@@ -7,7 +7,8 @@ export const Canvas: React.FC = () => {
     worldRef, svgRef, minimapRef,
     addNodeFromPalette, select, onNodeMouseDown, onWheelZoom,
     onMouseMove, onMouseUp, onCanvasMouseDown, onCanvasClick,
-    draw, drawMinimap
+    draw, drawMinimap,
+    toggleMode, removeSelection, duplicateSelection, groupIntoVPC
   } = useFlow();
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -47,10 +48,10 @@ export const Canvas: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space") document.body.style.cursor = "grab";
-      if (e.key === "c" || e.key === "C") useFlow.getState().toggleMode();
-      if (e.key === "Delete" || e.key === "Backspace") useFlow.getState().removeSelection();
-      if (e.key === "d" || e.key === "D") useFlow.getState().duplicateSelection();
-      if (e.key === "g" || e.key === "G") useFlow.getState().groupIntoVPC();
+      if (e.key === "c" || e.key === "C") toggleMode();
+      if (e.key === "Delete" || e.key === "Backspace") removeSelection();
+      if (e.key === "d" || e.key === "D") duplicateSelection();
+      if (e.key === "g" || e.key === "G") groupIntoVPC();
     };
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") document.body.style.cursor = "default"; };
     window.addEventListener("keydown", onKeyDown);
@@ -59,7 +60,7 @@ export const Canvas: React.FC = () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, []);
+  }, [toggleMode, removeSelection, duplicateSelection, groupIntoVPC]);
 
   return (
     <>

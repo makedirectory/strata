@@ -79,7 +79,6 @@ interface FlowContextValue {
 
 const FlowContext = createContext<FlowContextValue>(null as any);
 export const useFlow = () => useContext(FlowContext);
-useFlow.getState = () => useContext(FlowContext);
 
 // ---------- Provider ----------
 export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

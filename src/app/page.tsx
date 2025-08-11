@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
-import { FlowProvider, useFlow } from "../hooks/useFlow";
+import { FlowProvider } from "../hooks/useFlow";
+import { useFlow } from "../hooks/useFlow";
 import { Palette } from "../components/Palette";
 import { Canvas } from "../components/Canvas";
 import { Inspector } from "../components/Inspector";
@@ -22,6 +23,26 @@ function TopBar() {
   );
 }
 
+function ModeButtons(){
+  const { setMode } = useFlow();
+  return (
+    <div className="palette">
+      <button onClick={() => setMode("move")}>Move</button>
+      <button onClick={() => setMode("connect")}>Connect</button>
+    </div>
+  );
+}
+
+function FooterControls(){
+  const { fitToView, center } = useFlow();
+  return (
+    <div className="footer">
+      <button onClick={fitToView}>Fit to View</button>
+      <button onClick={center}>Center</button>
+    </div>
+  );
+}
+
 export default function Page() {
   return (
     <FlowProvider>
@@ -34,10 +55,7 @@ export default function Page() {
             Drag items onto the canvas. Hold <span className="kbd">Space</span> to pan. Press <span className="kbd">C</span> to toggle Connect mode, then click a source port and a target.
           </div>
           <h3>Modes</h3>
-          <div className="palette">
-            <button onClick={() => useFlow.getState().setMode("move")}>Move</button>
-            <button onClick={() => useFlow.getState().setMode("connect")}>Connect</button>
-          </div>
+          <ModeButtons />
           <h3>Shortcuts</h3>
           <div className="help">
             <div>Delete: remove selected node/edge</div>
@@ -60,10 +78,7 @@ export default function Page() {
         <aside className="right">
           <h3>Inspector</h3>
           <Inspector />
-          <div className="footer">
-            <button onClick={() => useFlow.getState().fitToView()}>Fit to View</button>
-            <button onClick={() => useFlow.getState().center()}>Center</button>
-          </div>
+          <FooterControls />
         </aside>
       </div>
       <div className="toast" id="toast" />
