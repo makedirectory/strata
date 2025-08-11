@@ -19,7 +19,7 @@ export const Inspector: React.FC = () => {
 
   // Helper to update on blur or Enter
   const handleFieldUpdate = (field: string, ref: React.RefObject<HTMLInputElement>) => {
-    if (!selection?.node) return;
+    if (selection?.type !== "node") return;
     const value = ref.current?.value ?? "";
     updateInspectorFields({ [field]: value });
   };

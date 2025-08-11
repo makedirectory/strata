@@ -132,7 +132,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (store.selection.type === "node") {
       store.updateNodeProps(store.selection.id, patch);
       // Update selection to reflect new node props
-      const updatedNode = store.nodes.find(n => n.id === store.selection.id);
+      const updatedNode = store.nodes.find(n => n.id === store.selection?.id);
       if (updatedNode) {
         store.setSelection({ type: "node", id: updatedNode.id, node: updatedNode });
       }
