@@ -4,7 +4,10 @@ import { useFlow } from "../hooks/useFlow";
 
 export const Inspector: React.FC = () => {
   const { selection, updateInspectorFields, runValidateUI, runRulesUI, validationHtml, rulesHtml, removeSelection } = useFlow();
-
+  // Use refs for Name and CIDR fields for smoother editing
+  const nameRef = React.useRef<HTMLInputElement>(null);
+  const cidrRef = React.useRef<HTMLInputElement>(null);
+  
   if (!selection) {
     return (
       <div className="inspector">
@@ -14,14 +17,40 @@ export const Inspector: React.FC = () => {
     );
   }
 
+  // Helper to update on blur or Enter
+  const handleFieldUpdate = (field: string, ref: React.RefObject<HTMLInputElement>) => {
+    if (!selection?.node) return;
+    const value = ref.current?.value ?? "";
+    updateInspectorFields({ [field]: value });
+  };
+
   return (
     <div className="inspector">
       {selection?.type === "node" ? (
         <div className="section">
           <div className="kv">
             <div>Type</div><div id="insType">{selection.node?.type}</div>
-            <div>Name</div><div><input id="insName" value={selection.node?.props.name || ""} onChange={(e)=>updateInspectorFields({ name: e.target.value })} /></div>
-            <div>CIDR (if net)</div><div><input id="insCidr" placeholder="10.0.0.0/16" value={selection.node?.props.cidr || ""} onChange={(e)=>updateInspectorFields({ cidr: e.target.value })} /></div>
+            <div>Name</div>
+            <div>
+              <input
+                id="insName"
+                defaultValue={selection.node?.props.name || ""}
+                ref={nameRef}
+                onBlur={() => handleFieldUpdate("name", nameRef)}
+                onKeyDown={e => { if (e.key === "Enter") { handleFieldUpdate("name", nameRef); nameRef.current?.blur(); } }}
+              />
+            </div>
+            <div>CIDR (if net)</div>
+            <div>
+              <input
+                id="insCidr"
+                placeholder="10.0.0.0/16"
+                defaultValue={selection.node?.props.cidr || ""}
+                ref={cidrRef}
+                onBlur={() => handleFieldUpdate("cidr", cidrRef)}
+                onKeyDown={e => { if (e.key === "Enter") { handleFieldUpdate("cidr", cidrRef); cidrRef.current?.blur(); } }}
+              />
+            </div>
             <div>Public?</div><div><select id="insPublic" value={String(!!selection.node?.props.public)} onChange={(e)=>updateInspectorFields({ public: e.target.value === "true" })}><option value="false">No</option><option value="true">Yes</option></select></div>
             <div>AZ</div><div><input id="insAz" placeholder="us-east-1a" value={selection.node?.props.az || ""} onChange={(e)=>updateInspectorFields({ az: e.target.value })} /></div>
             <div>Notes</div><div><textarea id="insNotes" rows={3} value={selection.node?.props.notes || ""} onChange={(e)=>updateInspectorFields({ notes: e.target.value })} /></div>
