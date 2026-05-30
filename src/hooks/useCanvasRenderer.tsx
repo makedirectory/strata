@@ -75,6 +75,7 @@ interface NodeRecord {
     collapsed: boolean;
     depth: number;
     envTint: string;
+    tintKind: string;
     searchMatch: boolean;
   };
 }
@@ -118,8 +119,10 @@ interface DrawInputs {
   hiddenRelClasses: ReadonlySet<string>;
   /** Filtered-out elements dim (keep context) or hide entirely. */
   filterMode: "dim" | "hide";
-  /** Environment-tint overlay: resource id → tint colour, or null when off. */
+  /** Background tint: resource id → colour, or null when off. */
   envTintById: ReadonlyMap<string, string> | null;
+  /** Which tint is active — picks a subtle (env) vs strong (heat) style. */
+  tintKind: "env" | "heat";
   /** When set (large graphs), only render nodes/edges intersecting this world
    *  rect; null keeps the small-graph viewport-only fast path. */
   cullViewport: Rect | null;
@@ -196,6 +199,7 @@ export function useCanvasRenderer(
         hiddenRelClasses,
         filterMode,
         envTintById,
+        tintKind,
         cullViewport,
         edgeStyle,
         searchMatches,
@@ -376,6 +380,7 @@ export function useCanvasRenderer(
                 collapsed: false,
                 depth: -1,
                 envTint: "",
+                tintKind: "env",
                 searchMatch: false,
               },
             };
@@ -440,15 +445,16 @@ export function useCanvasRenderer(
           if (dimmed !== prev.dimmed) rec.div.classList.toggle("dimmed", dimmed);
           if (searchMatch !== prev.searchMatch)
             rec.div.classList.toggle("search-match", searchMatch);
-          // Environment-tint overlay (background tint by account environment).
-          if (envTint !== prev.envTint) {
+          // Background tint overlay — env tint (subtle) or heat (strong).
+          if (envTint !== prev.envTint || tintKind !== prev.tintKind) {
+            rec.div.classList.remove("env-tinted", "heat-tinted");
             if (envTint) {
               rec.div.style.setProperty("--env-tint", envTint);
-              rec.div.classList.add("env-tinted");
+              rec.div.classList.add(tintKind === "heat" ? "heat-tinted" : "env-tinted");
             } else {
-              rec.div.classList.remove("env-tinted");
               rec.div.style.removeProperty("--env-tint");
             }
+            prev.tintKind = tintKind;
           }
 
           // ---- container chrome (backplate header + child-count + collapse) ----
@@ -550,6 +556,7 @@ export function useCanvasRenderer(
           prev.depth = depthVal;
           prev.envTint = envTint;
           prev.searchMatch = searchMatch;
+          // prev.tintKind is written inside the tint patch above.
         } catch (err) {
           console.error("draw node failed", r, err);
         }
@@ -798,6 +805,7 @@ export function useCanvasRenderer(
       hiddenRelClasses: ReadonlySet<string>,
       filterMode: "dim" | "hide",
       envTintById: ReadonlyMap<string, string> | null,
+      tintKind: "env" | "heat",
       cullViewport: Rect | null,
       edgeStyle: "curved" | "orthogonal",
       searchMatches: ReadonlySet<string>,
@@ -839,6 +847,7 @@ export function useCanvasRenderer(
         hiddenRelClasses,
         filterMode,
         envTintById,
+        tintKind,
         cullViewport,
         edgeStyle,
         searchMatches,
@@ -870,6 +879,7 @@ export function useCanvasRenderer(
         last.hiddenRelClasses === hiddenRelClasses &&
         last.filterMode === filterMode &&
         last.envTintById === envTintById &&
+        last.tintKind === tintKind &&
         last.cullViewport === cullViewport &&
         last.edgeStyle === edgeStyle &&
         last.searchMatches === searchMatches &&

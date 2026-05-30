@@ -299,6 +299,10 @@ export function useFlowStore() {
   const toggleExpandedGroup = useCallback((key: string) => {
     setExpandedGroups((prev) => toggledSet(prev, key));
   }, []);
+  /** Idempotently expand a summary group (used when revealing a hidden node). */
+  const expandGroup = useCallback((key: string) => {
+    setExpandedGroups((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+  }, []);
   /** Apply a full layer state at once (view presets, saved views). */
   const setLayers = useCallback((layers: LayerState) => {
     setHiddenCategories(new Set(layers.hiddenCategories));
@@ -495,6 +499,7 @@ export function useFlowStore() {
     toggleCategory,
     toggleRelClass,
     toggleExpandedGroup,
+    expandGroup,
     setFilterMode,
     setEnvironmentTint,
     setEdgeStyle,

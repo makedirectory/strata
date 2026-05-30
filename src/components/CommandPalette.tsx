@@ -12,6 +12,8 @@ interface Command {
   run: () => void;
   /** Keep the palette open after running (e.g. zoom in/out). */
   keepOpen?: boolean;
+  /** Mutates the model — hidden while presentation / read-only mode is on. */
+  editing?: boolean;
 }
 
 /**
@@ -78,7 +80,7 @@ export const CommandPalette: React.FC = () => {
   const staticCommands = useMemo<Command[]>(() => {
     const cmds: Command[] = [
       { id: "fit", title: "Fit to view", group: "View", run: flow.fitToView },
-      { id: "tidy", title: "Tidy — auto-arrange", group: "View", run: flow.tidy },
+      { id: "tidy", title: "Tidy — auto-arrange", group: "View", run: flow.tidy, editing: true },
       { id: "zoom-sel", title: "Zoom to selection", group: "View", run: flow.zoomToSelection },
       { id: "zoom-100", title: "Zoom to 100%", group: "View", run: flow.zoomReset },
       { id: "zoom-in", title: "Zoom in", group: "View", run: flow.zoomIn, keepOpen: true },
@@ -175,20 +177,33 @@ export const CommandPalette: React.FC = () => {
         run: () => flow.setActiveOverlay("none"),
       },
 
-      { id: "mode", title: "Toggle Connect / Move mode", group: "Edit", run: flow.toggleMode },
-      { id: "undo", title: "Undo", group: "Edit", run: flow.undo },
-      { id: "redo", title: "Redo", group: "Edit", run: flow.redo },
-      { id: "clear", title: "Clear canvas", group: "Edit", run: flow.clear },
+      {
+        id: "mode",
+        title: "Toggle Connect / Move mode",
+        group: "Edit",
+        run: flow.toggleMode,
+        editing: true,
+      },
+      { id: "undo", title: "Undo", group: "Edit", run: flow.undo, editing: true },
+      { id: "redo", title: "Redo", group: "Edit", run: flow.redo, editing: true },
+      { id: "clear", title: "Clear canvas", group: "Edit", run: flow.clear, editing: true },
 
       { id: "validate", title: "Validate architecture", group: "Tools", run: flow.runValidateUI },
       { id: "rules", title: "Suggest rules", group: "Tools", run: flow.runRulesUI },
       { id: "export", title: "Export JSON", group: "Tools", run: flow.exportJSON },
-      { id: "import-json", title: "Import JSON", group: "Tools", run: flow.importJSONDialog },
+      {
+        id: "import-json",
+        title: "Import JSON",
+        group: "Tools",
+        run: flow.importJSONDialog,
+        editing: true,
+      },
       {
         id: "import-iac",
         title: "Import IaC (Terraform / CloudFormation)",
         group: "Tools",
         run: flow.importIaCDialog,
+        editing: true,
       },
       { id: "save", title: "Save to server", group: "Tools", run: flow.saveToServer },
       {
@@ -196,12 +211,14 @@ export const CommandPalette: React.FC = () => {
         title: "Load preset: Basic AWS",
         group: "Tools",
         run: () => flow.loadPreset("aws-basic"),
+        editing: true,
       },
       {
         id: "preset-ecs",
         title: "Load preset: ECS + ALB",
         group: "Tools",
         run: () => flow.loadPreset("ecs-alb"),
+        editing: true,
       },
     ];
     return cmds;
@@ -231,24 +248,27 @@ export const CommandPalette: React.FC = () => {
     setSearchMatches(open && matchKey ? new Set(matchKey.split(",")) : new Set());
   }, [open, matchKey, setSearchMatches]);
 
+  const readOnly = flow.presentation;
   const commands = useMemo<Command[]>(() => {
-    const filteredStatic = q
-      ? staticCommands.filter((c) => c.title.toLowerCase().includes(q))
-      : staticCommands;
-    const serviceCmds: Command[] = q
-      ? searchServices(q)
-          .slice(0, 6)
-          .map((svc) => ({
-            id: `add:${svc.id}`,
-            title: `Add ${svc.name}`,
-            hint: serviceIcon(svc.id),
-            group: "Add service",
-            run: () =>
-              window.dispatchEvent(
-                new CustomEvent(PALETTE_ADD_EVENT, { detail: { serviceId: svc.id } }),
-              ),
-          }))
-      : [];
+    const filteredStatic = (
+      q ? staticCommands.filter((c) => c.title.toLowerCase().includes(q)) : staticCommands
+    ).filter((c) => !readOnly || !c.editing);
+    // Adding services is an edit — omit it in read-only mode.
+    const serviceCmds: Command[] =
+      q && !readOnly
+        ? searchServices(q)
+            .slice(0, 6)
+            .map((svc) => ({
+              id: `add:${svc.id}`,
+              title: `Add ${svc.name}`,
+              hint: serviceIcon(svc.id),
+              group: "Add service",
+              run: () =>
+                window.dispatchEvent(
+                  new CustomEvent(PALETTE_ADD_EVENT, { detail: { serviceId: svc.id } }),
+                ),
+            }))
+        : [];
     const nodeCmds: Command[] = nodeMatches.slice(0, 8).map((r) => ({
       id: `go:${r.id}`,
       title: `Go to ${r.name}`,
@@ -257,7 +277,7 @@ export const CommandPalette: React.FC = () => {
       run: () => flow.goToResource(r.id),
     }));
     return [...filteredStatic, ...serviceCmds, ...nodeCmds];
-  }, [q, staticCommands, nodeMatches, flow]);
+  }, [q, staticCommands, nodeMatches, flow, readOnly]);
 
   useEffect(() => {
     setActive((a) => Math.min(a, Math.max(0, commands.length - 1)));

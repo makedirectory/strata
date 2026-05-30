@@ -407,6 +407,15 @@ text.dimmed {
   background: color-mix(in srgb, var(--env-tint, #24406b) 26%, transparent);
 }
 
+/* Heat overlay: a stronger, distinct tint from the subtle environment tint. */
+.node.heat-tinted {
+  background: color-mix(in srgb, var(--env-tint, transparent) 50%, #0f1a31);
+  border-color: color-mix(in srgb, var(--env-tint, #24406b) 80%, #24406b);
+}
+.node.container.heat-tinted > .node-header {
+  background: color-mix(in srgb, var(--env-tint, #24406b) 55%, transparent);
+}
+
 /* ---- Leaf summary node ("N× service", click to expand) ---- */
 .node.summary {
   display: flex;

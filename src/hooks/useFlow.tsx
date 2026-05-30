@@ -242,13 +242,16 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Transient alignment guides shown while dragging a node (world coordinates).
   const [guides, setGuides] = React.useState<GuideLine[]>([]);
 
-  const state = {
-    resources: store.resources,
-    relationships: store.relationships,
-    viewport: store.viewport,
-    mode: store.mode,
-    density: store.density,
-  };
+  const state = React.useMemo(
+    () => ({
+      resources: store.resources,
+      relationships: store.relationships,
+      viewport: store.viewport,
+      mode: store.mode,
+      density: store.density,
+    }),
+    [store.resources, store.relationships, store.viewport, store.mode, store.density],
+  );
 
   // ---- containment layout -------------------------------------------------
   const isContainerPred = useCallback(
@@ -644,6 +647,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.hiddenRelClasses,
       store.filterMode,
       overlayHeat ?? envTintById,
+      store.activeOverlay === "heat" ? "heat" : "env",
       cullViewport,
       store.edgeStyle,
       store.searchMatches,
@@ -674,6 +678,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     envTintById,
     overlayHeat,
     overlayLit,
+    store.activeOverlay,
     store.edgeStyle,
     store.searchMatches,
     onNodeMouseDown,
@@ -765,11 +770,43 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [store, layout, storeSetViewport, viewSize],
   );
 
-  /** Select a node and centre the viewport on it (⌘K jump / search). */
+  /**
+   * Select a node and centre the viewport on it (⌘K jump / search). If the
+   * target is hidden inside collapsed containers or behind an "N×" summary,
+   * reveal it first (expand ancestors + its summary group), then centre using a
+   * freshly-computed layout so the camera lands correctly this tick.
+   */
   const goToResource = useCallback(
     (id: string) => {
       selectSingle(id);
-      const rect = layout.rects.get(id);
+      const byId = new Map(store.resources.map((r) => [r.id, r]));
+      const target = byId.get(id);
+      if (!target) return;
+
+      // Expand every collapsed ancestor on the path to the root.
+      const nextCollapsed = new Set(store.collapsed);
+      const guard = new Set<string>();
+      let cur = target.parentId;
+      while (cur && byId.has(cur) && !guard.has(cur)) {
+        guard.add(cur);
+        nextCollapsed.delete(cur);
+        cur = byId.get(cur)?.parentId;
+      }
+      // Expand the target's own summary group, if it is summarized.
+      const nextExpanded = new Set(store.expandedGroups);
+      if (target.parentId) nextExpanded.add(summaryKey(target.parentId, target.serviceId));
+
+      if (nextCollapsed.size !== store.collapsed.size) store.setCollapsedIds(nextCollapsed);
+      nextExpanded.forEach((k) => store.expandGroup(k));
+
+      // Centre using a layout that reflects the revealed state.
+      const revealed = computeLayout(store.resources, {
+        collapsed: nextCollapsed,
+        isContainer: isContainerPred,
+        density: store.density,
+        summarize: { threshold: SUMMARY_THRESHOLD, expandedGroups: nextExpanded },
+      });
+      const rect = revealed.rects.get(id);
       if (rect) {
         storeSetViewport(
           panToCenter(
@@ -780,7 +817,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     },
-    [selectSingle, layout, storeSetViewport, viewSize, getViewport],
+    [selectSingle, store, isContainerPred, storeSetViewport, viewSize, getViewport],
   );
 
   /** Double-clicking a container toggles focus on it (zoom-to-fit + dim others). */
