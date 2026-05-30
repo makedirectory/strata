@@ -71,6 +71,7 @@ interface NodeRecord {
     count: number;
     collapsed: boolean;
     depth: number;
+    envTint: string;
   };
 }
 
@@ -108,6 +109,13 @@ interface DrawInputs {
   collapsed: ReadonlySet<string>;
   /** When focusing a container, the id set of its subtree; others dim. */
   focusSubtree: ReadonlySet<string> | null;
+  /** Layer filters: hidden resource categories + relationship classes. */
+  hiddenCategories: ReadonlySet<string>;
+  hiddenRelClasses: ReadonlySet<string>;
+  /** Filtered-out elements dim (keep context) or hide entirely. */
+  filterMode: "dim" | "hide";
+  /** Environment-tint overlay: resource id → tint colour, or null when off. */
+  envTintById: ReadonlyMap<string, string> | null;
   onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void;
   onConnect: (id: string, type: "start" | "end") => void;
   onSelect: (sel: Selection) => void;
@@ -153,6 +161,10 @@ export function useCanvasRenderer(
         layout,
         collapsed,
         focusSubtree,
+        hiddenCategories,
+        hiddenRelClasses,
+        filterMode,
+        envTintById,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -160,6 +172,15 @@ export function useCanvasRenderer(
         onToggleCollapse,
       } = input;
       const rectOf = layout.rects;
+
+      // Resource ids whose category is filtered off (dim or hide).
+      const categoryHidden = new Set<string>();
+      if (hiddenCategories.size > 0) {
+        for (const r of resources) {
+          const cat = getService(r.serviceId)?.category;
+          if (cat && hiddenCategories.has(cat)) categoryHidden.add(r.id);
+        }
+      }
 
       // Shared arrowhead marker (created once). `context-stroke` makes the head
       // inherit each edge's per-class stroke colour.
@@ -208,6 +229,9 @@ export function useCanvasRenderer(
           // removes any stale DOM since it is absent from seenNodes).
           const p = rectOf.get(r.id);
           if (!p) return;
+          const nodeFilteredOut = categoryHidden.has(r.id);
+          // In "hide" mode a filtered node is removed (absent from seenNodes).
+          if (nodeFilteredOut && filterMode === "hide") return;
           seenNodes.add(r.id);
           const isContainerNode = layout.isContainerNode(r.id);
           const childCount = layout.childCount(r.id);
@@ -234,7 +258,8 @@ export function useCanvasRenderer(
           // container's subtree.
           const hoverDim = focusId !== null && !focusNeighbours.has(r.id);
           const containerDim = focusSubtree !== null && !focusSubtree.has(r.id);
-          const dimmed = hoverDim || containerDim;
+          const dimmed = hoverDim || containerDim || (nodeFilteredOut && filterMode === "dim");
+          const envTint = envTintById?.get(r.id) ?? "";
 
           let rec = nodes.get(r.id);
           if (!rec) {
@@ -309,6 +334,7 @@ export function useCanvasRenderer(
                 count: -1,
                 collapsed: false,
                 depth: -1,
+                envTint: "",
               },
             };
             nodes.set(r.id, rec);
@@ -370,6 +396,16 @@ export function useCanvasRenderer(
           }
           if (compact !== prev.compact) rec.div.classList.toggle("dense-compact", compact);
           if (dimmed !== prev.dimmed) rec.div.classList.toggle("dimmed", dimmed);
+          // Environment-tint overlay (background tint by account environment).
+          if (envTint !== prev.envTint) {
+            if (envTint) {
+              rec.div.style.setProperty("--env-tint", envTint);
+              rec.div.classList.add("env-tinted");
+            } else {
+              rec.div.classList.remove("env-tinted");
+              rec.div.style.removeProperty("--env-tint");
+            }
+          }
 
           // ---- container chrome (backplate header + child-count + collapse) ----
           if (isContainerNode !== prev.container) {
@@ -468,6 +504,7 @@ export function useCanvasRenderer(
           prev.count = childCount;
           prev.collapsed = nodeCollapsed;
           prev.depth = depthVal;
+          prev.envTint = envTint;
         } catch (err) {
           console.error("draw node failed", r, err);
         }
@@ -497,6 +534,11 @@ export function useCanvasRenderer(
         const ra = rectOf.get(fromId);
         const rb = rectOf.get(toId);
         if (!ra || !rb) return;
+        // Layer filter: by relationship class or by either endpoint's category.
+        const cls = relationshipClassDef(rel.kind as RelationshipKind);
+        const edgeFilteredOut =
+          hiddenRelClasses.has(cls.id) || categoryHidden.has(fromId) || categoryHidden.has(toId);
+        if (edgeFilteredOut && filterMode === "hide") return;
         seenEdges.add(rel.id);
 
         const p1 = { x: ra.x + ra.w, y: ra.y + ra.h / 2 };
@@ -506,7 +548,6 @@ export function useCanvasRenderer(
 
         const def = RELATIONSHIPS[rel.kind as RelationshipKind];
         // Encode by relationship class: colour + dash (arrowhead via marker).
-        const cls = relationshipClassDef(rel.kind as RelationshipKind);
         const dash = cls.dash ?? "";
         const labelText = def?.label ?? rel.kind;
         const midx = (p1.x + p2.x) / 2;
@@ -514,11 +555,11 @@ export function useCanvasRenderer(
         const selected = selection?.type === "edge" && selection.id === rel.id;
         const color = selected ? "#5fbef3" : cls.color;
         // Dim unless the edge touches the hover focus / lies within a focused
-        // container's subtree.
+        // container's subtree, or is filtered out by a layer.
         const hoverDim = focusId !== null && fromId !== focusId && toId !== focusId;
         const containerDim =
           focusSubtree !== null && (!focusSubtree.has(fromId) || !focusSubtree.has(toId));
-        const dimmed = hoverDim || containerDim;
+        const dimmed = hoverDim || containerDim || (edgeFilteredOut && filterMode === "dim");
 
         let rec = edges.get(rel.id);
         if (!rec) {
@@ -625,6 +666,10 @@ export function useCanvasRenderer(
       layout: LayoutResult,
       collapsed: ReadonlySet<string>,
       focusSubtree: ReadonlySet<string> | null,
+      hiddenCategories: ReadonlySet<string>,
+      hiddenRelClasses: ReadonlySet<string>,
+      filterMode: "dim" | "hide",
+      envTintById: ReadonlyMap<string, string> | null,
       onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void,
       onConnect: (id: string, type: "start" | "end") => void,
       onSelect: (sel: Selection) => void,
@@ -657,6 +702,10 @@ export function useCanvasRenderer(
         layout,
         collapsed,
         focusSubtree,
+        hiddenCategories,
+        hiddenRelClasses,
+        filterMode,
+        envTintById,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -679,6 +728,10 @@ export function useCanvasRenderer(
         last.layout === layout &&
         last.collapsed === collapsed &&
         last.focusSubtree === focusSubtree &&
+        last.hiddenCategories === hiddenCategories &&
+        last.hiddenRelClasses === hiddenRelClasses &&
+        last.filterMode === filterMode &&
+        last.envTintById === envTintById &&
         last.onNodeMouseDown === onNodeMouseDown &&
         last.onConnect === onConnect &&
         last.onSelect === onSelect &&

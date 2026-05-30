@@ -31,6 +31,33 @@ import {
   type GuideLine,
 } from "../canvas/geometry";
 import { computeLayout, type LayoutResult } from "../canvas/layout";
+import { RELATIONSHIP_CLASS_ORDER, type RelationshipClass } from "../aws/relationshipClasses";
+import type { ServiceCategoryId } from "../aws/types";
+import type { LayerState } from "./useFlowStore";
+
+/** Built-in view-mode presets → relationship-class emphasis. */
+export type ViewPreset = "all" | "network" | "security" | "data" | "high-level";
+
+/** A user-saved view (layer state) persisted to localStorage. */
+interface SavedView {
+  name: string;
+  hiddenCategories: string[];
+  hiddenRelClasses: string[];
+  filterMode: "dim" | "hide";
+  environmentTint: boolean;
+}
+const SAVED_VIEWS_KEY = "strata.savedViews";
+
+function readSavedViews(): SavedView[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SAVED_VIEWS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as SavedView[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 interface FlowContextValue {
   state: {
@@ -63,6 +90,22 @@ interface FlowContextValue {
   breadcrumb: Array<{ id: string; name: string }>;
   /** Currently focused container id, or null. */
   focusedContainerId: string | null;
+
+  // Layers / filters / overlays (Phase 3)
+  hiddenCategories: ReadonlySet<string>;
+  hiddenRelClasses: ReadonlySet<string>;
+  filterMode: "dim" | "hide";
+  environmentTint: boolean;
+  toggleCategory: (id: ServiceCategoryId) => void;
+  toggleRelClass: (id: RelationshipClass) => void;
+  setFilterMode: (m: "dim" | "hide") => void;
+  setEnvironmentTint: (on: boolean) => void;
+  applyViewPreset: (name: ViewPreset) => void;
+  savedViews: ReadonlyArray<{ name: string }>;
+  saveView: (name: string) => void;
+  applySavedView: (name: string) => void;
+  deleteSavedView: (name: string) => void;
+
   select: (sel: Selection) => void;
   addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
   removeSelection: () => void;
@@ -195,6 +238,29 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }),
     [store.resources, store.collapsed, store.density, store.dragOverride, isContainerPred],
   );
+  // Environment-tint overlay: resource id → tint colour, from its account's
+  // environment (or an Environment tag), null when the overlay is off.
+  const envTintById = React.useMemo<ReadonlyMap<string, string> | null>(() => {
+    if (!store.environmentTint) return null;
+    const accById = new Map(store.accounts.map((a) => [a.id, a]));
+    const tint = (env: string | undefined, accountColor?: string): string => {
+      if (accountColor) return accountColor;
+      const e = (env ?? "").toLowerCase();
+      if (e.includes("prod")) return "#f87171";
+      if (e.includes("stag")) return "#fbbf24";
+      if (e.includes("dev")) return "#34d399";
+      if (e.includes("sand") || e.includes("test")) return "#60a5fa";
+      return "#94a3b8";
+    };
+    const m = new Map<string, string>();
+    for (const r of store.resources) {
+      const acc = r.accountId ? accById.get(r.accountId) : undefined;
+      const env = acc?.environment ?? r.tags?.Environment ?? r.tags?.environment;
+      if (acc || env) m.set(r.id, tint(env, acc?.color));
+    }
+    return m;
+  }, [store.environmentTint, store.accounts, store.resources]);
+
   // Id set of the focused container's subtree (for focus-container dimming).
   const focusSubtree = React.useMemo<ReadonlySet<string> | null>(() => {
     const root = store.focusedContainerId;
@@ -500,6 +566,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       layout,
       store.collapsed,
       focusSubtree,
+      store.hiddenCategories,
+      store.hiddenRelClasses,
+      store.filterMode,
+      envTintById,
       onNodeMouseDown,
       onConnectCb,
       storeSetSelection,
@@ -518,6 +588,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     layout,
     store.collapsed,
     focusSubtree,
+    store.hiddenCategories,
+    store.hiddenRelClasses,
+    store.filterMode,
+    envTintById,
     onNodeMouseDown,
     onConnectCb,
     storeSetSelection,
@@ -615,6 +689,100 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return chain;
   }, [store.focusedContainerId, store.selection, store.resources]);
+
+  // ---- view presets + saved views ----------------------------------------
+  const { setLayers: storeSetLayers, setCollapsedIds } = store;
+
+  const applyViewPreset = useCallback(
+    (name: ViewPreset) => {
+      const hideAllBut = (keep: RelationshipClass): Set<RelationshipClass> =>
+        new Set(RELATIONSHIP_CLASS_ORDER.filter((c) => c !== keep));
+      const base: LayerState = {
+        hiddenCategories: new Set(),
+        hiddenRelClasses: new Set(),
+        filterMode: "dim",
+        environmentTint: store.environmentTint,
+      };
+      switch (name) {
+        case "network":
+          storeSetLayers({ ...base, hiddenRelClasses: hideAllBut("network") });
+          break;
+        case "security":
+          storeSetLayers({ ...base, hiddenRelClasses: hideAllBut("permission") });
+          break;
+        case "data":
+          storeSetLayers({ ...base, hiddenRelClasses: hideAllBut("data") });
+          break;
+        case "high-level": {
+          storeSetLayers(base);
+          setCollapsedIds(
+            store.resources.filter((r) => layout.isContainerNode(r.id)).map((r) => r.id),
+          );
+          break;
+        }
+        case "all":
+        default:
+          storeSetLayers(base);
+          setCollapsedIds([]);
+          break;
+      }
+    },
+    [storeSetLayers, setCollapsedIds, store.environmentTint, store.resources, layout],
+  );
+
+  const [savedViews, setSavedViews] = React.useState<SavedView[]>([]);
+  useEffect(() => {
+    setSavedViews(readSavedViews());
+  }, []);
+  const persistViews = useCallback((views: SavedView[]) => {
+    setSavedViews(views);
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(views));
+      } catch {
+        /* storage unavailable / quota — keep the in-memory list */
+      }
+    }
+  }, []);
+  const saveView = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const view: SavedView = {
+        name: trimmed,
+        hiddenCategories: [...store.hiddenCategories],
+        hiddenRelClasses: [...store.hiddenRelClasses],
+        filterMode: store.filterMode,
+        environmentTint: store.environmentTint,
+      };
+      persistViews([...savedViews.filter((v) => v.name !== trimmed), view]);
+    },
+    [
+      savedViews,
+      persistViews,
+      store.hiddenCategories,
+      store.hiddenRelClasses,
+      store.filterMode,
+      store.environmentTint,
+    ],
+  );
+  const applySavedView = useCallback(
+    (name: string) => {
+      const v = savedViews.find((x) => x.name === name);
+      if (!v) return;
+      storeSetLayers({
+        hiddenCategories: new Set(v.hiddenCategories as ServiceCategoryId[]),
+        hiddenRelClasses: new Set(v.hiddenRelClasses as RelationshipClass[]),
+        filterMode: v.filterMode,
+        environmentTint: v.environmentTint,
+      });
+    },
+    [savedViews, storeSetLayers],
+  );
+  const deleteSavedView = useCallback(
+    (name: string) => persistViews(savedViews.filter((v) => v.name !== name)),
+    [savedViews, persistViews],
+  );
 
   /**
    * Centre the viewport on the world point under a minimap pixel (client
@@ -909,6 +1077,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     onNodeDoubleClick,
     breadcrumb,
     focusedContainerId: store.focusedContainerId,
+
+    hiddenCategories: store.hiddenCategories,
+    hiddenRelClasses: store.hiddenRelClasses,
+    filterMode: store.filterMode,
+    environmentTint: store.environmentTint,
+    toggleCategory: store.toggleCategory,
+    toggleRelClass: store.toggleRelClass,
+    setFilterMode: store.setFilterMode,
+    setEnvironmentTint: store.setEnvironmentTint,
+    applyViewPreset,
+    savedViews,
+    saveView,
+    applySavedView,
+    deleteSavedView,
+
     select: store.setSelection,
     addResourceFromPalette,
     removeSelection: store.removeSelection,
