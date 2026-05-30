@@ -14,12 +14,10 @@ export const Canvas: React.FC = () => {
     svgRef,
     minimapRef,
     addResourceFromPalette,
-    select,
     onWheelZoom,
     onMouseMove,
     onMouseUp,
     onCanvasMouseDown,
-    onCanvasClick,
     draw,
     drawMinimap,
     state,
@@ -34,6 +32,7 @@ export const Canvas: React.FC = () => {
     zoomToSelection,
     fitToView,
     guides,
+    marquee,
     minimapNavigate,
   } = useFlow();
 
@@ -211,15 +210,9 @@ export const Canvas: React.FC = () => {
       <svg className="edges" ref={svgRef} aria-hidden="true" />
       {/* Pointer-only canvas surface; node interactions are delivered via the
           renderer's per-node handlers, so these layers are aria-hidden. */}
-      <div
-        className="world"
-        ref={worldRef}
-        aria-hidden="true"
-        onClick={() => select(null)}
-        onMouseDown={onCanvasMouseDown}
-      />
-      <div className="overlay" aria-hidden="true" onClick={onCanvasClick} />
-      {guides.length > 0 && (
+      <div className="world" ref={worldRef} aria-hidden="true" onMouseDown={onCanvasMouseDown} />
+      <div className="overlay" aria-hidden="true" />
+      {(guides.length > 0 || marquee) && (
         <svg
           className="guides"
           aria-hidden="true"
@@ -249,6 +242,16 @@ export const Canvas: React.FC = () => {
                 vectorEffect="non-scaling-stroke"
               />
             ),
+          )}
+          {marquee && (
+            <rect
+              className="marquee"
+              x={marquee.x}
+              y={marquee.y}
+              width={marquee.w}
+              height={marquee.h}
+              vectorEffect="non-scaling-stroke"
+            />
           )}
         </svg>
       )}

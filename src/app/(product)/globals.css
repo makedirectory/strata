@@ -378,6 +378,12 @@ svg.guides {
   stroke-dasharray: 4 3;
   opacity: 0.9;
 }
+.marquee {
+  fill: rgba(95, 190, 243, 0.12);
+  stroke: #5fbef3;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
 .edge.invalid {
   stroke: var(--danger);
   stroke-dasharray: 6 4;

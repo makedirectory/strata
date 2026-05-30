@@ -122,7 +122,9 @@ export default function Page() {
           <ModeButtons />
           <h3>Shortcuts</h3>
           <div className="help">
-            <div>Delete: remove selected node/edge</div>
+            <div>Scroll: pan · ⌘/Ctrl+scroll or pinch: zoom</div>
+            <div>Drag empty canvas: marquee-select</div>
+            <div>Delete: remove selected node(s)/edge</div>
             <div>D: duplicate selected node</div>
             <div>G: group selected into VPC</div>
           </div>
