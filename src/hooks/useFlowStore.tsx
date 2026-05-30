@@ -159,11 +159,24 @@ export function useFlowStore() {
       };
       mutate((cur) => ({ resources: [...cur.resources, resource] }));
       setSelection(nodeSelection(resource));
+      setSelectedIds([id]);
     },
     [mutate, uid],
   );
 
   const removeSelection = useCallback(() => {
+    // Multi-selection (marquee/group) takes precedence: delete every selected
+    // node and any relationship touching one of them, in a single history step.
+    if (selectedIds.length > 0) {
+      const ids = new Set(selectedIds);
+      mutate((cur) => ({
+        resources: cur.resources.filter((r) => !ids.has(r.id)),
+        relationships: cur.relationships.filter((e) => !ids.has(e.from) && !ids.has(e.to)),
+      }));
+      setSelectedIds([]);
+      setSelection(null);
+      return;
+    }
     if (!selection) return;
     if (selection.type === "node") {
       const id = selection.id;
@@ -176,7 +189,8 @@ export function useFlowStore() {
       mutate((cur) => ({ relationships: cur.relationships.filter((e) => e.id !== id) }));
     }
     setSelection(null);
-  }, [selection, mutate]);
+    setSelectedIds([]);
+  }, [selectedIds, selection, mutate]);
 
   /** Live position update during drag — not committed to history here. */
   const updateResourcePosition = useCallback((id: string, pos: { x: number; y: number }) => {
@@ -185,6 +199,24 @@ export function useFlowStore() {
       if (r.id !== id) return r;
       const prev = r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
       return { ...r, position: { ...prev, x: pos.x, y: pos.y } };
+    });
+    liveRef.current = { ...cur, resources: nextResources };
+    setResources(nextResources);
+  }, []);
+
+  /**
+   * Live batch position update during a group drag — not committed here (the
+   * single history entry is recorded at drag end via {@link commitCurrentState}).
+   */
+  const updateResourcePositions = useCallback((updates: { id: string; x: number; y: number }[]) => {
+    if (updates.length === 0) return;
+    const byId = new Map(updates.map((u) => [u.id, u]));
+    const cur = liveRef.current;
+    const nextResources = cur.resources.map((r) => {
+      const u = byId.get(r.id);
+      if (!u) return r;
+      const prev = r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
+      return { ...r, position: { ...prev, x: u.x, y: u.y } };
     });
     liveRef.current = { ...cur, resources: nextResources };
     setResources(nextResources);
@@ -225,6 +257,7 @@ export function useFlowStore() {
       const rel: Relationship = { id, from: fromId, to: toId, kind, source: "manual" };
       const next = mutate((cur) => ({ relationships: [...cur.relationships, rel] }));
       setSelection(edgeSelection(rel, next.resources));
+      setSelectedIds([]);
     },
     [mutate, uid],
   );
@@ -244,6 +277,7 @@ export function useFlowStore() {
     };
     mutate((cur) => ({ resources: [...cur.resources, copy] }));
     setSelection(nodeSelection(copy));
+    setSelectedIds([id]);
   }, [selection, mutate, uid]);
 
   /** Add a containing VPC around the selected node. */
@@ -259,6 +293,7 @@ export function useFlowStore() {
     if (typeof confirm === "function" && !confirm("Clear canvas?")) return;
     mutate(() => ({ resources: [], relationships: [] }));
     setSelection(null);
+    setSelectedIds([]);
   }, [mutate]);
 
   /** Replace the entire model (import / preset / server load). */
@@ -278,6 +313,7 @@ export function useFlowStore() {
         graphId: next.graphId ?? cur.graphId,
       }));
       setSelection(null);
+      setSelectedIds([]);
     },
     [mutate],
   );
@@ -330,6 +366,7 @@ export function useFlowStore() {
     removeSelection,
     updateResource,
     updateResourcePosition,
+    updateResourcePositions,
     updateRelationshipKind,
     connect,
     duplicateSelection,

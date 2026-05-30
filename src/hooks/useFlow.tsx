@@ -40,8 +40,12 @@ interface FlowContextValue {
   svgRef: React.RefObject<SVGSVGElement | null>;
   minimapRef: React.RefObject<HTMLCanvasElement | null>;
   selection: Selection;
+  /** Ids of all selected nodes (single or marquee/group multi-selection). */
+  selectedIds: string[];
   /** Transient alignment guides (world coords) to draw while dragging. */
   guides: GuideLine[];
+  /** Transient marquee selection rectangle (world coords), or null. */
+  marquee: Rect | null;
 
   // Actions
   setMode: (m: CanvasMode) => void;
@@ -133,6 +137,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     onMouseUp: iOnMouseUp,
     onWheelZoom: iOnWheelZoom,
     onNodeMouseDown: iOnNodeMouseDown,
+    onCanvasMouseDown: iOnCanvasMouseDown,
     onConnect: iOnConnect,
     fitToView: iFitToView,
     center: iCenter,
@@ -141,7 +146,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [validationResults, setValidationResults] = React.useState<ValidationResult[] | null>(null);
   const [ruleSuggestions, setRuleSuggestions] = React.useState<RuleSuggestion[] | null>(null);
-  const [status, setStatus] = React.useState<string>("Pan with space ⎵ + drag. Connect mode: C.");
+  const [status, setStatus] = React.useState<string>(
+    "Scroll to pan · ⌘/pinch to zoom · drag empty canvas to select · Space+drag to pan · C to connect.",
+  );
   // Transient alignment guides shown while dragging a node (world coordinates).
   const [guides, setGuides] = React.useState<GuideLine[]>([]);
 
@@ -218,12 +225,45 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateResource: storeUpdateResource,
     updateRelationshipKind: storeUpdateRelationshipKind,
     updateResourcePosition,
+    updateResourcePositions,
     setViewport: storeSetViewport,
     getViewport,
     commitCurrentState,
     setSelection: storeSetSelection,
+    setSelectedIds: storeSetSelectedIds,
     connect: storeConnect,
   } = store;
+
+  // ---- selection helpers (single + multi kept consistent) ----------------
+  const selectSingle = useCallback(
+    (id: string) => {
+      const r = store.resources.find((x) => x.id === id);
+      storeSetSelectedIds([id]);
+      if (r) storeSetSelection({ type: "node", id, resource: r });
+    },
+    [store.resources, storeSetSelectedIds, storeSetSelection],
+  );
+  const clearSelection = useCallback(() => {
+    storeSetSelectedIds([]);
+    storeSetSelection(null);
+  }, [storeSetSelectedIds, storeSetSelection]);
+  /** Apply a marquee result: 0 → clear, 1 → single (Inspector detail), N → multi. */
+  const applyMarquee = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) {
+        clearSelection();
+      } else if (ids.length === 1) {
+        selectSingle(ids[0]);
+      } else {
+        storeSetSelectedIds(ids);
+        storeSetSelection(null);
+      }
+    },
+    [clearSelection, selectSingle, storeSetSelectedIds, storeSetSelection],
+  );
+
+  // Transient marquee selection rectangle (world coords) drawn while dragging.
+  const [marquee, setMarquee] = React.useState<Rect | null>(null);
 
   const updateResourceField = useCallback(
     (patch: { name?: string; region?: string; config?: Record<string, unknown> }) => {
@@ -241,23 +281,41 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [store.selection, storeUpdateRelationshipKind],
   );
 
+  const onCanvasMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      iOnCanvasMouseDown(e, {
+        pan: store.viewport,
+        mode: store.mode,
+        setMarquee,
+        clearSelection,
+      });
+    },
+    [iOnCanvasMouseDown, store.viewport, store.mode, clearSelection],
+  );
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
-      iOnMouseMove(
-        e,
-        store.resources,
-        store.viewport,
-        updateResourcePosition,
-        storeSetViewport,
+      iOnMouseMove(e, {
+        resources: store.resources,
+        pan: store.viewport,
+        updatePositions: updateResourcePositions,
+        updatePan: storeSetViewport,
         setGuides,
-      );
+        setMarquee,
+      });
     },
-    [iOnMouseMove, store.resources, store.viewport, updateResourcePosition, storeSetViewport],
+    [iOnMouseMove, store.resources, store.viewport, updateResourcePositions, storeSetViewport],
   );
   const onMouseUp = useCallback(() => {
-    iOnMouseUp(commitCurrentState);
-    setGuides([]);
-  }, [iOnMouseUp, commitCurrentState]);
+    iOnMouseUp({
+      resources: store.resources,
+      commitState: commitCurrentState,
+      selectSingle,
+      applyMarquee,
+      clearSelection,
+      setGuides,
+      setMarquee,
+    });
+  }, [iOnMouseUp, store.resources, commitCurrentState, selectSingle, applyMarquee, clearSelection]);
   const onWheelZoom = useCallback(
     (e: WheelEvent) => iOnWheelZoom(e, getViewport(), storeSetViewport),
     [iOnWheelZoom, getViewport, storeSetViewport],
@@ -265,18 +323,26 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const onNodeMouseDown = useCallback(
     (e: React.MouseEvent, resource: ResourceInstance) => {
-      iOnNodeMouseDown(e, resource, store.viewport, store.mode, store.resources, storeConnect);
-      // Selecting is meaningful in move mode; in connect mode the click drives
-      // wiring but selecting the node is still useful feedback.
-      storeSetSelection({ type: "node", id: resource.id, resource });
+      // Selection is decided inside the interaction layer (selectSingle): a node
+      // in a multi-selection keeps the group for dragging; any other node
+      // becomes the single selection.
+      iOnNodeMouseDown(e, resource, {
+        pan: store.viewport,
+        mode: store.mode,
+        resources: store.resources,
+        selectedIds: store.selectedIds,
+        connect: storeConnect,
+        selectSingle,
+      });
     },
     [
       iOnNodeMouseDown,
       store.viewport,
       store.mode,
       store.resources,
+      store.selectedIds,
       storeConnect,
-      storeSetSelection,
+      selectSingle,
     ],
   );
 
@@ -304,6 +370,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.relationships,
       store.viewport,
       store.selection,
+      store.selectedIds,
       onNodeMouseDown,
       onConnectCb,
       storeSetSelection,
@@ -314,6 +381,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.relationships,
     store.viewport,
     store.selection,
+    store.selectedIds,
     onNodeMouseDown,
     onConnectCb,
     storeSetSelection,
@@ -637,7 +705,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     svgRef,
     minimapRef,
     selection: store.selection,
+    selectedIds: store.selectedIds,
     guides,
+    marquee,
 
     setMode: store.setMode,
     toggleMode,
@@ -649,8 +719,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateResourceField,
     updateRelationshipKind,
 
-    onCanvasMouseDown: interaction.onCanvasMouseDown,
-    onCanvasClick: () => store.setSelection(null),
+    onCanvasMouseDown,
+    onCanvasClick: clearSelection,
     onMouseMove,
     onMouseUp,
     onWheelZoom,
