@@ -5,7 +5,11 @@ import { DEFAULT_NODE_SIZE } from "../aws/model";
 import type { CanvasMode, Selection } from "../types";
 import type { RelationshipKind } from "../aws/types";
 import { defaultConfig, getService } from "../aws/registry";
+import { GRID_STEP } from "../canvas/geometry";
 import { useHistory, type HistoryState } from "./useHistory";
+
+/** Round a world coordinate to the visible grid step (matches drag snapping). */
+const snapToGrid = (n: number) => Math.round(n / GRID_STEP) * GRID_STEP;
 
 interface FlowState extends HistoryState {
   resources: ResourceInstance[];
@@ -151,7 +155,7 @@ export function useFlowStore() {
         name: svc.name,
         config: defaultConfig(serviceId),
         source: "manual",
-        position: { x: Math.round(x / 4) * 4, y: Math.round(y / 4) * 4, ...DEFAULT_NODE_SIZE },
+        position: { x: snapToGrid(x), y: snapToGrid(y), ...DEFAULT_NODE_SIZE },
       };
       mutate((cur) => ({ resources: [...cur.resources, resource] }));
       setSelection(nodeSelection(resource));

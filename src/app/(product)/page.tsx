@@ -137,7 +137,6 @@ export default function Page() {
           </div>
         </aside>
         <main className="canvas-wrap" id="canvasWrap">
-          <div className="grid" />
           <Canvas />
         </main>
         <aside className="right">

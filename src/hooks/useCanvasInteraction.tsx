@@ -9,8 +9,10 @@ import {
   zoomAbout,
   fitView,
   boundsOf,
+  computeSnap,
   screenToWorld as toWorld,
   type Vec2,
+  type GuideLine,
 } from "../canvas/geometry";
 
 /** Wheel-zoom sensitivity: factor = exp(-deltaY * k). Smooth for pinch + ⌘-wheel. */
@@ -108,17 +110,25 @@ export function useCanvasInteraction() {
       pan: Pan,
       updatePosition: (id: string, pos: { x: number; y: number }) => void,
       updatePan: (newPan: Pan) => void,
+      setGuides: (guides: GuideLine[]) => void,
     ) => {
       if (dragRef.current) {
-        const r = resources.find((r) => r.id === dragRef.current!.id);
+        const id = dragRef.current.id;
+        const r = resources.find((x) => x.id === id);
         if (!r) return;
+        const box = pos(r);
         const nx = (e.clientX - pan.x - dragRef.current.dx) / pan.scale;
         const ny = (e.clientY - pan.y - dragRef.current.dy) / pan.scale;
-        draggedRef.current = true;
-        updatePosition(r.id, {
-          x: Math.round(nx / 4) * 4,
-          y: Math.round(ny / 4) * 4,
+        // Snap to the visible grid + align to other nodes' edges/centres. The
+        // threshold is expressed in screen pixels (≈8px) converted to world
+        // units so it feels the same at every zoom level.
+        const others = resources.filter((x) => x.id !== id).map(pos);
+        const snap = computeSnap({ x: nx, y: ny, w: box.w, h: box.h }, others, {
+          threshold: 8 / pan.scale,
         });
+        draggedRef.current = true;
+        updatePosition(id, { x: snap.x, y: snap.y });
+        setGuides(snap.guides);
       } else if (panningRef.current) {
         updatePan({
           ...pan,

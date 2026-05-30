@@ -16,7 +16,14 @@ import {
 } from "../aws/rules";
 import { listGraphs, getGraph, createGraph, updateGraph } from "../lib/api";
 import { importIaC } from "../aws/iac";
-import { zoomAbout, zoomByFactor, fitView, boundsOf, type Rect } from "../canvas/geometry";
+import {
+  zoomAbout,
+  zoomByFactor,
+  fitView,
+  boundsOf,
+  type Rect,
+  type GuideLine,
+} from "../canvas/geometry";
 
 interface FlowContextValue {
   state: {
@@ -29,6 +36,8 @@ interface FlowContextValue {
   svgRef: React.RefObject<SVGSVGElement | null>;
   minimapRef: React.RefObject<HTMLCanvasElement | null>;
   selection: Selection;
+  /** Transient alignment guides (world coords) to draw while dragging. */
+  guides: GuideLine[];
 
   // Actions
   setMode: (m: CanvasMode) => void;
@@ -127,6 +136,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [validationResults, setValidationResults] = React.useState<ValidationResult[] | null>(null);
   const [ruleSuggestions, setRuleSuggestions] = React.useState<RuleSuggestion[] | null>(null);
   const [status, setStatus] = React.useState<string>("Pan with space ⎵ + drag. Connect mode: C.");
+  // Transient alignment guides shown while dragging a node (world coordinates).
+  const [guides, setGuides] = React.useState<GuideLine[]>([]);
 
   const state = {
     resources: store.resources,
@@ -226,14 +237,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
-      iOnMouseMove(e, store.resources, store.viewport, updateResourcePosition, storeSetViewport);
+      iOnMouseMove(
+        e,
+        store.resources,
+        store.viewport,
+        updateResourcePosition,
+        storeSetViewport,
+        setGuides,
+      );
     },
     [iOnMouseMove, store.resources, store.viewport, updateResourcePosition, storeSetViewport],
   );
-  const onMouseUp = useCallback(
-    () => iOnMouseUp(commitCurrentState),
-    [iOnMouseUp, commitCurrentState],
-  );
+  const onMouseUp = useCallback(() => {
+    iOnMouseUp(commitCurrentState);
+    setGuides([]);
+  }, [iOnMouseUp, commitCurrentState]);
   const onWheelZoom = useCallback(
     (e: WheelEvent) => iOnWheelZoom(e, getViewport(), storeSetViewport),
     [iOnWheelZoom, getViewport, storeSetViewport],
@@ -584,6 +602,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     svgRef,
     minimapRef,
     selection: store.selection,
+    guides,
 
     setMode: store.setMode,
     toggleMode,

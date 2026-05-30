@@ -276,22 +276,10 @@ body {
 .grid {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(#15203a 2px, transparent 2px),
-    linear-gradient(90deg, #15203a 2px, transparent 2px),
-    linear-gradient(#10182c 1px, transparent 1px),
-    linear-gradient(90deg, #10182c 1px, transparent 1px);
-  background-size:
-    80px 80px,
-    80px 80px,
-    16px 16px,
-    16px 16px;
-  background-position:
-    -1px -1px,
-    -1px -1px,
-    -1px -1px,
-    -1px -1px;
+  /* background-image / size / position are set imperatively in Canvas so the
+     grid pans and zooms with the viewport (see the grid effect). */
   pointer-events: none;
+  z-index: 0;
 }
 .world {
   position: absolute;
@@ -370,6 +358,25 @@ svg.edges {
   stroke: #3baed3;
   stroke-width: 2;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.25));
+}
+
+/* Transient alignment guides shown while dragging a node. */
+svg.guides {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 0 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.guide-line {
+  stroke: #f0a2ff;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: 0.9;
 }
 .edge.invalid {
   stroke: var(--danger);

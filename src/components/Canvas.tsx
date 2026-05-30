@@ -1,9 +1,14 @@
 "use client";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useFlow } from "../hooks/useFlow";
 import { PALETTE_ADD_EVENT } from "./Palette";
 
+/** Major/minor visible grid steps (world units). Minor matches the snap step. */
+const GRID_MAJOR = 80;
+const GRID_MINOR = 16;
+
 export const Canvas: React.FC = () => {
+  const gridRef = useRef<HTMLDivElement>(null);
   const {
     worldRef,
     svgRef,
@@ -28,6 +33,7 @@ export const Canvas: React.FC = () => {
     zoomReset,
     zoomToSelection,
     fitToView,
+    guides,
   } = useFlow();
 
   // Drag and drop — scoped to the canvas element so drops elsewhere in the
@@ -94,6 +100,33 @@ export const Canvas: React.FC = () => {
     drawMinimap();
   }, [state.resources, state.relationships, state.viewport, state.mode, draw, drawMinimap]);
 
+  // Make the visible grid track the viewport so "snap to the visible grid" is
+  // honest at any pan/zoom: background-position follows pan, size scales with
+  // zoom. The minor (snap-step) grid is dropped once it would be denser than
+  // ~8px on screen so far-out zoom does not turn into a solid fill.
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const { x, y, scale } = state.viewport;
+    const major = GRID_MAJOR * scale;
+    const minor = GRID_MINOR * scale;
+    const images = [
+      "linear-gradient(#15203a 2px, transparent 2px)",
+      "linear-gradient(90deg, #15203a 2px, transparent 2px)",
+    ];
+    const sizes = [`${major}px ${major}px`, `${major}px ${major}px`];
+    if (minor >= 8) {
+      images.push(
+        "linear-gradient(#10182c 1px, transparent 1px)",
+        "linear-gradient(90deg, #10182c 1px, transparent 1px)",
+      );
+      sizes.push(`${minor}px ${minor}px`, `${minor}px ${minor}px`);
+    }
+    el.style.backgroundImage = images.join(", ");
+    el.style.backgroundSize = sizes.join(", ");
+    el.style.backgroundPosition = images.map(() => `${x}px ${y}px`).join(", ");
+  }, [state.viewport]);
+
   // Mouse events
   useEffect(() => {
     window.addEventListener("mousemove", onMouseMove);
@@ -152,6 +185,7 @@ export const Canvas: React.FC = () => {
 
   return (
     <>
+      <div className="grid" ref={gridRef} aria-hidden="true" />
       <svg className="edges" ref={svgRef} aria-hidden="true" />
       {/* Pointer-only canvas surface; node interactions are delivered via the
           renderer's per-node handlers, so these layers are aria-hidden. */}
@@ -163,6 +197,39 @@ export const Canvas: React.FC = () => {
         onMouseDown={onCanvasMouseDown}
       />
       <div className="overlay" aria-hidden="true" onClick={onCanvasClick} />
+      {guides.length > 0 && (
+        <svg
+          className="guides"
+          aria-hidden="true"
+          style={{
+            transform: `translate(${state.viewport.x}px, ${state.viewport.y}px) scale(${state.viewport.scale})`,
+          }}
+        >
+          {guides.map((g, i) =>
+            g.axis === "x" ? (
+              <line
+                key={i}
+                x1={g.pos}
+                y1={g.from}
+                x2={g.pos}
+                y2={g.to}
+                className="guide-line"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : (
+              <line
+                key={i}
+                x1={g.from}
+                y1={g.pos}
+                x2={g.to}
+                y2={g.pos}
+                className="guide-line"
+                vectorEffect="non-scaling-stroke"
+              />
+            ),
+          )}
+        </svg>
+      )}
       {state.resources.length === 0 && (
         <div className="empty-hint" aria-hidden="true">
           <div className="empty-hint-title">Nothing here yet</div>
