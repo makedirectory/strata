@@ -7,7 +7,7 @@
   },
   "packageManager": "npm@10.9.3",
   "overrides": {
-    "zod": "4.1.12"
+    "zod": "$zod"
   },
   "scripts": {
     "dev": "next dev",
