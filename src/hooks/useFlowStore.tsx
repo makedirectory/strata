@@ -81,6 +81,9 @@ export function useFlowStore() {
   );
   const [filterMode, setFilterMode] = useState<"dim" | "hide">("dim");
   const [environmentTint, setEnvironmentTint] = useState(false);
+  // Summary group keys (`${parentId}::${serviceId}`) that are expanded (shown
+  // as individual nodes rather than a single "N× …" summary). View-only.
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
   const [selection, setSelection] = useState<Selection>(null);
   // Multi-selection set (marquee / group operations). The single `selection`
   // above still drives the Inspector detail view; `selectedIds` drives group
@@ -282,6 +285,10 @@ export function useFlowStore() {
   const toggleRelClass = useCallback((id: RelationshipClass) => {
     setHiddenRelClasses((prev) => toggledSet(prev, id));
   }, []);
+  /** Expand/collapse a summarized leaf group by its `${parentId}::${serviceId}` key. */
+  const toggleExpandedGroup = useCallback((key: string) => {
+    setExpandedGroups((prev) => toggledSet(prev, key));
+  }, []);
   /** Apply a full layer state at once (view presets, saved views). */
   const setLayers = useCallback((layers: LayerState) => {
     setHiddenCategories(new Set(layers.hiddenCategories));
@@ -384,6 +391,7 @@ export function useFlowStore() {
     setSelection(null);
     setSelectedIds([]);
     setCollapsed(new Set());
+    setExpandedGroups(new Set());
     setFocusedContainerId(null);
     setDragOverride(null);
   }, [mutate]);
@@ -407,6 +415,7 @@ export function useFlowStore() {
       setSelection(null);
       setSelectedIds([]);
       setCollapsed(new Set());
+      setExpandedGroups(new Set());
       setFocusedContainerId(null);
       setDragOverride(null);
     },
@@ -452,6 +461,7 @@ export function useFlowStore() {
     hiddenRelClasses,
     filterMode,
     environmentTint,
+    expandedGroups,
     selection,
     selectedIds,
     graphId,
@@ -468,6 +478,7 @@ export function useFlowStore() {
     setParent,
     toggleCategory,
     toggleRelClass,
+    toggleExpandedGroup,
     setFilterMode,
     setEnvironmentTint,
     setLayers,
