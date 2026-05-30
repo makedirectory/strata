@@ -48,3 +48,6 @@ website/.docusaurus/
 
 # Coverage
 coverage/
+
+# Specs (local planning notes, not tracked)
+specs/
