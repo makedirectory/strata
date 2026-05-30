@@ -9,8 +9,8 @@ import type { Metadata } from "next";
  * fully isolated. See `next.config.mjs`.
  */
 export const metadata: Metadata = {
-  title: "AWS Flow Builder",
-  description: "Visual AWS architecture builder for VPC/ECS with validation & rules",
+  title: "Strata",
+  description: "Strata — design, validate, and understand AWS cloud architecture visually.",
 };
 
 export default function ProductLayout({ children }: { children: React.ReactNode }) {

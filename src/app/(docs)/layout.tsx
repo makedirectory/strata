@@ -11,17 +11,17 @@ import "nextra-theme-docs/style.css";
  */
 export const metadata = {
   title: {
-    default: "AWS Flow Builder Docs",
-    template: "%s – AWS Flow Builder Docs",
+    default: "Strata Docs",
+    template: "%s – Strata Docs",
   },
-  description: "User and engineering documentation for AWS Flow Builder.",
+  description: "User and engineering documentation for Strata.",
 };
 
 // Open-source project — point this at the public repository.
-const REPO = "https://github.com/koroid/aws-flow-builder";
+const REPO = "https://github.com/koroid/strata";
 
-const navbar = <Navbar logo={<b>🔶 AWS Flow Builder</b>} projectLink={REPO} />;
-const footer = <Footer>MIT — AWS Flow Builder · open source</Footer>;
+const navbar = <Navbar logo={<b>🔶 Strata</b>} projectLink={REPO} />;
+const footer = <Footer>MIT — Strata · open source</Footer>;
 
 export default async function DocsLayout({ children }: { children: ReactNode }) {
   return (

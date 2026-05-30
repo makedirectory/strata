@@ -1,5 +1,5 @@
 /**
- * AWS Flow Builder — Infrastructure-as-Code import
+ * Strata — Infrastructure-as-Code import
  * ------------------------------------------------
  * Turns **CloudFormation** templates (JSON or YAML) and **Terraform** configs
  * (`terraform show -json` state / plan JSON) into the in-app

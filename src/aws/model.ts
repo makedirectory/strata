@@ -1,5 +1,5 @@
 /**
- * AWS Flow Builder — Domain Data Model
+ * Strata — Domain Data Model
  * ------------------------------------
  * The persisted representation of an AWS environment. Deliberately decoupled
  * from the canvas/rendering layer: a `ResourceInstance` references a

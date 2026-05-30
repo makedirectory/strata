@@ -1,5 +1,4 @@
 ---
-sidebar_position: 5
 title: Persistence & the Server
 ---
 
@@ -7,8 +6,8 @@ title: Persistence & the Server
 
 ## The Route Handlers _are_ the server
 
-There is no separate backend service. The Next.js App Router Route Handlers
-under `src/app/api/graphs/` are the entire server tier:
+There is no separate backend service. The Next.js App Router Route Handlers under
+`src/app/api/graphs/` are the entire server tier:
 
 - `src/app/api/graphs/route.ts`
   - `GET /api/graphs` → `repo.list()` → `{ graphs: GraphSummary[] }`.
@@ -16,12 +15,17 @@ under `src/app/api/graphs/` are the entire server tier:
     `validateGraph()` (422 on failure), then `repo.create()` → `201`.
 - `src/app/api/graphs/[id]/route.ts`
   - `GET /api/graphs/:id` → full graph or `404`.
-  - `PUT /api/graphs/:id` → `validateGraph()` then `repo.update()` (`404` if
-    absent).
+  - `PUT /api/graphs/:id` → first a runtime shape check via `hasGraphCollections()`
+    (`src/server/graphSchema.ts`), which requires `name` plus the
+    `accounts`/`resources`/`relationships` arrays and returns `422` if any are
+    missing — this guards a trust boundary so undefined collections can't be
+    persisted as silent data loss. It then fills optional defaults over
+    `emptyGraph(body.name)`, runs `validateGraph()` (`422` on errors), and
+    `repo.update()` (`404` if absent).
   - `DELETE /api/graphs/:id` → `repo.remove()`.
 
-Both files set `export const dynamic = "force-dynamic"` so reads/writes always
-hit the store. They never talk to a concrete store — only to a `Repository`.
+Both files set `export const dynamic = "force-dynamic"` so reads/writes always hit
+the store. They never talk to a concrete store — only to a `Repository`.
 
 ## The `Repository` interface (`src/server/repository.ts`)
 
@@ -39,38 +43,38 @@ export interface Repository {
 
 ## Default: file-backed (`src/server/fileRepository.ts`)
 
-`FileRepository` stores each graph as JSON under `.data/graphs/<id>.json`
-(override the directory with `AWS_FLOW_DATA_DIR`). It runs with **zero external
-infrastructure** — ideal for local dev and demos. It assigns `randomUUID()` ids
-and `createdAt`/`updatedAt` timestamps on write, stamps `SCHEMA_VERSION`, sorts
-list results by `updatedAt`, and guards `fileFor()` against path traversal.
+`FileRepository` stores each graph as JSON under `.data/graphs/<id>.json` (override
+the directory with `AWS_FLOW_DATA_DIR`). It runs with **zero external
+infrastructure** — ideal for local dev and demos. It assigns `randomUUID()` ids and
+`createdAt`/`updatedAt` timestamps on write, stamps `SCHEMA_VERSION`, sorts list
+results by `updatedAt`, and guards `fileFor()` against path traversal.
 
 ## Selecting a backend (`src/server/index.ts`)
 
 `getRepository()` lazily constructs and memoizes the active store, chosen by the
-`AWS_FLOW_REPOSITORY` env var (default `"file"`). The `switch` already has
-commented slots for `"postgres"` and `"dynamodb"`:
+`AWS_FLOW_REPOSITORY` env var (default `"file"`). The `switch` already has commented
+slots for `"postgres"` and `"dynamodb"`:
 
 ```ts
 const kind = process.env.AWS_FLOW_REPOSITORY ?? "file";
 switch (kind) {
-  // case "postgres": instance = new PostgresRepository(); break;
-  // case "dynamodb": instance = new DynamoRepository(); break;
   case "file":
   default:
     instance = new FileRepository();
     break;
+  // case "postgres": instance = new PostgresRepository(); break;
+  // case "dynamodb": instance = new DynamoRepository(); break;
 }
 ```
 
-The instance is memoized as a process-wide singleton, so `AWS_FLOW_REPOSITORY`
-must be set before the first request. `resetRepository()` clears the memo (used
-in tests that switch backends).
+The instance is memoized as a process-wide singleton, so `AWS_FLOW_REPOSITORY` must
+be set before the first request. `resetRepository()` clears the memo (used in tests
+that switch backends).
 
 ## Swapping to Postgres/RDS or DynamoDB
 
-A new backend implements the five-method `Repository` interface and is
-registered in the `getRepository()` switch — **no caller changes**. Sketch:
+A new backend implements the five-method `Repository` interface and is registered in
+the `getRepository()` switch — **no caller changes**. Sketch:
 
 ```ts
 // src/server/postgresRepository.ts
@@ -93,11 +97,10 @@ export class PostgresRepository implements Repository {
 }
 ```
 
-Store the full `InfrastructureGraph` as a JSONB column (Postgres) or a single
-item (DynamoDB, partition key = `id`); `list()` projects to `GraphSummary`.
-Preserve the contract the file store establishes: server-assigned ids,
-server-stamped timestamps, `SCHEMA_VERSION` on every write, and `null`/`false`
-on missing records.
+Store the full `InfrastructureGraph` as a JSONB column (Postgres) or a single item
+(DynamoDB, partition key = `id`); `list()` projects to `GraphSummary`. Preserve the
+contract the file store establishes: server-assigned ids, server-stamped
+timestamps, `SCHEMA_VERSION` on every write, and `null`/`false` on missing records.
 
 ## Environment variables
 
