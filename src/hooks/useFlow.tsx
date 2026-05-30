@@ -15,6 +15,7 @@ import {
   type RuleSuggestion,
 } from "../aws/rules";
 import { listGraphs, getGraph, createGraph, updateGraph } from "../lib/api";
+import { importIaC } from "../aws/iac";
 
 interface FlowContextValue {
   state: {
@@ -70,6 +71,7 @@ interface FlowContextValue {
   suggestRules: () => void;
   exportJSON: () => void;
   importJSONDialog: () => void;
+  importIaCDialog: () => void;
   clear: () => void;
   loadPreset: (presetName: string) => void;
   runValidateUI: () => void;
@@ -351,6 +353,46 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     input.click();
   };
 
+  const importIaCDialog = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,.yaml,.yml,.tf,.tfstate,.template";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onerror = () => setStatus("Import failed: could not read file.");
+      reader.onload = () => {
+        try {
+          const text = String(reader.result);
+          const result = importIaC(text, { name: file.name });
+          const { graph, format, unmappedTypes, warnings } = result;
+          store.replaceAll({
+            resources: graph.resources ?? [],
+            relationships: graph.relationships ?? [],
+            viewport: graph.viewport,
+            accounts: graph.accounts ?? [],
+            graphId: graph.id ?? "",
+          });
+          store.setSelection(null);
+          const parts = [`Imported ${graph.resources.length} resource(s) from ${format}.`];
+          if (unmappedTypes.length > 0) {
+            parts.push(`Unmapped types: ${unmappedTypes.join(", ")}.`);
+          }
+          if (warnings.length > 0) {
+            parts.push(warnings.join(" "));
+          }
+          setStatus(parts.join(" "));
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "unknown error";
+          setStatus(`IaC import failed: ${detail}`);
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   // ---- Server save / load -------------------------------------------------
   const saveToServer = useCallback(async () => {
     try {
@@ -524,6 +566,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     suggestRules: runSuggest,
     exportJSON,
     importJSONDialog,
+    importIaCDialog,
     clear: store.clear,
     loadPreset,
     runValidateUI: runValidate,

@@ -12,6 +12,7 @@ function TopBar() {
     runRulesUI,
     exportJSON,
     importJSONDialog,
+    importIaCDialog,
     clear,
     status,
     undo,
@@ -47,6 +48,9 @@ function TopBar() {
         </button>
         <button onClick={exportJSON}>Export JSON</button>
         <button onClick={importJSONDialog}>Import JSON</button>
+        <button onClick={importIaCDialog} title="Import Terraform or CloudFormation">
+          Import IaC
+        </button>
         <button onClick={saveToServer} title="Save graph to server">
           Save to Server
         </button>
