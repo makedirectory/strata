@@ -3,13 +3,30 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import type { ResourceInstance, Relationship, Viewport, Account } from "../aws/model";
 import { DEFAULT_NODE_SIZE } from "../aws/model";
 import type { CanvasMode, CanvasDensity, Selection } from "../types";
-import type { RelationshipKind } from "../aws/types";
+import type { RelationshipKind, ServiceCategoryId } from "../aws/types";
+import type { RelationshipClass } from "../aws/relationshipClasses";
 import { defaultConfig, getService } from "../aws/registry";
 import { GRID_STEP } from "../canvas/geometry";
 import { useHistory, type HistoryState } from "./useHistory";
 
 /** Round a world coordinate to the visible grid step (matches drag snapping). */
 const snapToGrid = (n: number) => Math.round(n / GRID_STEP) * GRID_STEP;
+
+/** Visibility layers / filters / overlay (view-only, not in history). */
+export interface LayerState {
+  hiddenCategories: ReadonlySet<ServiceCategoryId>;
+  hiddenRelClasses: ReadonlySet<RelationshipClass>;
+  filterMode: "dim" | "hide";
+  environmentTint: boolean;
+}
+
+/** Return a new Set with `value` toggled. */
+function toggledSet<T>(set: ReadonlySet<T>, value: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return next;
+}
 
 interface FlowState extends HistoryState {
   resources: ResourceInstance[];
@@ -55,6 +72,15 @@ export function useFlowStore() {
   const [dragOverride, setDragOverride] = useState<{ id: string; x: number; y: number } | null>(
     null,
   );
+  // View-only layer/filter/overlay state (Phase 3) — not in history.
+  const [hiddenCategories, setHiddenCategories] = useState<ReadonlySet<ServiceCategoryId>>(
+    new Set(),
+  );
+  const [hiddenRelClasses, setHiddenRelClasses] = useState<ReadonlySet<RelationshipClass>>(
+    new Set(),
+  );
+  const [filterMode, setFilterMode] = useState<"dim" | "hide">("dim");
+  const [environmentTint, setEnvironmentTint] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
   // Multi-selection set (marquee / group operations). The single `selection`
   // above still drives the Inspector detail view; `selectedIds` drives group
@@ -234,6 +260,11 @@ export function useFlowStore() {
     setResources(nextResources);
   }, []);
 
+  /** Replace the collapsed-container set (e.g. the High-level view preset). */
+  const setCollapsedIds = useCallback((ids: Iterable<string>) => {
+    setCollapsed(new Set(ids));
+  }, []);
+
   /** Toggle a container's collapsed state (view-only). */
   const toggleCollapsed = useCallback((id: string) => {
     setCollapsed((prev) => {
@@ -242,6 +273,21 @@ export function useFlowStore() {
       else next.add(id);
       return next;
     });
+  }, []);
+
+  // ---- layer / filter / overlay setters (view-only) ----
+  const toggleCategory = useCallback((id: ServiceCategoryId) => {
+    setHiddenCategories((prev) => toggledSet(prev, id));
+  }, []);
+  const toggleRelClass = useCallback((id: RelationshipClass) => {
+    setHiddenRelClasses((prev) => toggledSet(prev, id));
+  }, []);
+  /** Apply a full layer state at once (view presets, saved views). */
+  const setLayers = useCallback((layers: LayerState) => {
+    setHiddenCategories(new Set(layers.hiddenCategories));
+    setHiddenRelClasses(new Set(layers.hiddenRelClasses));
+    setFilterMode(layers.filterMode);
+    setEnvironmentTint(layers.environmentTint);
   }, []);
 
   /**
@@ -402,6 +448,10 @@ export function useFlowStore() {
     collapsed,
     focusedContainerId,
     dragOverride,
+    hiddenCategories,
+    hiddenRelClasses,
+    filterMode,
+    environmentTint,
     selection,
     selectedIds,
     graphId,
@@ -412,9 +462,15 @@ export function useFlowStore() {
     setMode,
     setDensity,
     toggleCollapsed,
+    setCollapsedIds,
     setFocusedContainerId,
     setDragOverride,
     setParent,
+    toggleCategory,
+    toggleRelClass,
+    setFilterMode,
+    setEnvironmentTint,
+    setLayers,
     setSelection,
     setSelectedIds,
     setGraphId: setGraphIdSynced,

@@ -5,7 +5,147 @@ import { Palette } from "../../components/Palette";
 import { Canvas } from "../../components/Canvas";
 import { Inspector } from "../../components/Inspector";
 import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
+import { RELATIONSHIP_CLASSES, RELATIONSHIP_CLASS_ORDER } from "../../aws/relationshipClasses";
 import type { GraphSummary } from "../../aws/model";
+
+const VIEW_PRESETS = [
+  { id: "all", label: "All" },
+  { id: "network", label: "Network" },
+  { id: "security", label: "Security" },
+  { id: "data", label: "Data flow" },
+  { id: "high-level", label: "High-level" },
+] as const;
+
+/** Layers / filters / view-modes panel (Phase 3). */
+function LayersPanel() {
+  const {
+    hiddenCategories,
+    hiddenRelClasses,
+    toggleCategory,
+    toggleRelClass,
+    filterMode,
+    setFilterMode,
+    environmentTint,
+    setEnvironmentTint,
+    applyViewPreset,
+    savedViews,
+    saveView,
+    applySavedView,
+    deleteSavedView,
+  } = useFlow();
+  const [viewName, setViewName] = React.useState("");
+  const commitSave = () => {
+    if (viewName.trim()) {
+      saveView(viewName);
+      setViewName("");
+    }
+  };
+  return (
+    <div className="layers">
+      <div className="layers-presets">
+        {VIEW_PRESETS.map((p) => (
+          <button key={p.id} onClick={() => applyViewPreset(p.id)} title={`${p.label} view`}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="layers-sub">Relationships</div>
+      <div className="chips">
+        {RELATIONSHIP_CLASS_ORDER.map((c) => {
+          const def = RELATIONSHIP_CLASSES[c];
+          const on = !hiddenRelClasses.has(c);
+          return (
+            <button
+              key={c}
+              className={`chip ${on ? "on" : "off"}`}
+              onClick={() => toggleRelClass(c)}
+              aria-pressed={on}
+            >
+              <span className="chip-dot" style={{ background: def.color }} />
+              {def.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="layers-sub">Categories</div>
+      <div className="chips chips-icons">
+        {CATEGORY_ORDER.map((id) => {
+          const on = !hiddenCategories.has(id);
+          return (
+            <button
+              key={id}
+              className={`chip chip-icon ${on ? "on" : "off"}`}
+              onClick={() => toggleCategory(id)}
+              title={CATEGORIES[id].name}
+              aria-pressed={on}
+              aria-label={CATEGORIES[id].name}
+            >
+              <span className="chip-dot" style={{ background: CATEGORIES[id].color }} />
+              <span aria-hidden="true">{CATEGORIES[id].icon}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="layers-row">
+        <span className="layers-sub">Filtered</span>
+        <div className="seg">
+          <button
+            className={filterMode === "dim" ? "active" : ""}
+            onClick={() => setFilterMode("dim")}
+          >
+            Dim
+          </button>
+          <button
+            className={filterMode === "hide" ? "active" : ""}
+            onClick={() => setFilterMode("hide")}
+          >
+            Hide
+          </button>
+        </div>
+      </div>
+
+      <label className="layers-check">
+        <input
+          type="checkbox"
+          checked={environmentTint}
+          onChange={(e) => setEnvironmentTint(e.target.checked)}
+        />
+        Environment tint
+      </label>
+
+      <div className="layers-sub">Saved views</div>
+      <div className="saved-add">
+        <input
+          value={viewName}
+          onChange={(e) => setViewName(e.target.value)}
+          placeholder="Save current as…"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitSave();
+          }}
+        />
+        <button onClick={commitSave}>Save</button>
+      </div>
+      {savedViews.map((v) => (
+        <div className="saved-view" key={v.name}>
+          <button className="saved-apply" onClick={() => applySavedView(v.name)}>
+            {v.name}
+          </button>
+          <button
+            className="saved-del"
+            title="Delete view"
+            aria-label={`Delete ${v.name}`}
+            onClick={() => deleteSavedView(v.name)}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** Dropdown listing saved graphs (name · resource count · updated), replacing
  *  the old window.prompt "Load from Server" flow. */
@@ -225,15 +365,8 @@ export default function Page() {
             <div>D: duplicate selected node</div>
             <div>G: group selected into VPC</div>
           </div>
-          <h3>Legend</h3>
-          <div className="palette" style={{ gridTemplateColumns: "1fr" }}>
-            {CATEGORY_ORDER.map((id) => (
-              <div className="item" key={id}>
-                <span className="dot" style={{ background: CATEGORIES[id].color }}></span>{" "}
-                {CATEGORIES[id].name}
-              </div>
-            ))}
-          </div>
+          <h3>Layers &amp; Views</h3>
+          <LayersPanel />
         </aside>
         <main className="canvas-wrap" id="canvasWrap">
           <Canvas />
