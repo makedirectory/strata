@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# AWS Flow Builder
 
-## Getting Started
+A registry-driven canvas for **modeling AWS infrastructure as a typed graph**.
+Drag services onto a canvas, configure them with auto-generated forms, and connect
+them with typed relationships (`contains`, `routes_to`, `invokes`, `peers_with`, …)
+— with the whole vocabulary spanning 14 AWS service categories. It is built to be
+extended one service at a time and to eventually ingest live AWS state via MCP /
+Cloud Control.
 
-First, run the development server:
+The core idea: **everything visual is derived from a data registry, not hardcoded.**
+Adding a new AWS service is a single catalog entry — no UI changes.
+
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Graphs persist to a local file store under `.data/graphs/` by default — **no
+external infrastructure required**.
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+### Other scripts
 
-## Learn More
+```bash
+npm run build   # production build
+npm run start   # run the production build
+npm run lint    # lint
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Configuration
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Env var               | Default        | Purpose                                                               |
+| --------------------- | -------------- | --------------------------------------------------------------------- |
+| `AWS_FLOW_REPOSITORY` | `file`         | Persistence backend (`file`; `postgres`/`dynamodb` are designed-for). |
+| `AWS_FLOW_DATA_DIR`   | `.data/graphs` | Directory for the file-backed store.                                  |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+src/
+  aws/                  Registry + domain model (the data foundation)
+    types.ts            ServiceDefinition, ConfigField, RelationshipKind, scopes
+    registry.ts         Aggregates catalogs; lookups, search, validateRegistry()
+    categories.ts       Category + relationship presentation metadata
+    model.ts            InfrastructureGraph / ResourceInstance / Relationship, validateGraph()
+    regions.ts          AWS region reference list
+    rules.ts            Architecture validation + best-practice rule suggestions
+    services/*.ts       Per-category service catalogs (networking.ts is the template)
+    mcp.ts              MCP / Cloud Control import mapper (mapDiscoveredToGraph)
+  server/               Persistence (the Route Handlers are the server tier)
+    repository.ts       Repository interface
+    fileRepository.ts   Default file-backed store
+    index.ts            getRepository() — backend selection via env
+  app/
+    api/graphs/         REST Route Handlers (GET/POST, GET/PUT/DELETE by id)
+    page.tsx, layout.tsx
+  components/           UI: Palette, Canvas, Inspector
+  hooks/                Canvas state, rendering, interaction, undo/redo
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Adding a new AWS service
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+Append one `ServiceDefinition` to the matching catalog in `src/aws/services/`
+(use `networking.ts` as the template) — the palette, colours, icons, inspector
+form, and search pick it up automatically. See
+[ARCHITECTURE.md §2](./ARCHITECTURE.md#2-the-service-registry--schema).
+
+## Architecture
+
+For the full design — registry schema, domain model, the registry-driven UI, the
+swappable persistence layer, MCP ingestion readiness, and a candid list of gaps and
+next steps — see **[ARCHITECTURE.md](./ARCHITECTURE.md)**.
+
+## Tech Stack
+
+Next.js (App Router) · React · TypeScript · Tailwind CSS.
