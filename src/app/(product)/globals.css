@@ -11,9 +11,18 @@
   width: 100%;
   height: 100%;
 }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* The product uses plain CSS (no Tailwind) so the build does not re-process
+   Nextra's prebuilt theme CSS under /docs. The few utility classes the app
+   relied on are defined here directly. */
+.h-screen {
+  height: 100vh;
+}
+.mt-1 {
+  margin-top: 0.25rem;
+}
+.ml-1 {
+  margin-left: 0.25rem;
+}
 
 /* Theme tokens */
 :root {

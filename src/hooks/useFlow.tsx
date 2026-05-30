@@ -24,9 +24,9 @@ interface FlowContextValue {
     viewport: ReturnType<typeof useFlowStore>["viewport"];
     mode: CanvasMode;
   };
-  worldRef: React.RefObject<HTMLDivElement>;
-  svgRef: React.RefObject<SVGSVGElement>;
-  minimapRef: React.RefObject<HTMLCanvasElement>;
+  worldRef: React.RefObject<HTMLDivElement | null>;
+  svgRef: React.RefObject<SVGSVGElement | null>;
+  minimapRef: React.RefObject<HTMLCanvasElement | null>;
   selection: Selection;
 
   // Actions

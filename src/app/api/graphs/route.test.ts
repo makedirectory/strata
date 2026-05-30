@@ -189,7 +189,7 @@ describe("GET /api/graphs/[id]", () => {
     const createRes = await collection.POST(jsonRequest("POST", validGraphBody()));
     const created = await createRes.json();
 
-    const res = await idRoute.GET(jsonRequest("GET"), { params: { id: created.id } });
+    const res = await idRoute.GET(jsonRequest("GET"), { params: Promise.resolve({ id: created.id }) });
     expect(res.status).toBe(200);
     const fetched = await res.json();
     expect(fetched.id).toBe(created.id);
@@ -198,7 +198,7 @@ describe("GET /api/graphs/[id]", () => {
   });
 
   it("returns 404 for an unknown (well-formed) id", async () => {
-    const res = await idRoute.GET(jsonRequest("GET"), { params: { id: randomUUID() } });
+    const res = await idRoute.GET(jsonRequest("GET"), { params: Promise.resolve({ id: randomUUID() }) });
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json.error).toBe("Not found");
@@ -216,7 +216,7 @@ describe("PUT /api/graphs/[id]", () => {
     updateBody.relationships = [];
 
     const res = await idRoute.PUT(jsonRequest("PUT", updateBody), {
-      params: { id: created.id },
+      params: Promise.resolve({ id: created.id }),
     });
     expect(res.status).toBe(200);
     const updated = await res.json();
@@ -229,14 +229,14 @@ describe("PUT /api/graphs/[id]", () => {
 
   it("returns 404 when updating an unknown id", async () => {
     const res = await idRoute.PUT(jsonRequest("PUT", validGraphBody()), {
-      params: { id: randomUUID() },
+      params: Promise.resolve({ id: randomUUID() }),
     });
     expect(res.status).toBe(404);
   });
 
   it("rejects a body missing required collections with 422", async () => {
     const res = await idRoute.PUT(jsonRequest("PUT", { name: "no arrays" }), {
-      params: { id: randomUUID() },
+      params: Promise.resolve({ id: randomUUID() }),
     });
     expect(res.status).toBe(422);
     const json = await res.json();
@@ -249,7 +249,7 @@ describe("PUT /api/graphs/[id]", () => {
 
     const body = validGraphBody();
     body.relationships = [{ id: "relX", from: "ghost", to: "r2", kind: "connects_to" }];
-    const res = await idRoute.PUT(jsonRequest("PUT", body), { params: { id: created.id } });
+    const res = await idRoute.PUT(jsonRequest("PUT", body), { params: Promise.resolve({ id: created.id }) });
     expect(res.status).toBe(422);
     const json = await res.json();
     expect(json.error).toBe("Invalid graph");
@@ -263,19 +263,19 @@ describe("DELETE /api/graphs/[id]", () => {
     const created = await createRes.json();
 
     const delRes = await idRoute.DELETE(jsonRequest("DELETE"), {
-      params: { id: created.id },
+      params: Promise.resolve({ id: created.id }),
     });
     expect(delRes.status).toBe(200);
     const delJson = await delRes.json();
     expect(delJson.ok).toBe(true);
 
-    const getRes = await idRoute.GET(jsonRequest("GET"), { params: { id: created.id } });
+    const getRes = await idRoute.GET(jsonRequest("GET"), { params: Promise.resolve({ id: created.id }) });
     expect(getRes.status).toBe(404);
   });
 
   it("returns 404 when deleting an unknown id", async () => {
     const res = await idRoute.DELETE(jsonRequest("DELETE"), {
-      params: { id: randomUUID() },
+      params: Promise.resolve({ id: randomUUID() }),
     });
     expect(res.status).toBe(404);
   });

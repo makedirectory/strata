@@ -1,10 +1,10 @@
 "use client";
 import React from "react";
-import { FlowProvider, useFlow } from "../hooks/useFlow";
-import { Palette } from "../components/Palette";
-import { Canvas } from "../components/Canvas";
-import { Inspector } from "../components/Inspector";
-import { CATEGORIES, CATEGORY_ORDER } from "../aws/categories";
+import { FlowProvider, useFlow } from "../../hooks/useFlow";
+import { Palette } from "../../components/Palette";
+import { Canvas } from "../../components/Canvas";
+import { Inspector } from "../../components/Inspector";
+import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
 
 function TopBar() {
   const {

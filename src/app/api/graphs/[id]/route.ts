@@ -18,18 +18,20 @@ import type { InfrastructureGraph } from "../../../../aws/model";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = requireAuth(req);
   if (denied) return denied;
+  const { id } = await params;
   const repo = getRepository();
-  const graph = await repo.get(params.id);
+  const graph = await repo.get(id);
   if (!graph) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(graph);
 }
 
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = requireAuth(req);
   if (denied) return denied;
+  const { id } = await params;
   const repo = getRepository();
   let body: unknown;
   try {
@@ -58,16 +60,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const errors = validateGraph(graph);
   if (errors.length)
     return NextResponse.json({ error: "Invalid graph", details: errors }, { status: 422 });
-  const updated = await repo.update(params.id, graph);
+  const updated = await repo.update(id, graph);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(updated);
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = requireAuth(req);
   if (denied) return denied;
+  const { id } = await params;
   const repo = getRepository();
-  const ok = await repo.remove(params.id);
+  const ok = await repo.remove(id);
   if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

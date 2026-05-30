@@ -161,7 +161,7 @@ export function useCanvasInteraction() {
   const fitToView = useCallback(
     (
       resources: ResourceInstance[],
-      worldRef: React.RefObject<HTMLDivElement>,
+      worldRef: React.RefObject<HTMLDivElement | null>,
       updatePan: (newPan: Pan) => void,
     ) => {
       if (resources.length === 0) {
