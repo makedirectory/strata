@@ -34,6 +34,10 @@ export const Canvas: React.FC = () => {
     guides,
     marquee,
     minimapNavigate,
+    onNodeDoubleClick,
+    focusContainer,
+    breadcrumb,
+    focusedContainerId,
   } = useFlow();
 
   // Whether a minimap click-drag is in progress (window-level so the drag keeps
@@ -210,7 +214,16 @@ export const Canvas: React.FC = () => {
       <svg className="edges" ref={svgRef} aria-hidden="true" />
       {/* Pointer-only canvas surface; node interactions are delivered via the
           renderer's per-node handlers, so these layers are aria-hidden. */}
-      <div className="world" ref={worldRef} aria-hidden="true" onMouseDown={onCanvasMouseDown} />
+      <div
+        className="world"
+        ref={worldRef}
+        aria-hidden="true"
+        onMouseDown={onCanvasMouseDown}
+        onDoubleClick={(e) => {
+          const id = (e.target as HTMLElement).closest(".node")?.getAttribute("data-id");
+          if (id) onNodeDoubleClick(id);
+        }}
+      />
       <div className="overlay" aria-hidden="true" />
       {(guides.length > 0 || marquee) && (
         <svg
@@ -261,6 +274,27 @@ export const Canvas: React.FC = () => {
           <div className="empty-hint-sub">
             Drag a service from the palette, load a preset, or Import IaC.
           </div>
+        </div>
+      )}
+      {breadcrumb.length > 0 && (
+        <div className="breadcrumb" role="navigation" aria-label="Containment path">
+          {breadcrumb.map((c, i) => (
+            <React.Fragment key={c.id}>
+              {i > 0 && <span className="breadcrumb-sep">▸</span>}
+              <button className="breadcrumb-crumb" onClick={() => focusContainer(c.id)}>
+                {c.name}
+              </button>
+            </React.Fragment>
+          ))}
+          {focusedContainerId && (
+            <button
+              className="breadcrumb-exit"
+              title="Exit focus"
+              onClick={() => focusContainer(null)}
+            >
+              ✕
+            </button>
+          )}
         </div>
       )}
       <div className="zoom-controls" role="group" aria-label="Zoom controls">

@@ -4,11 +4,8 @@ import type { ResourceInstance } from "../aws/model";
 import type { RelationshipKind } from "../aws/types";
 import type { CanvasMode, Pan } from "../types";
 import { getService } from "../aws/registry";
-import { DEFAULT_NODE_SIZE } from "../aws/model";
 import {
   zoomAbout,
-  fitView,
-  boundsOf,
   computeSnap,
   normalizeRect,
   nodesInRect,
@@ -27,13 +24,18 @@ interface DragState {
   anchorId: string;
   /** All moving node ids (length 1 for a single drag). */
   ids: string[];
-  /** Initial top-left of each moving node, keyed by id. */
+  /** Initial top-left (effective rect) of each moving node, keyed by id. */
   start: Map<string, Vec2>;
   /** Screen-space offset of the pointer from the anchor's top-left at grab. */
   grabDX: number;
   grabDY: number;
   /** True when the drag began on a node that was part of a multi-selection. */
   isGroup: boolean;
+  /** The dragged node already had a parent — a child drag uses the layout override. */
+  wasChild: boolean;
+  /** Latest snapped top-left of the anchor (for drop reparent / free placement). */
+  lastX: number;
+  lastY: number;
 }
 
 /** An in-progress marquee selection rectangle. */
@@ -44,10 +46,6 @@ interface MarqueeState {
   originTop: number;
   rectWorld: Rect;
   moved: boolean;
-}
-
-function pos(r: ResourceInstance) {
-  return r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
 }
 
 /** Canvas-wrap-local pointer coordinates for a native event (subtract the rect). */
@@ -96,13 +94,14 @@ export function useCanvasInteraction() {
         mode: CanvasMode;
         resources: ResourceInstance[];
         selectedIds: string[];
+        rects: Map<string, Rect>;
         connect: (from: string, to: string, kind: RelationshipKind) => void;
         selectSingle: (id: string) => void;
       },
     ) => {
       e.preventDefault();
       e.stopPropagation();
-      const { pan, mode, resources, selectedIds, connect, selectSingle } = ctx;
+      const { pan, mode, resources, selectedIds, rects, connect, selectSingle } = ctx;
       // In "connect" mode, clicking nodes wires them: first click picks the
       // source, second click on a different node creates the relationship.
       if (mode === "connect") {
@@ -124,14 +123,12 @@ export function useCanvasInteraction() {
       const ids = isGroup ? [...selectedIds] : [resource.id];
       if (!isGroup) selectSingle(resource.id);
 
-      const p = pos(resource);
+      // Grab from the EFFECTIVE (laid-out) rect so a nested node doesn't jump.
+      const p = rects.get(resource.id) ?? { x: 0, y: 0, w: 0, h: 0 };
       const start = new Map<string, Vec2>();
       for (const id of ids) {
-        const r = resources.find((x) => x.id === id);
-        if (r) {
-          const rp = pos(r);
-          start.set(id, { x: rp.x, y: rp.y });
-        }
+        const rb = rects.get(id);
+        if (rb) start.set(id, { x: rb.x, y: rb.y });
       }
       dragRef.current = {
         anchorId: resource.id,
@@ -140,6 +137,9 @@ export function useCanvasInteraction() {
         grabDX: e.clientX - (pan.x + p.x * pan.scale),
         grabDY: e.clientY - (pan.y + p.y * pan.scale),
         isGroup,
+        wasChild: !!resource.parentId,
+        lastX: p.x,
+        lastY: p.y,
       };
       draggedRef.current = false;
     },
@@ -191,40 +191,51 @@ export function useCanvasInteraction() {
     (
       e: MouseEvent,
       ctx: {
-        resources: ResourceInstance[];
+        rects: Map<string, Rect>;
         pan: Pan;
         updatePositions: (updates: { id: string; x: number; y: number }[]) => void;
         updatePan: (newPan: Pan) => void;
         setGuides: (guides: GuideLine[]) => void;
         setMarquee: (rect: Rect | null) => void;
+        setOverride: (o: { id: string; x: number; y: number } | null) => void;
       },
     ) => {
-      const { resources, pan, updatePositions, updatePan, setGuides, setMarquee } = ctx;
+      const { rects, pan, updatePositions, updatePan, setGuides, setMarquee, setOverride } = ctx;
       const drag = dragRef.current;
       if (drag) {
-        const anchor = resources.find((x) => x.id === drag.anchorId);
+        const box = rects.get(drag.anchorId);
         const startAnchor = drag.start.get(drag.anchorId);
-        if (!anchor || !startAnchor) return;
-        const box = pos(anchor);
+        if (!box || !startAnchor) return;
         const nx = (e.clientX - pan.x - drag.grabDX) / pan.scale;
         const ny = (e.clientY - pan.y - drag.grabDY) / pan.scale;
         // Snap the anchor to the visible grid + other nodes' edges/centres
         // (excluding the moving set). Threshold ≈8 screen px in world units.
         const moving = new Set(drag.ids);
-        const others = resources.filter((x) => !moving.has(x.id)).map(pos);
+        const others = [...rects.entries()].filter(([id]) => !moving.has(id)).map(([, r]) => r);
         const snap = computeSnap({ x: nx, y: ny, w: box.w, h: box.h }, others, {
           threshold: 8 / pan.scale,
         });
-        // Apply the anchor's snapped delta to every moving node so the group
-        // keeps its shape.
-        const ddx = snap.x - startAnchor.x;
-        const ddy = snap.y - startAnchor.y;
-        const updates = drag.ids.map((id) => {
-          const s = drag.start.get(id) ?? { x: 0, y: 0 };
-          return { id, x: s.x + ddx, y: s.y + ddy };
-        });
         draggedRef.current = true;
-        updatePositions(updates);
+        drag.lastX = snap.x;
+        drag.lastY = snap.y;
+        if (drag.isGroup) {
+          // Move every selected node together (top-level stored positions).
+          const ddx = snap.x - startAnchor.x;
+          const ddy = snap.y - startAnchor.y;
+          updatePositions(
+            drag.ids.map((id) => {
+              const s = drag.start.get(id) ?? { x: 0, y: 0 };
+              return { id, x: s.x + ddx, y: s.y + ddy };
+            }),
+          );
+        } else if (drag.wasChild) {
+          // A child detaches via the layout override and follows the cursor; its
+          // former parent repacks. Reparent happens on drop.
+          setOverride({ id: drag.anchorId, x: snap.x, y: snap.y });
+        } else {
+          // A free top-level node moves its stored position directly.
+          updatePositions([{ id: drag.anchorId, x: snap.x, y: snap.y }]);
+        }
         setGuides(snap.guides);
         return;
       }
@@ -246,23 +257,47 @@ export function useCanvasInteraction() {
 
   const onMouseUp = useCallback(
     (ctx: {
-      resources: ResourceInstance[];
+      rects: Map<string, Rect>;
       commitState: () => void;
       selectSingle: (id: string) => void;
       applyMarquee: (ids: string[]) => void;
       clearSelection: () => void;
       setGuides: (guides: GuideLine[]) => void;
       setMarquee: (rect: Rect | null) => void;
+      setOverride: (o: { id: string; x: number; y: number } | null) => void;
+      /** Deepest visible container under a world point, excluding a subtree. */
+      containerAt: (point: Vec2, excludeId: string) => string | null;
+      setParent: (id: string, parentId: string | undefined, dropPos?: Vec2) => void;
     }) => {
       const drag = dragRef.current;
       if (drag) {
         if (draggedRef.current) {
-          // Group/single move → exactly one history entry.
-          ctx.commitState();
+          const box = ctx.rects.get(drag.anchorId);
+          if (drag.isGroup) {
+            // Group move → one history entry; no reparenting.
+            ctx.commitState();
+          } else {
+            // Single drag: reparent based on the container under the node centre.
+            const center = {
+              x: drag.lastX + (box?.w ?? 0) / 2,
+              y: drag.lastY + (box?.h ?? 0) / 2,
+            };
+            const target = ctx.containerAt(center, drag.anchorId);
+            if (target) {
+              ctx.setParent(drag.anchorId, target);
+            } else if (drag.wasChild) {
+              // Dropped on empty canvas → becomes a free top-level node there.
+              ctx.setParent(drag.anchorId, undefined, { x: drag.lastX, y: drag.lastY });
+            } else {
+              // Stayed a free top-level node → just commit the moved position.
+              ctx.commitState();
+            }
+          }
         } else if (drag.isGroup) {
           // A click (no move) on a member of a multi-selection collapses to it.
           ctx.selectSingle(drag.anchorId);
         }
+        ctx.setOverride(null);
         dragRef.current = null;
         draggedRef.current = false;
         ctx.setGuides([]);
@@ -270,10 +305,13 @@ export function useCanvasInteraction() {
       const m = marqueeRef.current;
       if (m) {
         if (m.moved) {
-          const boxes = ctx.resources.map((r) => {
-            const p = pos(r);
-            return { id: r.id, x: p.x, y: p.y, w: p.w, h: p.h };
-          });
+          const boxes = [...ctx.rects.entries()].map(([id, r]) => ({
+            id,
+            x: r.x,
+            y: r.y,
+            w: r.w,
+            h: r.h,
+          }));
           ctx.applyMarquee(nodesInRect(boxes, m.rectWorld));
         } else {
           // A bare click on empty canvas clears the selection.
@@ -328,24 +366,6 @@ export function useCanvasInteraction() {
     [defaultKind],
   );
 
-  const fitToView = useCallback(
-    (
-      resources: ResourceInstance[],
-      worldRef: React.RefObject<HTMLDivElement | null>,
-      updatePan: (newPan: Pan) => void,
-    ) => {
-      if (resources.length === 0) {
-        updatePan({ x: 200, y: 120, scale: 1 });
-        return;
-      }
-      const bounds = boundsOf(resources.map(pos));
-      if (!bounds) return;
-      const view = (worldRef.current!.parentElement as HTMLElement).getBoundingClientRect();
-      updatePan(fitView(bounds, { width: view.width, height: view.height }));
-    },
-    [],
-  );
-
   const center = useCallback((pan: Pan, updatePan: (newPan: Pan) => void) => {
     updatePan({ ...pan, x: 200, y: 120 });
   }, []);
@@ -359,7 +379,6 @@ export function useCanvasInteraction() {
     setSpacePressed,
     onConnect,
     screenToWorld,
-    fitToView,
     center,
   };
 }

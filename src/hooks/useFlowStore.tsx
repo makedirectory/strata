@@ -47,6 +47,14 @@ export function useFlowStore() {
   const [mode, setMode] = useState<CanvasMode>("move");
   // View-only node density (not part of the model / history).
   const [density, setDensity] = useState<CanvasDensity>("comfortable");
+  // View-only containment state: collapsed container ids, the focused container
+  // (zoom-to-fit + dim siblings), and a live drag override (node + subtree
+  // detached to a free anchor while dragging). None of these are in history.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [focusedContainerId, setFocusedContainerId] = useState<string | null>(null);
+  const [dragOverride, setDragOverride] = useState<{ id: string; x: number; y: number } | null>(
+    null,
+  );
   const [selection, setSelection] = useState<Selection>(null);
   // Multi-selection set (marquee / group operations). The single `selection`
   // above still drives the Inspector detail view; `selectedIds` drives group
@@ -125,6 +133,8 @@ export function useFlowStore() {
       setLive(state);
       setSelection(null);
       setSelectedIds([]);
+      setFocusedContainerId(null);
+      setDragOverride(null);
       // Clear on the next microtask rather than a macrotask (setTimeout): this
       // runs before any subsequent user-triggered macrotask could synchronously
       // call a commit, closing the race window.
@@ -224,6 +234,37 @@ export function useFlowStore() {
     setResources(nextResources);
   }, []);
 
+  /** Toggle a container's collapsed state (view-only). */
+  const toggleCollapsed = useCallback((id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Reparent a node (drag-in/out). `parentId` undefined makes it a free
+   * top-level node placed at `dropPos`. Committed as one history entry.
+   */
+  const setParent = useCallback(
+    (id: string, parentId: string | undefined, dropPos?: { x: number; y: number }) => {
+      mutate((cur) => ({
+        resources: cur.resources.map((r) => {
+          if (r.id !== id) return r;
+          const next: ResourceInstance = { ...r, parentId: parentId || undefined };
+          if (!parentId && dropPos) {
+            const prevPos = r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
+            next.position = { ...prevPos, x: dropPos.x, y: dropPos.y };
+          }
+          return next;
+        }),
+      }));
+    },
+    [mutate],
+  );
+
   /** Inspector field writes: name / region / config[key]. Committed. */
   const updateResource = useCallback(
     (id: string, patch: { name?: string; region?: string; config?: Record<string, unknown> }) => {
@@ -296,6 +337,9 @@ export function useFlowStore() {
     mutate(() => ({ resources: [], relationships: [] }));
     setSelection(null);
     setSelectedIds([]);
+    setCollapsed(new Set());
+    setFocusedContainerId(null);
+    setDragOverride(null);
   }, [mutate]);
 
   /** Replace the entire model (import / preset / server load). */
@@ -316,6 +360,9 @@ export function useFlowStore() {
       }));
       setSelection(null);
       setSelectedIds([]);
+      setCollapsed(new Set());
+      setFocusedContainerId(null);
+      setDragOverride(null);
     },
     [mutate],
   );
@@ -352,6 +399,9 @@ export function useFlowStore() {
     accounts,
     mode,
     density,
+    collapsed,
+    focusedContainerId,
+    dragOverride,
     selection,
     selectedIds,
     graphId,
@@ -361,6 +411,10 @@ export function useFlowStore() {
     getViewport,
     setMode,
     setDensity,
+    toggleCollapsed,
+    setFocusedContainerId,
+    setDragOverride,
+    setParent,
     setSelection,
     setSelectedIds,
     setGraphId: setGraphIdSynced,

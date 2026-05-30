@@ -27,8 +27,10 @@ import {
   minimapToWorld,
   panToCenter,
   type Rect,
+  type Vec2,
   type GuideLine,
 } from "../canvas/geometry";
+import { computeLayout, type LayoutResult } from "../canvas/layout";
 
 interface FlowContextValue {
   state: {
@@ -53,6 +55,14 @@ interface FlowContextValue {
   setMode: (m: CanvasMode) => void;
   toggleMode: () => void;
   setDensity: (d: CanvasDensity) => void;
+  /** Focus a container (zoom-to-fit + dim others), or null to clear. */
+  focusContainer: (id: string | null) => void;
+  /** Double-click handler for a node id (toggles container focus). */
+  onNodeDoubleClick: (id: string) => void;
+  /** Ancestor path of the focus target, root → leaf (clickable crumbs). */
+  breadcrumb: Array<{ id: string; name: string }>;
+  /** Currently focused container id, or null. */
+  focusedContainerId: string | null;
   select: (sel: Selection) => void;
   addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
   removeSelection: () => void;
@@ -147,7 +157,6 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     onNodeMouseDown: iOnNodeMouseDown,
     onCanvasMouseDown: iOnCanvasMouseDown,
     onConnect: iOnConnect,
-    fitToView: iFitToView,
     center: iCenter,
   } = interaction;
   const { draw: rDraw, drawMinimap: rDrawMinimap } = renderer;
@@ -167,6 +176,79 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     mode: store.mode,
     density: store.density,
   };
+
+  // ---- containment layout -------------------------------------------------
+  const isContainerPred = useCallback(
+    (r: ResourceInstance) => !!getService(r.serviceId)?.isContainer,
+    [],
+  );
+  // Effective rects for every visible node (containers auto-fit + pack their
+  // children; collapsed ones hide descendants; the live drag override detaches
+  // a subtree to the cursor). The renderer, edges and hit-testing all read this.
+  const layout: LayoutResult = React.useMemo(
+    () =>
+      computeLayout(store.resources, {
+        collapsed: store.collapsed,
+        isContainer: isContainerPred,
+        density: store.density,
+        override: store.dragOverride,
+      }),
+    [store.resources, store.collapsed, store.density, store.dragOverride, isContainerPred],
+  );
+  // Id set of the focused container's subtree (for focus-container dimming).
+  const focusSubtree = React.useMemo<ReadonlySet<string> | null>(() => {
+    const root = store.focusedContainerId;
+    if (!root) return null;
+    const childrenByParent = new Map<string, string[]>();
+    for (const r of store.resources) {
+      if (!r.parentId) continue;
+      const list = childrenByParent.get(r.parentId);
+      if (list) list.push(r.id);
+      else childrenByParent.set(r.parentId, [r.id]);
+    }
+    const set = new Set<string>();
+    const stack = [root];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (set.has(id)) continue;
+      set.add(id);
+      for (const c of childrenByParent.get(id) ?? []) stack.push(c);
+    }
+    return set;
+  }, [store.focusedContainerId, store.resources]);
+
+  /** Deepest visible container under a world point, excluding a node's subtree
+   *  (so a container can't be dropped into itself). Used for drag-to-reparent. */
+  const containerAt = useCallback(
+    (point: Vec2, excludeId: string): string | null => {
+      // Build the excluded subtree (excludeId + all descendants).
+      const desc = new Set<string>([excludeId]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const r of store.resources) {
+          if (r.parentId && desc.has(r.parentId) && !desc.has(r.id)) {
+            desc.add(r.id);
+            grew = true;
+          }
+        }
+      }
+      let best: { id: string; depth: number } | null = null;
+      for (const [id, rect] of layout.rects) {
+        if (desc.has(id) || !layout.isContainerNode(id)) continue;
+        const inside =
+          point.x >= rect.x &&
+          point.x <= rect.x + rect.w &&
+          point.y >= rect.y &&
+          point.y <= rect.y + rect.h;
+        if (!inside) continue;
+        const d = layout.depth.get(id) ?? 0;
+        if (!best || d > best.depth) best = { id, depth: d };
+      }
+      return best?.id ?? null;
+    },
+    [store.resources, layout],
+  );
 
   /** Assemble the current model into an InfrastructureGraph. */
   const buildGraph = useCallback((): InfrastructureGraph => {
@@ -314,27 +396,48 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
       iOnMouseMove(e, {
-        resources: store.resources,
+        rects: layout.rects,
         pan: store.viewport,
         updatePositions: updateResourcePositions,
         updatePan: storeSetViewport,
         setGuides,
         setMarquee,
+        setOverride: store.setDragOverride,
       });
     },
-    [iOnMouseMove, store.resources, store.viewport, updateResourcePositions, storeSetViewport],
+    [
+      iOnMouseMove,
+      layout,
+      store.viewport,
+      updateResourcePositions,
+      storeSetViewport,
+      store.setDragOverride,
+    ],
   );
   const onMouseUp = useCallback(() => {
     iOnMouseUp({
-      resources: store.resources,
+      rects: layout.rects,
       commitState: commitCurrentState,
       selectSingle,
       applyMarquee,
       clearSelection,
       setGuides,
       setMarquee,
+      setOverride: store.setDragOverride,
+      containerAt,
+      setParent: store.setParent,
     });
-  }, [iOnMouseUp, store.resources, commitCurrentState, selectSingle, applyMarquee, clearSelection]);
+  }, [
+    iOnMouseUp,
+    layout,
+    commitCurrentState,
+    selectSingle,
+    applyMarquee,
+    clearSelection,
+    store.setDragOverride,
+    containerAt,
+    store.setParent,
+  ]);
   const onWheelZoom = useCallback(
     (e: WheelEvent) => iOnWheelZoom(e, getViewport(), storeSetViewport),
     [iOnWheelZoom, getViewport, storeSetViewport],
@@ -350,6 +453,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         mode: store.mode,
         resources: store.resources,
         selectedIds: store.selectedIds,
+        rects: layout.rects,
         connect: storeConnect,
         selectSingle,
       });
@@ -360,6 +464,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.mode,
       store.resources,
       store.selectedIds,
+      layout,
       storeConnect,
       selectSingle,
     ],
@@ -392,10 +497,14 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.selectedIds,
       store.density,
       focusId,
+      layout,
+      store.collapsed,
+      focusSubtree,
       onNodeMouseDown,
       onConnectCb,
       storeSetSelection,
       onHover,
+      store.toggleCollapsed,
     );
   }, [
     rDraw,
@@ -406,19 +515,27 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.selectedIds,
     store.density,
     focusId,
+    layout,
+    store.collapsed,
+    focusSubtree,
     onNodeMouseDown,
     onConnectCb,
     storeSetSelection,
     onHover,
+    store.toggleCollapsed,
   ]);
   const drawMinimap = useCallback(
-    () => rDrawMinimap(store.resources, store.viewport, viewSize()),
-    [rDrawMinimap, store.resources, store.viewport, viewSize],
+    () => rDrawMinimap(store.resources, layout, store.viewport, viewSize()),
+    [rDrawMinimap, store.resources, layout, store.viewport, viewSize],
   );
-  const fitToView = useCallback(
-    () => iFitToView(store.resources, worldRef, storeSetViewport),
-    [iFitToView, store.resources, storeSetViewport],
-  );
+  const fitToView = useCallback(() => {
+    const bounds = boundsOf([...layout.rects.values()]);
+    if (!bounds) {
+      storeSetViewport({ x: 200, y: 120, scale: 1 });
+      return;
+    }
+    storeSetViewport(fitView(bounds, viewSize()));
+  }, [layout, storeSetViewport, viewSize]);
   const center = useCallback(
     () => iCenter(store.viewport, storeSetViewport),
     [iCenter, store.viewport, storeSetViewport],
@@ -449,17 +566,55 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? [store.selection.id]
         : [];
     if (ids.length === 0) {
-      iFitToView(store.resources, worldRef, storeSetViewport);
+      fitToView();
       return;
     }
-    const idSet = new Set(ids);
-    const boxes: Rect[] = store.resources
-      .filter((r) => idSet.has(r.id))
-      .map((r) => r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE });
+    const boxes = ids.map((id) => layout.rects.get(id)).filter((r): r is Rect => !!r);
     const bounds = boundsOf(boxes);
     if (!bounds) return;
     storeSetViewport(fitView(bounds, viewSize(), { maxScale: 1.4 }));
-  }, [store.selectedIds, store.selection, store.resources, iFitToView, storeSetViewport, viewSize]);
+  }, [store.selectedIds, store.selection, layout, fitToView, storeSetViewport, viewSize]);
+
+  /**
+   * Focus a container: frame its subtree (zoom-to-fit) and dim everything
+   * outside it. Toggling the same container off clears the focus.
+   */
+  const focusContainer = useCallback(
+    (id: string | null) => {
+      store.setFocusedContainerId(id);
+      if (!id) return;
+      const bounds = layout.rects.get(id);
+      if (bounds) storeSetViewport(fitView(bounds, viewSize(), { maxScale: 1.2 }));
+    },
+    [store, layout, storeSetViewport, viewSize],
+  );
+
+  /** Double-clicking a container toggles focus on it (zoom-to-fit + dim others). */
+  const onNodeDoubleClick = useCallback(
+    (id: string) => {
+      if (!layout.isContainerNode(id)) return;
+      focusContainer(store.focusedContainerId === id ? null : id);
+    },
+    [layout, focusContainer, store.focusedContainerId],
+  );
+
+  /** Ancestor path (root → target) of the focused container, else the single
+   *  selected node — rendered as a clickable breadcrumb. */
+  const breadcrumb = React.useMemo<Array<{ id: string; name: string }>>(() => {
+    const targetId =
+      store.focusedContainerId ?? (store.selection?.type === "node" ? store.selection.id : null);
+    if (!targetId) return [];
+    const byId = new Map(store.resources.map((r) => [r.id, r]));
+    const chain: Array<{ id: string; name: string }> = [];
+    const guard = new Set<string>();
+    let cur = byId.get(targetId);
+    while (cur && !guard.has(cur.id)) {
+      guard.add(cur.id);
+      chain.unshift({ id: cur.id, name: cur.name });
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    return chain;
+  }, [store.focusedContainerId, store.selection, store.resources]);
 
   /**
    * Centre the viewport on the world point under a minimap pixel (client
@@ -480,14 +635,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const my = (clientY - rect.top) * (bh / rect.height);
       const vp = getViewport();
       const view = viewSize();
-      const content = boundsOf(
-        store.resources.map((r) => r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE }),
-      );
+      const content = boundsOf([...layout.rects.values()]);
       const t = minimapTransform(content, viewportWorldRect(vp, view), { w: bw, h: bh });
       const world = minimapToWorld(t, { x: mx, y: my });
       storeSetViewport(panToCenter(world, view, vp.scale));
     },
-    [minimapRef, getViewport, viewSize, store.resources, storeSetViewport],
+    [minimapRef, getViewport, viewSize, layout, storeSetViewport],
   );
 
   // ---- Validation + rule suggestions -------------------------------------
@@ -659,6 +812,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       y: number,
       name: string,
       config: Record<string, unknown> = {},
+      parentId?: string,
     ) => {
       const id = store.uid();
       const svc = getService(serviceId);
@@ -669,6 +823,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         config: { ...defaultConfig(serviceId), ...config },
         source: "manual",
         position: { x, y, ...DEFAULT_NODE_SIZE },
+        parentId,
       });
       return id;
     };
@@ -678,41 +833,40 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (presetName === "aws-basic") {
       const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
-      const pubA = seed("subnet-public", 140, 220, "Public A", {
-        cidr: "10.0.1.0/24",
-        az: "us-east-1a",
-      });
-      const priA = seed("subnet-private", 140, 360, "Private A", {
-        cidr: "10.0.2.0/24",
-        az: "us-east-1a",
-      });
-      const igw = seed("internet-gateway", 420, 180, "IGW");
-      link(vpc, pubA, "contains");
-      link(vpc, priA, "contains");
+      // Subnets nest inside the VPC (containment is nesting, not an edge).
+      seed("subnet-public", 140, 220, "Public A", { cidr: "10.0.1.0/24", az: "us-east-1a" }, vpc);
+      seed("subnet-private", 140, 360, "Private A", { cidr: "10.0.2.0/24", az: "us-east-1a" }, vpc);
+      const igw = seed("internet-gateway", 560, 140, "IGW");
       link(igw, vpc, "attached_to");
     } else if (presetName === "ecs-alb") {
       const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
-      const pubA = seed("subnet-public", 140, 220, "Public A", {
-        cidr: "10.0.1.0/24",
-        az: "us-east-1a",
-      });
-      const priA = seed("subnet-private", 140, 360, "Private A", {
-        cidr: "10.0.2.0/24",
-        az: "us-east-1a",
-      });
-      const igw = seed("internet-gateway", 420, 180, "IGW");
-      const nat = seed("nat-gateway", 420, 260, "NAT GW");
-      const rtPub = seed("route-table", 390, 220, "RT Public");
-      const rtPri = seed("route-table", 390, 340, "RT Private");
-      const nacl = seed("nacl", 390, 420, "App NACL");
-      const alb = seed("elastic-load-balancer", 700, 200, "ALB");
-      const sgAlb = seed("security-group", 620, 140, "SG-ALB");
-      const ecs = seed("ecs-service", 820, 340, "App Service", { port: 3000 });
-      const sgApp = seed("security-group", 760, 300, "SG-App");
-      const tg = seed("target-group", 760, 240, "TG-App", { port: 3000 });
+      const pubA = seed(
+        "subnet-public",
+        140,
+        220,
+        "Public A",
+        { cidr: "10.0.1.0/24", az: "us-east-1a" },
+        vpc,
+      );
+      const priA = seed(
+        "subnet-private",
+        140,
+        360,
+        "Private A",
+        { cidr: "10.0.2.0/24", az: "us-east-1a" },
+        vpc,
+      );
+      const igw = seed("internet-gateway", 760, 140, "IGW");
+      const nat = seed("nat-gateway", 760, 260, "NAT GW");
+      const rtPub = seed("route-table", 760, 380, "RT Public");
+      const rtPri = seed("route-table", 760, 500, "RT Private");
+      const nacl = seed("nacl", 760, 620, "App NACL");
+      const alb = seed("elastic-load-balancer", 1000, 200, "ALB");
+      const sgAlb = seed("security-group", 1000, 80, "SG-ALB");
+      const ecs = seed("ecs-service", 1000, 460, "App Service", { port: 3000 });
+      const sgApp = seed("security-group", 1000, 340, "SG-App");
+      const tg = seed("target-group", 1000, 320, "TG-App", { port: 3000 });
 
-      link(vpc, pubA, "contains");
-      link(vpc, priA, "contains");
       link(igw, vpc, "attached_to");
       link(nat, pubA, "attached_to");
       link(rtPub, pubA, "attached_to");
@@ -751,6 +905,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMode: store.setMode,
     toggleMode,
     setDensity: store.setDensity,
+    focusContainer,
+    onNodeDoubleClick,
+    breadcrumb,
+    focusedContainerId: store.focusedContainerId,
     select: store.setSelection,
     addResourceFromPalette,
     removeSelection: store.removeSelection,
