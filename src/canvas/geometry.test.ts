@@ -17,6 +17,9 @@ import {
   panToCenter,
   lodTier,
   nodeRenderHeight,
+  rectsIntersect,
+  expandRect,
+  gridPack,
   MIN_SCALE,
   MAX_SCALE,
   GRID_STEP,
@@ -213,6 +216,45 @@ describe("panToCenter", () => {
     // world point should land at the view centre (400,300) in local coords
     expect(pan.x + 500 * pan.scale).toBe(400);
     expect(pan.y + 500 * pan.scale).toBe(300);
+  });
+});
+
+describe("rectsIntersect / expandRect", () => {
+  const a: Rect = { x: 0, y: 0, w: 100, h: 100 };
+  it("detects overlap and separation", () => {
+    expect(rectsIntersect(a, { x: 50, y: 50, w: 100, h: 100 })).toBe(true);
+    expect(rectsIntersect(a, { x: 200, y: 0, w: 50, h: 50 })).toBe(false);
+    // edge-touching does not count as intersection
+    expect(rectsIntersect(a, { x: 100, y: 0, w: 50, h: 50 })).toBe(false);
+  });
+  it("expands on every side", () => {
+    expect(expandRect(a, 10)).toEqual({ x: -10, y: -10, w: 120, h: 120 });
+    // a previously-separate rect can intersect once expanded (cull margin)
+    expect(rectsIntersect(expandRect(a, 60), { x: 120, y: 0, w: 10, h: 10 })).toBe(true);
+  });
+});
+
+describe("gridPack", () => {
+  it("packs into rows of `cols` without overlap", () => {
+    const items = [
+      { id: "a", w: 100, h: 40 },
+      { id: "b", w: 100, h: 60 },
+      { id: "c", w: 100, h: 40 },
+    ];
+    const out = gridPack(items, { originX: 0, originY: 0, gap: 20, cols: 2 });
+    expect(out[0]).toEqual({ id: "a", x: 0, y: 0 });
+    expect(out[1]).toEqual({ id: "b", x: 120, y: 0 });
+    // third wraps to row 2, below the tallest of row 1 (60) + gap
+    expect(out[2]).toEqual({ id: "c", x: 0, y: 80 });
+  });
+  it("defaults to a square-ish column count and handles empty", () => {
+    expect(gridPack([])).toEqual([]);
+    const four = gridPack(
+      ["a", "b", "c", "d"].map((id) => ({ id, w: 10, h: 10 })),
+      { originX: 0, originY: 0, gap: 0 },
+    );
+    // ceil(sqrt(4)) = 2 columns → "c" starts a new row
+    expect(four[2].x).toBe(0);
   });
 });
 

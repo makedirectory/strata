@@ -89,6 +89,58 @@ export function unionRect(a: Rect, b: Rect): Rect {
   return { x, y, w: right - x, h: bottom - y };
 }
 
+/** True when two rects overlap (touching edges do not count). */
+export function rectsIntersect(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/** Grow a rect by `margin` on every side. */
+export function expandRect(r: Rect, margin: number): Rect {
+  return { x: r.x - margin, y: r.y - margin, w: r.w + margin * 2, h: r.h + margin * 2 };
+}
+
+export interface GridPackItem {
+  id: string;
+  w: number;
+  h: number;
+}
+export interface GridPackOptions {
+  originX?: number;
+  originY?: number;
+  gap?: number;
+  /** Columns; defaults to a square-ish ceil(sqrt(n)). */
+  cols?: number;
+}
+
+/**
+ * Flow-pack items into a tidy grid (rows of `cols`), returning a top-left for
+ * each. Used by "Tidy" to arrange top-level nodes; row height tracks the
+ * tallest item in the row so mixed sizes don't overlap.
+ */
+export function gridPack(
+  items: readonly GridPackItem[],
+  opts: GridPackOptions = {},
+): Array<{ id: string; x: number; y: number }> {
+  const { originX = 80, originY = 80, gap = 40, cols } = opts;
+  if (items.length === 0) return [];
+  const c = cols && cols > 0 ? cols : Math.max(1, Math.ceil(Math.sqrt(items.length)));
+  const out: Array<{ id: string; x: number; y: number }> = [];
+  let x = originX;
+  let y = originY;
+  let rowH = 0;
+  items.forEach((it, i) => {
+    if (i > 0 && i % c === 0) {
+      y += rowH + gap;
+      x = originX;
+      rowH = 0;
+    }
+    out.push({ id: it.id, x, y });
+    x += it.w + gap;
+    rowH = Math.max(rowH, it.h);
+  });
+  return out;
+}
+
 /** Bounding box of a set of rects, or null when empty. */
 export function boundsOf(rects: readonly Rect[]): Rect | null {
   if (rects.length === 0) return null;
