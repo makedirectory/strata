@@ -15,9 +15,14 @@ import {
   worldToMinimap,
   minimapToWorld,
   panToCenter,
+  lodTier,
+  nodeRenderHeight,
   MIN_SCALE,
   MAX_SCALE,
   GRID_STEP,
+  COMPACT_NEAR_HEIGHT,
+  MID_HEIGHT,
+  FAR_HEIGHT,
   type Rect,
   type NodeBox,
 } from "./geometry";
@@ -208,5 +213,27 @@ describe("panToCenter", () => {
     // world point should land at the view centre (400,300) in local coords
     expect(pan.x + 500 * pan.scale).toBe(400);
     expect(pan.y + 500 * pan.scale).toBe(300);
+  });
+});
+
+describe("lodTier", () => {
+  it("maps scale to far/mid/near tiers", () => {
+    expect(lodTier(0.2)).toBe("far");
+    expect(lodTier(0.39)).toBe("far");
+    expect(lodTier(0.4)).toBe("mid");
+    expect(lodTier(0.74)).toBe("mid");
+    expect(lodTier(0.75)).toBe("near");
+    expect(lodTier(2)).toBe("near");
+  });
+});
+
+describe("nodeRenderHeight", () => {
+  it("honours base height at near/comfortable, trims otherwise", () => {
+    expect(nodeRenderHeight("near", "comfortable", 100)).toBe(100);
+    expect(nodeRenderHeight("near", "compact", 100)).toBe(COMPACT_NEAR_HEIGHT);
+    expect(nodeRenderHeight("mid", "comfortable", 100)).toBe(MID_HEIGHT);
+    expect(nodeRenderHeight("mid", "compact", 100)).toBe(MID_HEIGHT);
+    expect(nodeRenderHeight("far", "comfortable", 100)).toBe(FAR_HEIGHT);
+    expect(nodeRenderHeight("far", "compact", 100)).toBe(FAR_HEIGHT);
   });
 });

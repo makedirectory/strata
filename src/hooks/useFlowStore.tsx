@@ -2,7 +2,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { ResourceInstance, Relationship, Viewport, Account } from "../aws/model";
 import { DEFAULT_NODE_SIZE } from "../aws/model";
-import type { CanvasMode, Selection } from "../types";
+import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind } from "../aws/types";
 import { defaultConfig, getService } from "../aws/registry";
 import { GRID_STEP } from "../canvas/geometry";
@@ -45,6 +45,8 @@ export function useFlowStore() {
   const [viewport, setViewport] = useState<Viewport>({ ...DEFAULT_VIEWPORT });
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [mode, setMode] = useState<CanvasMode>("move");
+  // View-only node density (not part of the model / history).
+  const [density, setDensity] = useState<CanvasDensity>("comfortable");
   const [selection, setSelection] = useState<Selection>(null);
   // Multi-selection set (marquee / group operations). The single `selection`
   // above still drives the Inspector detail view; `selectedIds` drives group
@@ -349,6 +351,7 @@ export function useFlowStore() {
     viewport,
     accounts,
     mode,
+    density,
     selection,
     selectedIds,
     graphId,
@@ -357,6 +360,7 @@ export function useFlowStore() {
     setViewport: setViewportSynced,
     getViewport,
     setMode,
+    setDensity,
     setSelection,
     setSelectedIds,
     setGraphId: setGraphIdSynced,
