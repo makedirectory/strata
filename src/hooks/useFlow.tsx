@@ -34,6 +34,14 @@ import {
 } from "../canvas/geometry";
 import { computeLayout, summaryKey, type LayoutResult } from "../canvas/layout";
 import { RELATIONSHIP_CLASS_ORDER, type RelationshipClass } from "../aws/relationshipClasses";
+import {
+  iamTrustOverlay,
+  securityPathOverlay,
+  heatByDegree,
+  heatColor,
+  type OverlayKind,
+  type OverlayLit,
+} from "../aws/overlays";
 import type { ServiceCategoryId } from "../aws/types";
 import type { LayerState } from "./useFlowStore";
 
@@ -113,6 +121,9 @@ interface FlowContextValue {
   /** Presentation / read-only mode (hides editing chrome, gates edits). */
   presentation: boolean;
   setPresentation: (on: boolean) => void;
+  /** Active analytical overlay (Phase 6). */
+  activeOverlay: OverlayKind;
+  setActiveOverlay: (o: OverlayKind) => void;
   toggleCategory: (id: ServiceCategoryId) => void;
   toggleRelClass: (id: RelationshipClass) => void;
   setFilterMode: (m: "dim" | "hide") => void;
@@ -287,6 +298,26 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return m;
   }, [store.environmentTint, store.accounts, store.resources]);
+
+  // ---- analytical overlays (Phase 6) -------------------------------------
+  // Lit node/edge set for the IAM-trust or security-path overlay (selection-
+  // aware); null for none/heat (which don't dim).
+  const overlayLit = React.useMemo<OverlayLit | null>(() => {
+    const focus = store.selection?.type === "node" ? store.selection.id : null;
+    if (store.activeOverlay === "iam")
+      return iamTrustOverlay(store.resources, store.relationships, focus);
+    if (store.activeOverlay === "security")
+      return securityPathOverlay(store.resources, store.relationships, focus);
+    return null;
+  }, [store.activeOverlay, store.resources, store.relationships, store.selection]);
+  // Heat overlay tint map (degree proxy), reusing the background-tint channel.
+  const overlayHeat = React.useMemo<ReadonlyMap<string, string> | null>(() => {
+    if (store.activeOverlay !== "heat") return null;
+    const heat = heatByDegree(store.resources, store.relationships);
+    const m = new Map<string, string>();
+    for (const [id, t] of heat) m.set(id, heatColor(t));
+    return m;
+  }, [store.activeOverlay, store.resources, store.relationships]);
 
   // Id set of the focused container's subtree (for focus-container dimming).
   const focusSubtree = React.useMemo<ReadonlySet<string> | null>(() => {
@@ -612,10 +643,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.hiddenCategories,
       store.hiddenRelClasses,
       store.filterMode,
-      envTintById,
+      overlayHeat ?? envTintById,
       cullViewport,
       store.edgeStyle,
       store.searchMatches,
+      overlayLit,
       onNodeMouseDown,
       onConnectCb,
       storeSetSelection,
@@ -640,6 +672,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.hiddenRelClasses,
     store.filterMode,
     envTintById,
+    overlayHeat,
+    overlayLit,
     store.edgeStyle,
     store.searchMatches,
     onNodeMouseDown,
@@ -1175,6 +1209,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setEdgeStyle: store.setEdgeStyle,
     presentation: store.presentation,
     setPresentation: store.setPresentation,
+    activeOverlay: store.activeOverlay,
+    setActiveOverlay: store.setActiveOverlay,
     toggleCategory: store.toggleCategory,
     toggleRelClass: store.toggleRelClass,
     setFilterMode: store.setFilterMode,

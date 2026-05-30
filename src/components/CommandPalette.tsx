@@ -150,6 +150,30 @@ export const CommandPalette: React.FC = () => {
         group: "View",
         run: () => flow.setPresentation(!flow.presentation),
       },
+      {
+        id: "overlay-iam",
+        title: "Overlay: IAM trust",
+        group: "View",
+        run: () => flow.setActiveOverlay("iam"),
+      },
+      {
+        id: "overlay-security",
+        title: "Overlay: Network paths",
+        group: "View",
+        run: () => flow.setActiveOverlay("security"),
+      },
+      {
+        id: "overlay-heat",
+        title: "Overlay: Heat (degree)",
+        group: "View",
+        run: () => flow.setActiveOverlay("heat"),
+      },
+      {
+        id: "overlay-none",
+        title: "Overlay: None",
+        group: "View",
+        run: () => flow.setActiveOverlay("none"),
+      },
 
       { id: "mode", title: "Toggle Connect / Move mode", group: "Edit", run: flow.toggleMode },
       { id: "undo", title: "Undo", group: "Edit", run: flow.undo },
