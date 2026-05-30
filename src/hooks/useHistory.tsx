@@ -2,7 +2,7 @@
 import { useRef, useCallback } from "react";
 import type { ResourceInstance, Relationship, Viewport, Account } from "../aws/model";
 
-/** A deep-cloneable snapshot of the canvas-relevant state. */
+/** A snapshot of the canvas-relevant state. */
 export interface HistoryState {
   resources: ResourceInstance[];
   relationships: Relationship[];
@@ -12,17 +12,20 @@ export interface HistoryState {
 }
 
 /**
- * Deep-clone a snapshot so history entries are isolated from live React state.
+ * Snapshot a state for history via STRUCTURAL SHARING, not a deep clone.
  *
- * Uses `structuredClone` when available (modern browsers / Node 17+) and falls
- * back to JSON round-tripping. NOTE: the history model (`HistoryState`) must
- * remain JSON-serializable — Functions, Dates, and Symbols are not preserved by
- * the fallback path.
+ * The store treats every state field as immutable — mutations always produce
+ * new arrays/objects (`map`/`filter`/spread) and never edit elements in place —
+ * so history entries can safely retain references to the committed arrays and
+ * element objects. A shallow copy isolates only the top-level container.
+ *
+ * This is the Phase 4 "patch-based history" win: undo memory is O(changed)
+ * (a handful of new array wrappers per step) instead of O(whole graph). The old
+ * `structuredClone` deep-copied every resource on every commit/undo/redo — MBs
+ * per step at a few thousand nodes.
  */
-function clone<T extends HistoryState>(state: T): T {
-  return typeof structuredClone === "function"
-    ? structuredClone(state)
-    : (JSON.parse(JSON.stringify(state)) as T);
+function snapshot<T extends HistoryState>(state: T): T {
+  return { ...state };
 }
 
 export function useHistory<T extends HistoryState>() {
@@ -41,7 +44,7 @@ export function useHistory<T extends HistoryState>() {
 
     // If this is the first commit, just set present
     if (!h.present) {
-      h.present = clone(state);
+      h.present = snapshot(state);
       return;
     }
 
@@ -54,7 +57,7 @@ export function useHistory<T extends HistoryState>() {
     }
 
     // Set new present and clear future
-    h.present = clone(state);
+    h.present = snapshot(state);
     h.future = [];
   }, []);
 
@@ -70,7 +73,7 @@ export function useHistory<T extends HistoryState>() {
     const prev = h.past.pop();
     if (prev) {
       h.present = prev;
-      return clone(prev);
+      return snapshot(prev);
     }
 
     return null;
@@ -88,7 +91,7 @@ export function useHistory<T extends HistoryState>() {
     const next = h.future.shift();
     if (next) {
       h.present = next;
-      return clone(next);
+      return snapshot(next);
     }
 
     return null;
