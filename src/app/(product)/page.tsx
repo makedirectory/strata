@@ -328,11 +328,14 @@ function PresetButtons() {
 }
 
 function FooterControls() {
-  const { fitToView, center } = useFlow();
+  const { fitToView, center, tidy } = useFlow();
   return (
     <div className="footer">
       <button onClick={fitToView}>Fit to View</button>
       <button onClick={center}>Center</button>
+      <button onClick={tidy} title="Auto-arrange top-level nodes">
+        Tidy
+      </button>
     </div>
   );
 }

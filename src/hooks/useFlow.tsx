@@ -26,10 +26,15 @@ import {
   minimapTransform,
   minimapToWorld,
   panToCenter,
+  expandRect,
+  gridPack,
   type Rect,
   type Vec2,
   type GuideLine,
 } from "../canvas/geometry";
+
+/** Above this many resources the renderer culls to the viewport. */
+const CULL_THRESHOLD = 250;
 import { computeLayout, type LayoutResult } from "../canvas/layout";
 import { RELATIONSHIP_CLASS_ORDER, type RelationshipClass } from "../aws/relationshipClasses";
 import type { ServiceCategoryId } from "../aws/types";
@@ -131,6 +136,8 @@ interface FlowContextValue {
   drawMinimap: () => void;
   fitToView: () => void;
   center: () => void;
+  /** Auto-arrange top-level nodes into a tidy grid. */
+  tidy: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
   zoomReset: () => void;
@@ -555,6 +562,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const draw = useCallback(() => {
+    // Cull to the viewport only for large graphs; keep the fast path otherwise.
+    let cullViewport: Rect | null = null;
+    if (store.resources.length > CULL_THRESHOLD) {
+      const vw = viewportWorldRect(store.viewport, viewSize());
+      cullViewport = expandRect(vw, Math.max(vw.w, vw.h) * 0.3);
+    }
     rDraw(
       store.resources,
       store.relationships,
@@ -570,6 +583,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.hiddenRelClasses,
       store.filterMode,
       envTintById,
+      cullViewport,
       onNodeMouseDown,
       onConnectCb,
       storeSetSelection,
@@ -577,6 +591,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.toggleCollapsed,
     );
   }, [
+    viewSize,
     rDraw,
     store.resources,
     store.relationships,
@@ -614,6 +629,23 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => iCenter(store.viewport, storeSetViewport),
     [iCenter, store.viewport, storeSetViewport],
   );
+
+  /** Auto-arrange top-level nodes into a tidy grid (one undo step). Containers
+   *  already auto-pack their children via the layout engine. */
+  const tidy = useCallback(() => {
+    const ids = new Set(store.resources.map((r) => r.id));
+    const top = store.resources.filter(
+      (r) => !r.parentId || r.parentId === r.id || !ids.has(r.parentId),
+    );
+    if (top.length === 0) return;
+    const items = top.map((r) => {
+      const rect = layout.rects.get(r.id);
+      return { id: r.id, w: rect?.w ?? DEFAULT_NODE_SIZE.w, h: rect?.h ?? DEFAULT_NODE_SIZE.h };
+    });
+    const packed = gridPack(items, { originX: 80, originY: 80, gap: 48 });
+    updateResourcePositions(packed.map((p) => ({ id: p.id, x: p.x, y: p.y })));
+    commitCurrentState();
+  }, [store.resources, layout, updateResourcePositions, commitCurrentState]);
 
   /** Zoom about the viewport centre by a multiplicative factor. */
   const zoomBy = useCallback(
@@ -1111,6 +1143,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     drawMinimap,
     fitToView,
     center,
+    tidy,
     zoomIn,
     zoomOut,
     zoomReset,

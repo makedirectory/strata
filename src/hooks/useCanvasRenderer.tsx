@@ -9,10 +9,12 @@ import { relationshipClassDef } from "../aws/relationshipClasses";
 import { regionName } from "../aws/regions";
 import {
   boundsOf,
+  unionRect,
   viewportWorldRect,
   minimapTransform,
   worldToMinimap,
   lodTier,
+  rectsIntersect,
   type Rect,
 } from "../canvas/geometry";
 import type { LayoutResult } from "../canvas/layout";
@@ -116,6 +118,9 @@ interface DrawInputs {
   filterMode: "dim" | "hide";
   /** Environment-tint overlay: resource id → tint colour, or null when off. */
   envTintById: ReadonlyMap<string, string> | null;
+  /** When set (large graphs), only render nodes/edges intersecting this world
+   *  rect; null keeps the small-graph viewport-only fast path. */
+  cullViewport: Rect | null;
   onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void;
   onConnect: (id: string, type: "start" | "end") => void;
   onSelect: (sel: Selection) => void;
@@ -165,6 +170,7 @@ export function useCanvasRenderer(
         hiddenRelClasses,
         filterMode,
         envTintById,
+        cullViewport,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -229,6 +235,8 @@ export function useCanvasRenderer(
           // removes any stale DOM since it is absent from seenNodes).
           const p = rectOf.get(r.id);
           if (!p) return;
+          // Viewport culling: off-screen nodes get no DOM (removed via cleanup).
+          if (cullViewport && !rectsIntersect(p, cullViewport)) return;
           const nodeFilteredOut = categoryHidden.has(r.id);
           // In "hide" mode a filtered node is removed (absent from seenNodes).
           if (nodeFilteredOut && filterMode === "hide") return;
@@ -539,6 +547,8 @@ export function useCanvasRenderer(
         const edgeFilteredOut =
           hiddenRelClasses.has(cls.id) || categoryHidden.has(fromId) || categoryHidden.has(toId);
         if (edgeFilteredOut && filterMode === "hide") return;
+        // Cull edges whose endpoints' span doesn't touch the viewport.
+        if (cullViewport && !rectsIntersect(unionRect(ra, rb), cullViewport)) return;
         seenEdges.add(rel.id);
 
         const p1 = { x: ra.x + ra.w, y: ra.y + ra.h / 2 };
@@ -670,6 +680,7 @@ export function useCanvasRenderer(
       hiddenRelClasses: ReadonlySet<string>,
       filterMode: "dim" | "hide",
       envTintById: ReadonlyMap<string, string> | null,
+      cullViewport: Rect | null,
       onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void,
       onConnect: (id: string, type: "start" | "end") => void,
       onSelect: (sel: Selection) => void,
@@ -706,6 +717,7 @@ export function useCanvasRenderer(
         hiddenRelClasses,
         filterMode,
         envTintById,
+        cullViewport,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -732,6 +744,7 @@ export function useCanvasRenderer(
         last.hiddenRelClasses === hiddenRelClasses &&
         last.filterMode === filterMode &&
         last.envTintById === envTintById &&
+        last.cullViewport === cullViewport &&
         last.onNodeMouseDown === onNodeMouseDown &&
         last.onConnect === onConnect &&
         last.onSelect === onSelect &&
