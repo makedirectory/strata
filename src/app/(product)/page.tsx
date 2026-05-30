@@ -30,6 +30,8 @@ function LayersPanel() {
     setEnvironmentTint,
     edgeStyle,
     setEdgeStyle,
+    activeOverlay,
+    setActiveOverlay,
     applyViewPreset,
     savedViews,
     saveView,
@@ -136,6 +138,31 @@ function LayersPanel() {
         />
         Environment tint
       </label>
+
+      <div className="layers-sub">Overlay</div>
+      <div className="chips">
+        {(
+          [
+            { id: "none", label: "None" },
+            { id: "iam", label: "IAM trust" },
+            { id: "security", label: "Network paths" },
+            { id: "heat", label: "Heat (degree)" },
+          ] as const
+        ).map((o) => (
+          <button
+            key={o.id}
+            className={`chip ${activeOverlay === o.id ? "on" : "off"}`}
+            onClick={() => setActiveOverlay(o.id)}
+            aria-pressed={activeOverlay === o.id}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <div className="help" style={{ margin: "0 2px" }}>
+        Overlays trace the relationship graph (select a node to trace from it). Heat is a degree
+        proxy.
+      </div>
 
       <div className="layers-sub">Saved views</div>
       <div className="saved-add">

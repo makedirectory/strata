@@ -6,6 +6,7 @@ import type { Selection, Pan, CanvasDensity, LodTier } from "../types";
 import { getService, serviceColor, serviceIcon } from "../aws/registry";
 import { RELATIONSHIPS } from "../aws/categories";
 import { relationshipClassDef } from "../aws/relationshipClasses";
+import type { OverlayLit } from "../aws/overlays";
 import { regionName } from "../aws/regions";
 import {
   boundsOf,
@@ -126,6 +127,8 @@ interface DrawInputs {
   edgeStyle: "curved" | "orthogonal";
   /** Nodes matching the active search query (highlighted). */
   searchMatches: ReadonlySet<string>;
+  /** Active analytical overlay's lit node/edge set; others dim. Null = no overlay. */
+  overlayLit: OverlayLit | null;
   onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void;
   onConnect: (id: string, type: "start" | "end") => void;
   onSelect: (sel: Selection) => void;
@@ -196,6 +199,7 @@ export function useCanvasRenderer(
         cullViewport,
         edgeStyle,
         searchMatches,
+        overlayLit,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -292,7 +296,9 @@ export function useCanvasRenderer(
           // container's subtree.
           const hoverDim = focusId !== null && !focusNeighbours.has(r.id);
           const containerDim = focusSubtree !== null && !focusSubtree.has(r.id);
-          const dimmed = hoverDim || containerDim || (nodeFilteredOut && filterMode === "dim");
+          const overlayDim = overlayLit !== null && !overlayLit.nodes.has(r.id);
+          const dimmed =
+            hoverDim || containerDim || overlayDim || (nodeFilteredOut && filterMode === "dim");
           const envTint = envTintById?.get(r.id) ?? "";
           const searchMatch = searchMatches.has(r.id);
 
@@ -574,7 +580,8 @@ export function useCanvasRenderer(
         const depthVal = layout.depth.get(s.id) ?? 0;
         const dimmed =
           (filteredOut && filterMode === "dim") ||
-          (focusSubtree !== null && !focusSubtree.has(s.parentId));
+          (focusSubtree !== null && !focusSubtree.has(s.parentId)) ||
+          (overlayLit !== null && !s.memberIds.some((m) => overlayLit.nodes.has(m)));
 
         let rec = summaryNodes.get(s.id);
         if (!rec) {
@@ -678,7 +685,9 @@ export function useCanvasRenderer(
         const hoverDim = focusId !== null && fromId !== focusId && toId !== focusId;
         const containerDim =
           focusSubtree !== null && (!focusSubtree.has(fromId) || !focusSubtree.has(toId));
-        const dimmed = hoverDim || containerDim || (edgeFilteredOut && filterMode === "dim");
+        const overlayDim = overlayLit !== null && !overlayLit.edges.has(rel.id);
+        const dimmed =
+          hoverDim || containerDim || overlayDim || (edgeFilteredOut && filterMode === "dim");
 
         let rec = edges.get(rel.id);
         if (!rec) {
@@ -792,6 +801,7 @@ export function useCanvasRenderer(
       cullViewport: Rect | null,
       edgeStyle: "curved" | "orthogonal",
       searchMatches: ReadonlySet<string>,
+      overlayLit: OverlayLit | null,
       onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void,
       onConnect: (id: string, type: "start" | "end") => void,
       onSelect: (sel: Selection) => void,
@@ -832,6 +842,7 @@ export function useCanvasRenderer(
         cullViewport,
         edgeStyle,
         searchMatches,
+        overlayLit,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -862,6 +873,7 @@ export function useCanvasRenderer(
         last.cullViewport === cullViewport &&
         last.edgeStyle === edgeStyle &&
         last.searchMatches === searchMatches &&
+        last.overlayLit === overlayLit &&
         last.onNodeMouseDown === onNodeMouseDown &&
         last.onConnect === onConnect &&
         last.onSelect === onSelect &&

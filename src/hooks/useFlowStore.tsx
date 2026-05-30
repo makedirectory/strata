@@ -5,6 +5,7 @@ import { DEFAULT_NODE_SIZE } from "../aws/model";
 import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind, ServiceCategoryId } from "../aws/types";
 import type { RelationshipClass } from "../aws/relationshipClasses";
+import type { OverlayKind } from "../aws/overlays";
 import { defaultConfig, getService } from "../aws/registry";
 import { GRID_STEP } from "../canvas/geometry";
 import { useHistory, type HistoryState } from "./useHistory";
@@ -87,6 +88,8 @@ export function useFlowStore() {
   const [searchMatches, setSearchMatches] = useState<ReadonlySet<string>>(new Set());
   // Presentation / read-only mode: hides editing chrome and gates edits.
   const [presentation, setPresentation] = useState(false);
+  // Active analytical overlay (Phase 6): none | iam | security | heat.
+  const [activeOverlay, setActiveOverlay] = useState<OverlayKind>("none");
   // Summary group keys (`${parentId}::${serviceId}`) that are expanded (shown
   // as individual nodes rather than a single "N× …" summary). View-only.
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
@@ -473,6 +476,7 @@ export function useFlowStore() {
     edgeStyle,
     searchMatches,
     presentation,
+    activeOverlay,
     expandedGroups,
     selection,
     selectedIds,
@@ -496,6 +500,7 @@ export function useFlowStore() {
     setEdgeStyle,
     setSearchMatches,
     setPresentation,
+    setActiveOverlay,
     setLayers,
     setSelection,
     setSelectedIds,
