@@ -310,7 +310,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
     if (!target) {
       out.push({
         level: "warn",
-        message: `Target Group "${tg.name}" should target a compute target (ECS Service, EC2 instance, Lambda, IP, or an ALB).`,
+        message: `Target Group "${tg.name}" should target a compute target (ECS Service, EC2 instance, Lambda, or an ALB).`,
       });
     }
   });

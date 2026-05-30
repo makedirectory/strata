@@ -4,9 +4,10 @@ import type { ResourceInstance } from "../aws/model";
 import type { RelationshipKind } from "../aws/types";
 import type { CanvasMode, Pan } from "../types";
 import { getService } from "../aws/registry";
+import { DEFAULT_NODE_SIZE } from "../aws/model";
 
 function pos(r: ResourceInstance) {
-  return r.position ?? { x: 0, y: 0, w: 200, h: 96 };
+  return r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
 }
 
 export function useCanvasInteraction() {

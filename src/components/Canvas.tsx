@@ -45,7 +45,14 @@ export const Canvas: React.FC = () => {
           "serviceId" in item &&
           typeof (item as { serviceId: unknown }).serviceId === "string"
         ) {
-          addResourceFromPalette((item as { serviceId: string }).serviceId, e.clientX, e.clientY);
+          // Convert window coords to canvas-wrap-local coords before passing to
+          // screenToWorld (which only undoes pan/scale relative to that origin).
+          const rect = el.getBoundingClientRect();
+          addResourceFromPalette(
+            (item as { serviceId: string }).serviceId,
+            e.clientX - rect.left,
+            e.clientY - rect.top,
+          );
         }
       } catch (err) {
         console.error("Canvas: failed to parse drag-and-drop payload", err);
@@ -67,8 +74,9 @@ export const Canvas: React.FC = () => {
       if (!detail || typeof detail.serviceId !== "string") return;
       const el = worldRef.current?.parentElement;
       const rect = el?.getBoundingClientRect();
-      const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-      const y = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+      // canvas-wrap-local centre (screenToWorld undoes pan/scale from this origin).
+      const x = rect ? rect.width / 2 : window.innerWidth / 2;
+      const y = rect ? rect.height / 2 : window.innerHeight / 2;
       addResourceFromPalette(detail.serviceId, x, y);
     };
     window.addEventListener(PALETTE_ADD_EVENT, handler);

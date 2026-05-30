@@ -247,7 +247,7 @@ describe("validateArchitecture", () => {
       const tg = res("target-group", { id: "tg", name: "tg-web" });
       const out = validateArchitecture(graph([tg]));
       expect(messages(out)).toContain(
-        'Target Group "tg-web" should target a compute target (ECS Service, EC2 instance, Lambda, IP, or an ALB).',
+        'Target Group "tg-web" should target a compute target (ECS Service, EC2 instance, Lambda, or an ALB).',
       );
     });
 

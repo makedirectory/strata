@@ -4,7 +4,7 @@ import { useFlowStore } from "./useFlowStore";
 import { useCanvasInteraction } from "./useCanvasInteraction";
 import { useCanvasRenderer } from "./useCanvasRenderer";
 import type { ResourceInstance, Relationship, InfrastructureGraph } from "../aws/model";
-import { emptyGraph } from "../aws/model";
+import { emptyGraph, DEFAULT_NODE_SIZE } from "../aws/model";
 import type { CanvasMode, Selection } from "../types";
 import type { RelationshipKind } from "../aws/types";
 import { defaultConfig, getService } from "../aws/registry";
@@ -248,6 +248,17 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ],
   );
 
+  // Stable connect callback: its identity only changes when resources/connect
+  // change, NOT on viewport changes. This lets the renderer's viewport-only
+  // fast path (which compares callback references) actually short-circuit on
+  // pan/zoom instead of running a full structural diff every frame.
+  const onConnectCb = useCallback(
+    (id: string, type: "start" | "end") => {
+      iOnConnect(id, type, store.resources, storeConnect);
+    },
+    [iOnConnect, store.resources, storeConnect],
+  );
+
   const draw = useCallback(() => {
     rDraw(
       store.resources,
@@ -255,20 +266,17 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.viewport,
       store.selection,
       onNodeMouseDown,
-      (id: string, type: "start" | "end") => {
-        iOnConnect(id, type, store.resources, storeConnect);
-      },
+      onConnectCb,
       storeSetSelection,
     );
   }, [
     rDraw,
-    iOnConnect,
     store.resources,
     store.relationships,
     store.viewport,
     store.selection,
     onNodeMouseDown,
-    storeConnect,
+    onConnectCb,
     storeSetSelection,
   ]);
   const drawMinimap = useCallback(
@@ -408,7 +416,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: name || svc?.name || serviceId,
         config: { ...defaultConfig(serviceId), ...config },
         source: "manual",
-        position: { x, y, w: 200, h: 96 },
+        position: { x, y, ...DEFAULT_NODE_SIZE },
       });
       return id;
     };

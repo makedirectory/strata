@@ -11,6 +11,7 @@ import {
   hasGraphCollections,
   pickWritableFields,
   checkCollectionLimits,
+  checkOptionalFields,
 } from "../../../../server/graphSchema";
 import { requireAuth } from "../../../../server/auth";
 import type { InfrastructureGraph } from "../../../../aws/model";
@@ -45,6 +46,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   // Whitelist incoming fields so unexpected/extra/server-owned keys
   // (id, schemaVersion, timestamps) can't be persisted via the raw body.
   const fields = pickWritableFields(body as Record<string, unknown>);
+  // Reject wrong-typed optional fields (description / viewport) as 422.
+  const optionalError = checkOptionalFields(body as Record<string, unknown>);
+  if (optionalError) return NextResponse.json({ error: optionalError }, { status: 422 });
   // The repository re-stamps id/schemaVersion/timestamps, so fill defaults for
   // any optional fields the client omitted before structural validation.
   const graph: InfrastructureGraph = { ...emptyGraph(body.name), ...fields };

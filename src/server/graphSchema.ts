@@ -83,6 +83,30 @@ export function checkCollectionLimits(value: {
   return null;
 }
 
+/**
+ * Validate the optional writable fields (`description`, `viewport`) when
+ * present. Returns an error message, or `null` when valid/absent. Prevents
+ * wrong-typed optional fields (e.g. `description: 123`, `viewport: "x"`) from
+ * being persisted. Routes map a non-null result to 422.
+ */
+export function checkOptionalFields(body: Record<string, unknown>): string | null {
+  if ("description" in body && body.description !== undefined) {
+    if (typeof body.description !== "string") return "description must be a string";
+  }
+  if ("viewport" in body && body.viewport !== undefined) {
+    const v = body.viewport;
+    if (
+      !isRecord(v) ||
+      typeof v.x !== "number" ||
+      typeof v.y !== "number" ||
+      typeof v.scale !== "number"
+    ) {
+      return "viewport must be an object with numeric x, y and scale";
+    }
+  }
+  return null;
+}
+
 /** Client-supplied fields a caller may set when creating/replacing a graph. */
 export const WRITABLE_FIELDS = [
   "name",

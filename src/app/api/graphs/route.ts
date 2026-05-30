@@ -6,7 +6,11 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "../../../server";
 import { emptyGraph, validateGraph } from "../../../aws/model";
-import { pickWritableFields, checkCollectionLimits } from "../../../server/graphSchema";
+import {
+  pickWritableFields,
+  checkCollectionLimits,
+  checkOptionalFields,
+} from "../../../server/graphSchema";
 import { requireAuth } from "../../../server/auth";
 import type { InfrastructureGraph } from "../../../aws/model";
 
@@ -46,6 +50,9 @@ export async function POST(req: Request) {
       );
     }
   }
+  // Reject wrong-typed optional fields (description / viewport) as 422.
+  const optionalError = checkOptionalFields(body as Record<string, unknown>);
+  if (optionalError) return NextResponse.json({ error: optionalError }, { status: 422 });
   const name = typeof fields.name === "string" ? fields.name : "Untitled Architecture";
   const graph: InfrastructureGraph = { ...emptyGraph(name), ...fields };
   // Bound payload size before persisting an arbitrarily large graph.
