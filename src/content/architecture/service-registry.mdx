@@ -1,13 +1,12 @@
 ---
-sidebar_position: 2
 title: Service Registry & Schema
 ---
 
 # The Service Registry & Schema
 
 The registry is the single source of truth for AWS service metadata. The UI,
-validation engine, and MCP importer all read from it — nothing about a service
-is hardcoded elsewhere.
+validation engine, and MCP/IaC importers all read from it — nothing about a
+service is hardcoded elsewhere.
 
 ## Schema (`src/aws/types.ts`)
 
@@ -24,13 +23,13 @@ The reusable definition of one AWS service. Key fields:
 - `icon` — currently an emoji token, swappable for the AWS icon set later.
 - `scope` — a `ServiceScope` (`global | region | az | vpc | subnet`) describing
   where the resource conceptually lives (see
-  [Data Model → scopes](./data-model.md#placement-scopes)).
+  [Data Model → placement scopes](/docs/architecture/data-model#placement-scopes)).
 - `isContainer` — `true` for services that visually contain others (VPC, Subnet).
 - `color` — optional per-service override; otherwise the category colour wins.
 - `configFields` — the dynamic inspector form schema (see `ConfigField`).
 - `commonConnections` — suggested outgoing edges for hints / auto-wiring.
-- `cfnType` — the CloudFormation type, which **doubles as the MCP / Cloud
-  Control import discriminator** (see [MCP Integration](./mcp-integration.md)).
+- `cfnType` — the CloudFormation type, which **doubles as the MCP / Cloud Control
+  import discriminator** (see [MCP Integration](/docs/architecture/mcp-integration)).
 - `arnPattern`, `keywords`, `docsUrl` — reference / search metadata.
 
 ```ts
@@ -73,8 +72,8 @@ presentation/validation metadata in `RELATIONSHIPS` (`src/aws/categories.ts`): a
 
 ### `CategoryDefinition`
 
-Presentation metadata per category: `color` (hex, used for node accenting and
-the legend) and `icon`. Defined in `CATEGORIES` and ordered by `CATEGORY_ORDER`
+Presentation metadata per category: `color` (hex, used for node accenting and the
+legend) and `icon`. Defined in `CATEGORIES` and ordered by `CATEGORY_ORDER`
 (`src/aws/categories.ts`).
 
 ## Registry aggregation (`src/aws/registry.ts`)
@@ -86,23 +85,24 @@ the legend) and `icon`. Defined in `CATEGORIES` and ordered by `CATEGORY_ORDER`
 - `CFN_INDEX` — `cfnType → ServiceDefinition`, the join table the MCP importer
   uses. `cfnType` is **not unique**: the registry intentionally models variants of
   one CloudFormation type as distinct services (e.g. public vs private
-  `AWS::EC2::Subnet`). The index is **first-wins** — the first service for a
-  `cfnType` is the canonical variant `getServiceByCfnType` returns; each subsequent
-  collision is recorded in `CFN_TYPE_COLLISIONS` and surfaced as a **warning** by
-  `validateRegistry()` rather than silently dropped or treated as an error.
+  `AWS::EC2::Subnet`, or `AWS::Lambda::Function` as `lambda` and `lambda-edge`).
+  The index is **first-wins** — the first service for a `cfnType` becomes the
+  canonical variant `getServiceByCfnType` returns; each subsequent collision is
+  recorded in `CFN_TYPE_COLLISIONS` and surfaced as a **warning** by
+  `validateRegistry()` (not an integrity error). MCP import maps to the canonical
+  variant; a downstream refinement step can reclassify by inspecting properties.
 
-Public accessors include `getService`, `requireService`,
-`getServiceByCfnType`, `allServices`, `servicesByCategory`, `serviceColor`
-(per-service override → category colour fallback), `serviceIcon`,
-`defaultConfig` (builds the initial config object from `ConfigField.default`s),
-and `searchServices` (free-text over name / fullName / description / id /
-keywords).
+Public accessors include `getService`, `requireService`, `getServiceByCfnType`,
+`allServices`, `servicesByCategory`, `serviceColor` (per-service override →
+category colour fallback), `serviceIcon`, `defaultConfig` (builds the initial
+config object from `ConfigField.default`s), and `searchServices` (free-text over
+name / fullName / description / id / keywords).
 
 `validateRegistry()` is a dev-time guardrail returning `RegistryIssue[]` (each
 `level: "error" | "warn"`): `error`s for duplicate ids and unknown categories, and
-`warn`s for dangling `commonConnections` targets and `cfnType` collisions. **This
-should be wired into CI** (see
-[Testing](./testing.md) and [Roadmap](./roadmap.md)).
+`warn`s for dangling `commonConnections` targets and shared-`cfnType` collisions.
+**This should be wired into CI** (see [Testing](/docs/architecture/testing) and
+[Roadmap](/docs/architecture/roadmap)).
 
 ## How to add a new service — one catalog entry, no UI changes
 

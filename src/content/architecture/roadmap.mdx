@@ -1,0 +1,75 @@
+---
+title: Roadmap
+---
+
+# Gaps, Risks & Recommended Next Steps
+
+A candid assessment of what is incomplete or will break at scale.
+
+## 1. Nested rendering is phase-2
+
+Containment is fully modeled (`parentId`, `isContainer`, `childrenOf`) but the
+canvas does not yet render children _inside_ their parent containers. Until it does,
+VPC → subnet → instance hierarchy is only logical, not visual.
+
+**Next:** implement container layout (resources nested within their parent's bounds;
+collapse/expand).
+
+## 2. The imperative full-redraw renderer will not scale
+
+`useCanvasRenderer.draw()` wipes the DOM (`world.innerHTML = ""`) and rebuilds every
+node each frame. For hand-built diagrams (tens of nodes) this is fine; for MCP-sized
+graphs (1000s of nodes) it will be unusable.
+
+**Next:** move to a reconciliation model (diff-and-patch or a retained renderer /
+canvas/WebGL), add **viewport culling** (only render visible nodes), and add
+**automatic layout** (dagre or ELK) so imported graphs are legible without manual
+placement.
+
+## 3. IAM / Security Groups / KMS should be overlays, not peer nodes
+
+Drawing every IAM role, security group, and KMS key as a first-class node produces
+"spaghetti" that buries the architecture.
+
+**Next:** render these as **toggleable overlays** (badges/highlights on the
+resources they apply to) rather than nodes and edges in the main graph. The
+relationship vocabulary already distinguishes them (`assumes`, `grants`, `allows`,
+`attached_to`) so the data supports it.
+
+## 4. Id strategy: UUID vs ARN coexistence
+
+Manually-created resources get server-assigned UUIDs (`randomUUID()`); imported
+resources have real ARNs. `ResourceInstance` carries both (`id` + optional `arn`),
+but there is no defined policy for de-duplication, re-import/merge, or stable
+identity across imports.
+
+**Next:** define ARN as the stable external key, keep UUID as the internal id, and
+build a merge/upsert path so re-importing an AWS account updates existing resources
+instead of duplicating them.
+
+## 5. Deep-clone-per-action history is memory-costly at scale
+
+`useHistory.commit()` `structuredClone`s the state on every committed action
+(falling back to `JSON.parse(JSON.stringify(state))` only where `structuredClone` is
+unavailable) and retains up to 100 snapshots. Each snapshot is a full copy of all
+nodes/edges — fine for small graphs, expensive for large/imported ones.
+
+**Next:** switch to a command/patch-based (diff) history or structural sharing.
+
+## 6. Validators are not yet enforced in CI
+
+`validateRegistry()` and `validateGraph()` exist but only run at module load / on API
+writes (see [Testing](/docs/architecture/testing)).
+
+**Next:** expand the test harness and **run `validateRegistry()` and `validateGraph()`
+(over fixtures) in CI** so duplicate ids, dangling `commonConnections`, and structural
+breakage fail the build.
+
+## 7. Auth and multi-tenancy are absent on the server
+
+The Route Handlers and `Repository` have no concept of a user, tenant, or
+authorization — any caller can list/read/write/delete any graph. This is acceptable
+for local/demo use only.
+
+**Next:** add authentication, per-tenant scoping on every `Repository` method, and
+authorization checks in the Route Handlers before any multi-user deployment.

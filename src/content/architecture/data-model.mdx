@@ -1,22 +1,20 @@
 ---
-sidebar_position: 3
 title: Domain Data Model
 ---
 
 # The Domain Data Model
 
-The persisted representation of an AWS environment lives in `src/aws/model.ts`.
-It is **deliberately decoupled from rendering**: a resource references a
-`ServiceDefinition` by id and stores config keyed by that service's
-`ConfigField` keys. This is exactly what the server stores and what the MCP
-importer produces.
+The persisted representation of an AWS environment lives in `src/aws/model.ts`. It
+is **deliberately decoupled from rendering**: a resource references a
+`ServiceDefinition` by id and stores config keyed by that service's `ConfigField`
+keys. This is exactly what the server stores and what the MCP importer produces.
 
 ## Entities
 
 - **`Account`** — an AWS account in scope: `accountId` (12-digit), `name`,
   optional `environment` (`"prod" | "staging" | …`) and `color`.
-- **`RegionRef`** — `{ code, name }`. The common set lives in
-  `src/aws/regions.ts` (`REGIONS`, `regionName(code)`); extend freely.
+- **`RegionRef`** — `{ code, name }`. The common set lives in `src/aws/regions.ts`
+  (`REGIONS`, `regionName(code)`); extend freely.
 - **`ResourceInstance`** — a concrete instance of a service:
   - `serviceId` references `ServiceDefinition.id`.
   - **Placement / scoping:** `accountId`, `region`, and `parentId`.
@@ -58,29 +56,28 @@ reference, distinct from the relationship graph. Helpers:
 - `resourcesByAccount(graph, accountId)`.
 - `relationshipsOf(graph, resourceId)`.
 
-:::note
-Containment is _modeled_ today but nested visual rendering (drawing children
-inside their parent container) is phase-2. See [Roadmap](./roadmap.md).
-:::
+> **Note:** containment is _modeled_ today but nested visual rendering (drawing
+> children inside their parent container) is phase-2. See
+> [Roadmap](/docs/architecture/roadmap).
 
 ## Placement scopes
 
-`ServiceDefinition.scope` (`global | region | az | vpc | subnet`) describes where
-a resource conceptually belongs and is the basis for placement validation and
-future layout: IAM is `global`, an S3 bucket is `region`-scoped, a subnet is
-`az`-scoped, an EC2 instance must sit inside a subnet, and so on.
+`ServiceDefinition.scope` (`global | region | az | vpc | subnet`) describes where a
+resource conceptually belongs and is the basis for placement validation and future
+layout: IAM is `global`, an S3 bucket is `region`-scoped, a subnet is `az`-scoped,
+an EC2 instance must sit inside a subnet, and so on.
 
 ## Validation & summaries
 
 - `validateGraph(graph)` returns structural errors: duplicate resource ids,
-  `parentId`s pointing at missing resources, and relationships referencing
-  missing `from`/`to`. The API enforces this on every write (see
-  [Persistence](./persistence.md)). **Wire into CI** (see
-  [Roadmap](./roadmap.md)).
-- `summarize(graph) → GraphSummary` produces the lightweight shape list
-  endpoints return (avoids shipping full graphs).
-- `emptyGraph(name)` produces a minimal valid graph; `id`/timestamps are
-  assigned on persist.
+  `parentId`s pointing at missing resources, and relationships referencing missing
+  `from`/`to`. The API enforces this on every write (see
+  [Persistence](/docs/architecture/persistence)). **Wire into CI** (see
+  [Roadmap](/docs/architecture/roadmap)).
+- `summarize(graph) → GraphSummary` produces the lightweight shape list endpoints
+  return (avoids shipping full graphs).
+- `emptyGraph(name)` produces a minimal valid graph; `id`/timestamps are assigned
+  on persist.
 
 A separate runtime shape check lives in `src/server/graphSchema.ts`
 (`isInfrastructureGraph`, `hasGraphCollections`): the model is a compile-time

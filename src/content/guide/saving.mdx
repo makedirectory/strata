@@ -1,0 +1,48 @@
+---
+title: Saving & Loading
+---
+
+# Saving, Loading & Export
+
+Strata gives you two complementary ways to keep your work: **save to the server**
+(so you can reopen a diagram in the app later) and **export to JSON** (a portable,
+version-controllable file you can share or check into git).
+
+## Save & load on the server
+
+- **Save** — click the Save button in the toolbar to store the current diagram on
+  the server. By default this writes to a local file store under `.data/graphs/` —
+  no external infrastructure or account required.
+- **Load** — click the Load button to reopen a previously saved diagram.
+
+Saved diagrams are stamped with their creation and update times automatically, so
+the most recently edited ones surface first.
+
+## Export & import JSON
+
+For a portable copy you fully control:
+
+- **Export JSON** — downloads the current diagram as a single JSON file. This is the
+  complete diagram-as-code: every resource, its configuration, and every typed
+  relationship.
+- **Import JSON** — loads a diagram from a JSON file you previously exported,
+  replacing what's currently on the canvas.
+
+Because the export is plain JSON, you can commit it to a repository, diff it across
+versions, or hand it to a teammate — it isn't locked into a proprietary datastore.
+
+> The JSON export is the same diagram-as-code Strata persists internally, so an
+> exported file round-trips cleanly back through Import JSON.
+
+## Start over
+
+Click **Clear** to empty the canvas. If you clear by accident, **Undo**
+(`Cmd/Ctrl+Z`) brings it back.
+
+## Which should I use?
+
+| Goal                                         | Use                  |
+| -------------------------------------------- | -------------------- |
+| Quickly reopen a diagram in this app later   | Save / Load          |
+| Share, back up, or version-control a diagram | Export / Import JSON |
+| Hand a diagram to another tool or teammate   | Export JSON          |

@@ -1,0 +1,86 @@
+---
+title: Importing IaC
+---
+
+# Importing Infrastructure-as-Code
+
+Already have infrastructure described in CloudFormation or Terraform? Instead of
+redrawing it by hand, import it and Strata renders it as a typed diagram — with
+containment (VPC → subnet → instance) and relationships derived automatically.
+
+## Supported formats
+
+- **CloudFormation** templates, in either **JSON or YAML** (including the short-form
+  intrinsic tags like `!Ref`, `!GetAtt`, and `!Sub`).
+- **Terraform**, as the JSON produced by `terraform show -json` (current state) or
+  `terraform plan -json` (planned changes).
+
+Strata auto-detects which of the two formats you pasted, so in most cases you don't
+need to tell it.
+
+## How to import
+
+1. Click **Import IaC** in the toolbar.
+2. Paste your template or state JSON (or select the file, depending on the dialog).
+3. Strata parses it, matches each resource to a known AWS service, lays the nodes
+   out on a grid, and draws the typed relationships.
+
+Containment is reconstructed from the source:
+
+- In **CloudFormation**, a resource's `VpcId`, `SubnetId`, `ClusterArn`, etc. (when
+  it points at another resource in the same template via `!Ref` / `!GetAtt`) nests
+  that resource inside its parent. Remaining references and `DependsOn` become
+  `depends_on` edges.
+- In **Terraform**, a `vpc_id` or `subnet_id` value that matches another resource's
+  `id` nests it under that parent. `depends_on` becomes `depends_on` edges.
+
+## Generating Terraform input
+
+From your Terraform working directory:
+
+```bash
+terraform show -json > state.json
+```
+
+Then paste the contents of `state.json` into the Import IaC dialog. Nested modules
+(`child_modules`) are walked automatically.
+
+## Example: a small CloudFormation template
+
+Importing this YAML produces a VPC containing a subnet, which contains an EC2
+instance:
+
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+  MySubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: 10.0.1.0/24
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref MySubnet
+      InstanceType: t3.micro
+```
+
+## What if a resource doesn't show up?
+
+Strata only renders resource types it recognizes. Any source type without a mapping
+is **skipped** and reported back as an "unmapped types" warning after the import.
+That's expected for less common services — the rest of your diagram still imports
+fine. Unmapped types are good candidates for a contributor to add to the service
+catalog (see the engineering [IaC Import](/docs/architecture/iac-import) docs).
+
+## After importing
+
+- Imported resources are marked as imported, so you can tell them apart from ones
+  you drew by hand.
+- You can edit, connect, and rearrange them just like any other node.
+- [Validate the design](/docs/guide/validation) or [save it](/docs/guide/saving) for
+  later.

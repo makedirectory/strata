@@ -1,5 +1,5 @@
 /**
- * AWS Flow Builder — Service Registry Schema
+ * Strata — Service Registry Schema
  * ------------------------------------------
  * The canonical, extensible vocabulary the whole application is built on.
  *

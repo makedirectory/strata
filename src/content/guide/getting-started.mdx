@@ -1,0 +1,73 @@
+---
+title: Getting Started
+---
+
+# Build Your First Diagram
+
+This walkthrough takes you from an empty canvas to a small, connected AWS
+architecture. Start the app with `npm run dev` and open `http://localhost:3000/`.
+
+## The layout
+
+The screen has three regions:
+
+- **Palette** (left) — every AWS service, grouped by category (networking, compute,
+  storage, database, …), with a search box at the top.
+- **Canvas** (center) — where your diagram lives. Pan, zoom, and arrange resources
+  here.
+- **Inspector** (right) — shows the configuration form for whatever node you have
+  selected, plus the Validate and Suggest Rules actions.
+
+A toolbar across the top holds the document-level actions: Undo / Redo, Validate,
+Suggest Rules, Export JSON, Import JSON, Import IaC, Save, Load, and Clear.
+
+## 1. Add a service (drag & drop)
+
+1. Find a service in the palette — type in the search box to filter (e.g. type
+   `vpc`, `lambda`, or `s3`).
+2. **Drag** the service from the palette and **drop** it onto the canvas. A node
+   appears where you dropped it, coloured and iconed by its category.
+
+Two starter presets are available from the toolbar if you'd rather begin with a
+working example: **Basic AWS** and **ECS + ALB**.
+
+## 2. Configure it (the inspector)
+
+Click a node to select it. The inspector on the right shows a form built
+automatically from that service's fields — a VPC has a CIDR block, an EC2 instance
+has an instance type, and so on. Edit the values and they're stored on the resource
+immediately. Every service gets the right form with no special-casing, because the
+form is generated from the service definition.
+
+## 3. Connect resources (typed relationships)
+
+Connections in Strata are **typed** — never anonymous lines. An edge might mean
+`routes_to`, `invokes`, `contains`, `peers_with`, and so on, and is drawn solid or
+dashed accordingly.
+
+1. Switch the canvas to **Connect** mode — click the Connect button in the toolbar
+   or press `C`. (Press the Move button to go back to moving nodes.)
+2. Drag from one node to another to create an edge. The relationship type is applied
+   based on the two services involved.
+3. Switch back to **Move** mode to reposition nodes.
+
+## 4. Navigate the canvas
+
+- **Pan** — hold `Space` and drag, or drag empty canvas.
+- **Fit to View** / **Center** — toolbar buttons to reframe the whole diagram.
+- **Delete** — select a node or edge and press `Delete`.
+- **Duplicate** — select a node and press `D`.
+- **Group** — select nodes and press `G` to group them into a VPC.
+
+## 5. Undo / redo
+
+Every change is tracked. Use the Undo and Redo toolbar buttons, or `Cmd/Ctrl+Z` and
+`Shift+Cmd/Ctrl+Z` (or `Ctrl+Y`).
+
+## Next steps
+
+- Already have infrastructure? [Import CloudFormation or Terraform](/docs/guide/importing-iac)
+  instead of drawing from scratch.
+- [Validate your design](/docs/guide/validation) and get best-practice rule
+  suggestions.
+- [Save your diagram](/docs/guide/saving) so you can reopen it later.

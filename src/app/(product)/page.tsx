@@ -25,10 +25,10 @@ function TopBar() {
   return (
     <div className="topbar">
       <div className="logo">
-        <span role="img" aria-label="AWS Flow Builder logo">
+        <span role="img" aria-label="Strata logo">
           🔶
         </span>{" "}
-        <span style={{ fontWeight: 800 }}>AWS Flow Builder</span>
+        <span style={{ fontWeight: 800 }}>Strata</span>
       </div>
       <div className="status" id="status">
         {status}
