@@ -14,7 +14,8 @@ import {
   type ValidationResult,
   type RuleSuggestion,
 } from "../aws/rules";
-import { listGraphs, getGraph, createGraph, updateGraph } from "../lib/api";
+import { listGraphs, getGraph, createGraph, updateGraph, deleteGraph } from "../lib/api";
+import type { GraphSummary } from "../aws/model";
 import { importIaC } from "../aws/iac";
 import {
   zoomAbout,
@@ -101,7 +102,12 @@ interface FlowContextValue {
   runValidateUI: () => void;
   runRulesUI: () => void;
   saveToServer: () => void;
-  loadFromServer: () => void;
+  /** List saved graphs for the Load menu. */
+  listSavedGraphs: () => Promise<GraphSummary[]>;
+  /** Load a saved graph by id. */
+  loadGraph: (id: string) => Promise<void>;
+  /** Delete a saved graph by id. */
+  deleteSavedGraph: (id: string) => Promise<void>;
   /** Structured validation findings, or `null` before the first run. */
   validationResults: ValidationResult[] | null;
   /** Structured rule suggestions, or `null` before the first run. */
@@ -579,36 +585,50 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [buildGraph, store]);
 
-  const loadFromServer = useCallback(async () => {
+  /** List saved graphs for the Load menu (returns [] and reports on failure). */
+  const listSavedGraphs = useCallback(async (): Promise<GraphSummary[]> => {
     try {
-      setStatus("Loading from server…");
-      const summaries = await listGraphs();
-      if (summaries.length === 0) {
-        setStatus("No saved graphs on server.");
-        return;
-      }
-      const list = summaries
-        .map((s, i) => `${i + 1}. ${s.name} (${s.resourceCount} resources)`)
-        .join("\n");
-      const pick = typeof prompt === "function" ? prompt(`Load which graph?\n${list}`, "1") : "1";
-      if (!pick) {
-        setStatus("Load cancelled.");
-        return;
-      }
-      const idx = Math.max(1, Math.min(summaries.length, Number(pick))) - 1;
-      const g = await getGraph(summaries[idx].id);
-      store.replaceAll({
-        resources: g.resources ?? [],
-        relationships: g.relationships ?? [],
-        viewport: g.viewport,
-        accounts: g.accounts ?? [],
-        graphId: g.id,
-      });
-      setStatus(`Loaded "${g.name}".`);
+      return await listGraphs();
     } catch {
       setStatus("Load failed: API unavailable.");
+      return [];
     }
-  }, [store]);
+  }, []);
+
+  /** Load a saved graph by id (replaces the current model). */
+  const loadGraph = useCallback(
+    async (id: string) => {
+      try {
+        setStatus("Loading from server…");
+        const g = await getGraph(id);
+        store.replaceAll({
+          resources: g.resources ?? [],
+          relationships: g.relationships ?? [],
+          viewport: g.viewport,
+          accounts: g.accounts ?? [],
+          graphId: g.id,
+        });
+        setStatus(`Loaded "${g.name}".`);
+      } catch {
+        setStatus("Load failed: API unavailable.");
+      }
+    },
+    [store],
+  );
+
+  /** Delete a saved graph by id (clears graphId if it was the open one). */
+  const deleteSavedGraph = useCallback(
+    async (id: string) => {
+      try {
+        await deleteGraph(id);
+        if (store.graphId === id) store.setGraphId("");
+        setStatus("Deleted saved graph.");
+      } catch {
+        setStatus("Delete failed: API unavailable.");
+      }
+    },
+    [store],
+  );
 
   // ---- Presets ------------------------------------------------------------
   const loadPreset = (presetName: string) => {
@@ -751,7 +771,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     runValidateUI: runValidate,
     runRulesUI: runSuggest,
     saveToServer,
-    loadFromServer,
+    listSavedGraphs,
+    loadGraph,
+    deleteSavedGraph,
     validationResults,
     ruleSuggestions,
     status,

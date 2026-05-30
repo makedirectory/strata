@@ -5,6 +5,84 @@ import { Palette } from "../../components/Palette";
 import { Canvas } from "../../components/Canvas";
 import { Inspector } from "../../components/Inspector";
 import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
+import type { GraphSummary } from "../../aws/model";
+
+/** Dropdown listing saved graphs (name · resource count · updated), replacing
+ *  the old window.prompt "Load from Server" flow. */
+function LoadMenu() {
+  const { listSavedGraphs, loadGraph, deleteSavedGraph } = useFlow();
+  const [open, setOpen] = React.useState(false);
+  const [graphs, setGraphs] = React.useState<GraphSummary[] | null>(null);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  const refresh = React.useCallback(async () => {
+    setGraphs(null);
+    setGraphs(await listSavedGraphs());
+  }, [listSavedGraphs]);
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next) await refresh();
+  };
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="load-menu" ref={ref}>
+      <button
+        onClick={toggle}
+        title="Load graph from server"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        Load from Server ▾
+      </button>
+      {open && (
+        <div className="load-menu-dropdown" role="menu">
+          {graphs === null && <div className="load-menu-empty">Loading…</div>}
+          {graphs && graphs.length === 0 && <div className="load-menu-empty">No saved graphs.</div>}
+          {graphs?.map((g) => (
+            <div className="load-menu-item" key={g.id}>
+              <button
+                className="load-menu-pick"
+                role="menuitem"
+                onClick={async () => {
+                  setOpen(false);
+                  await loadGraph(g.id);
+                }}
+              >
+                <span className="load-menu-name">{g.name}</span>
+                <span className="load-menu-meta">
+                  {g.resourceCount} resource{g.resourceCount === 1 ? "" : "s"}
+                  {g.updatedAt ? ` · ${new Date(g.updatedAt).toLocaleDateString()}` : ""}
+                </span>
+              </button>
+              <button
+                className="load-menu-delete"
+                title="Delete saved graph"
+                aria-label={`Delete ${g.name}`}
+                onClick={async () => {
+                  await deleteSavedGraph(g.id);
+                  await refresh();
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TopBar() {
   const {
@@ -20,7 +98,6 @@ function TopBar() {
     canUndo,
     canRedo,
     saveToServer,
-    loadFromServer,
   } = useFlow();
   return (
     <div className="topbar">
@@ -54,9 +131,7 @@ function TopBar() {
         <button onClick={saveToServer} title="Save graph to server">
           Save to Server
         </button>
-        <button onClick={loadFromServer} title="Load graph from server">
-          Load from Server
-        </button>
+        <LoadMenu />
         <button onClick={clear} title="Clear canvas">
           Clear
         </button>
