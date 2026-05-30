@@ -303,6 +303,58 @@ body {
   border-left: 3px solid var(--accent-color, #24406b);
   border-radius: 16px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  /* LOD clips content to the tier/density-derived height; height + opacity
+     animate on tier crossings and focus changes (position is NOT transitioned
+     so dragging stays crisp). */
+  overflow: hidden;
+  transition:
+    height 0.12s ease,
+    opacity 0.12s ease;
+}
+
+/* ---- Semantic level-of-detail (far → mid → near=full) ---- */
+.node.lod-mid .node-subtitle,
+.node.lod-mid .ports,
+.node.lod-far .node-subtitle,
+.node.lod-far .node-body,
+.node.lod-far .ports {
+  display: none;
+}
+.node.lod-mid .node-body .pill:nth-child(n + 2) {
+  display: none;
+}
+.node.lod-mid .node-header,
+.node.lod-far .node-header {
+  border-bottom: none;
+}
+.node.lod-mid .node-header {
+  padding: 7px 10px;
+}
+.node.lod-far .node-header {
+  padding: 4px 8px;
+}
+.node.lod-far .node-icon {
+  width: 24px;
+  height: 24px;
+}
+
+/* ---- Density: Compact trims the near tier ---- */
+.node.dense-compact .node-subtitle,
+.node.dense-compact .node-body .pill:nth-child(n + 2) {
+  display: none;
+}
+.node.dense-compact .node-body {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* ---- Focus dimming (hover/selection lights 1-hop neighbourhood) ---- */
+.node.dimmed {
+  opacity: 0.28;
+}
+.edge.dimmed,
+text.dimmed {
+  opacity: 0.14;
 }
 .node-header {
   display: flex;

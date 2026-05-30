@@ -5,7 +5,7 @@ import { useCanvasInteraction } from "./useCanvasInteraction";
 import { useCanvasRenderer } from "./useCanvasRenderer";
 import type { ResourceInstance, Relationship, InfrastructureGraph } from "../aws/model";
 import { emptyGraph, DEFAULT_NODE_SIZE } from "../aws/model";
-import type { CanvasMode, Selection } from "../types";
+import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind } from "../aws/types";
 import { defaultConfig, getService } from "../aws/registry";
 import {
@@ -36,6 +36,7 @@ interface FlowContextValue {
     relationships: Relationship[];
     viewport: ReturnType<typeof useFlowStore>["viewport"];
     mode: CanvasMode;
+    density: CanvasDensity;
   };
   worldRef: React.RefObject<HTMLDivElement | null>;
   svgRef: React.RefObject<SVGSVGElement | null>;
@@ -51,6 +52,7 @@ interface FlowContextValue {
   // Actions
   setMode: (m: CanvasMode) => void;
   toggleMode: () => void;
+  setDensity: (d: CanvasDensity) => void;
   select: (sel: Selection) => void;
   addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
   removeSelection: () => void;
@@ -163,6 +165,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     relationships: store.relationships,
     viewport: store.viewport,
     mode: store.mode,
+    density: store.density,
   };
 
   /** Assemble the current model into an InfrastructureGraph. */
@@ -271,6 +274,16 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Transient marquee selection rectangle (world coords) drawn while dragging.
   const [marquee, setMarquee] = React.useState<Rect | null>(null);
 
+  // Hovered node id → drives focus-dimming. Deduped so repeated enters of the
+  // same node don't re-render.
+  const [hoverId, setHoverId] = React.useState<string | null>(null);
+  const onHover = useCallback((id: string | null) => {
+    setHoverId((prev) => (prev === id ? prev : id));
+  }, []);
+  // Focus = the hovered node, else the single selected node. Its 1-hop
+  // neighbourhood stays lit; everything else dims.
+  const focusId = hoverId ?? (store.selection?.type === "node" ? store.selection.id : null);
+
   const updateResourceField = useCallback(
     (patch: { name?: string; region?: string; config?: Record<string, unknown> }) => {
       if (store.selection?.type !== "node") return;
@@ -377,9 +390,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.viewport,
       store.selection,
       store.selectedIds,
+      store.density,
+      focusId,
       onNodeMouseDown,
       onConnectCb,
       storeSetSelection,
+      onHover,
     );
   }, [
     rDraw,
@@ -388,9 +404,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.viewport,
     store.selection,
     store.selectedIds,
+    store.density,
+    focusId,
     onNodeMouseDown,
     onConnectCb,
     storeSetSelection,
+    onHover,
   ]);
   const drawMinimap = useCallback(
     () => rDrawMinimap(store.resources, store.viewport, viewSize()),
@@ -731,6 +750,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setMode: store.setMode,
     toggleMode,
+    setDensity: store.setDensity,
     select: store.setSelection,
     addResourceFromPalette,
     removeSelection: store.removeSelection,

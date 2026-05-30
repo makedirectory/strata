@@ -11,6 +11,7 @@
  *   subtract the `.canvas-wrap` bounding rect first, as the drop handler does).
  */
 import type { Viewport } from "../aws/model";
+import type { CanvasDensity, LodTier } from "../types";
 
 export interface Vec2 {
   x: number;
@@ -333,4 +334,37 @@ export function panToCenter(
     y: view.height / 2 - worldPoint.y * scale,
     scale,
   };
+}
+
+// ---- semantic level-of-detail --------------------------------------------
+
+/** Effective-scale thresholds for LOD tier boundaries. */
+export const LOD_FAR_BELOW = 0.4;
+export const LOD_MID_BELOW = 0.75;
+
+/** Compact-mode and reduced-tier node heights (world units). */
+export const COMPACT_NEAR_HEIGHT = 64;
+export const MID_HEIGHT = 48;
+export const FAR_HEIGHT = 34;
+
+/**
+ * Pick the level-of-detail tier from the effective zoom scale. Far → render a
+ * minimal card (icon + name); mid → icon + name + one pill; near → full card.
+ */
+export function lodTier(scale: number): LodTier {
+  if (scale < LOD_FAR_BELOW) return "far";
+  if (scale < LOD_MID_BELOW) return "mid";
+  return "near";
+}
+
+/**
+ * Rendered height for a node at a given tier/density. The near tier honours the
+ * node's base height (full card) in Comfortable and a trimmed height in Compact;
+ * mid/far collapse to fixed short cards. Edges use the same value so wires stay
+ * attached to the visible card.
+ */
+export function nodeRenderHeight(tier: LodTier, density: CanvasDensity, baseH: number): number {
+  if (tier === "far") return FAR_HEIGHT;
+  if (tier === "mid") return MID_HEIGHT;
+  return density === "compact" ? COMPACT_NEAR_HEIGHT : baseH;
 }

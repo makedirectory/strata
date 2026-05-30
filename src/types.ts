@@ -15,6 +15,12 @@ export type { ResourceInstance, Relationship, Viewport } from "./aws/model";
 /** Interaction mode for the canvas. */
 export type CanvasMode = "move" | "connect";
 
+/** Node information-density preset (Comfortable shows full cards, Compact trims). */
+export type CanvasDensity = "comfortable" | "compact";
+
+/** Semantic level-of-detail tier, derived from the effective zoom scale. */
+export type LodTier = "far" | "mid" | "near";
+
 /** An entry in the service palette, derived from a ServiceDefinition. */
 export interface PaletteItem {
   readonly serviceId: string;

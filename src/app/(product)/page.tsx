@@ -157,6 +157,26 @@ function ModeButtons() {
   );
 }
 
+function DensityButtons() {
+  const { setDensity, state } = useFlow();
+  return (
+    <div className="palette">
+      <button
+        onClick={() => setDensity("comfortable")}
+        className={state.density === "comfortable" ? "active" : ""}
+      >
+        Comfortable
+      </button>
+      <button
+        onClick={() => setDensity("compact")}
+        className={state.density === "compact" ? "active" : ""}
+      >
+        Compact
+      </button>
+    </div>
+  );
+}
+
 function PresetButtons() {
   const { loadPreset } = useFlow();
   return (
@@ -195,6 +215,8 @@ export default function Page() {
           <PresetButtons />
           <h3>Modes</h3>
           <ModeButtons />
+          <h3>Density</h3>
+          <DensityButtons />
           <h3>Shortcuts</h3>
           <div className="help">
             <div>Scroll: pan · ⌘/Ctrl+scroll or pinch: zoom</div>
