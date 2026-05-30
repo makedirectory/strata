@@ -13,6 +13,7 @@ const sidebars: SidebarsConfig = {
     "visual-mapping",
     "persistence",
     "mcp-integration",
+    "iac-import",
     "testing",
     "roadmap",
   ],

@@ -5,7 +5,9 @@ Drag services onto a canvas, configure them with auto-generated forms, and conne
 them with typed relationships (`contains`, `routes_to`, `invokes`, `peers_with`, …)
 — with the whole vocabulary spanning 14 AWS service categories. It is built to be
 extended one service at a time and to eventually ingest live AWS state via MCP /
-Cloud Control.
+Cloud Control. It can also import existing Infrastructure-as-Code —
+CloudFormation (JSON/YAML) and Terraform `show -json` — into the same graph
+(see [ARCHITECTURE.md §8](./ARCHITECTURE.md#8-infrastructure-as-code-import)).
 
 The core idea: **everything visual is derived from a data registry, not hardcoded.**
 Adding a new AWS service is a single catalog entry — no UI changes.
@@ -50,6 +52,7 @@ src/
     rules.ts            Architecture validation + best-practice rule suggestions
     services/*.ts       Per-category service catalogs (networking.ts is the template)
     mcp.ts              MCP / Cloud Control import mapper (mapDiscoveredToGraph)
+    iac.ts              Infrastructure-as-Code import (CloudFormation + Terraform → InfrastructureGraph)
   server/               Persistence (the Route Handlers are the server tier)
     repository.ts       Repository interface
     fileRepository.ts   Default file-backed store

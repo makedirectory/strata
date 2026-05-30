@@ -403,7 +403,84 @@ The importer's job is to turn a list of discovered resources into an
 
 ---
 
-## 7. Gaps, Risks & Recommended Next Steps
+## 8. Infrastructure-as-Code Import
+
+Beyond live MCP discovery (§6), the system imports **declared** infrastructure
+from existing IaC into the same `InfrastructureGraph`. The module is
+`src/aws/iac.ts` — pure and dependency-light (only `js-yaml` for CloudFormation
+YAML). It supports two source formats:
+
+- **CloudFormation** templates (JSON _or_ YAML).
+- **Terraform** `terraform show -json` output (state under `values.root_module`,
+  plan under `planned_values.root_module`) and `terraform plan -json`
+  (`resource_changes[]`).
+
+### Entry points
+
+- **`importIaC(content, opts?)`** — the main string entry point. It parses the
+  document (`parseDocument`, JSON or YAML), then routes by `opts.format` or, when
+  `"auto"`, by **`detectFormat(doc)`** — a heuristic that classifies the parsed
+  object as `"cloudformation"` (top-level `Resources` / `AWSTemplateFormatVersion`)
+  or `"terraform"` (`values` / `planned_values` / `resource_changes` /
+  `terraform_version` / `format_version`).
+- **`importCloudFormation(template, name?)`** and **`importTerraform(tf, name?)`**
+  — the per-format importers, callable directly with an already-parsed object.
+
+All three return an **`IacImportResult`**: `{ graph, format, unmappedTypes,
+warnings }`.
+
+### Join keys (the difference between the two formats)
+
+- **CloudFormation:** a resource's `Type` (e.g. `"AWS::EC2::Instance"`) **is** the
+  registry `cfnType`, so `getServiceByCfnType()` resolves it directly — the same
+  join key MCP discovery uses (§6).
+- **Terraform:** HCL carries no CloudFormation type, so the module ships its own
+  join table, **`TF_TYPE_TO_SERVICE_ID`** (`Record<tfType, serviceId>`, e.g.
+  `aws_instance → "ec2-instance"`). It is exported and meant to be extended freely
+  as the catalog grows.
+
+### YAML short-tag handling
+
+CloudFormation YAML uses short-form intrinsic tags (`!Ref`, `!GetAtt`, `!Sub`, …).
+`cfnYamlSchema()` registers a `js-yaml` type for every tag in `CFN_TAGS` (across
+scalar/sequence/mapping kinds) that constructs the equivalent `{ Ref: … }` /
+`{ "Fn::<Tag>": … }` object form, so the rest of the importer sees a uniform
+structure regardless of whether the source was JSON or YAML.
+
+### Shared builder, containment & relationship derivation
+
+Both paths normalise their source resources into a common internal
+`ResolvedItem[]` (`id`, `serviceId`, `name`, optional `parentId`, `properties`,
+`relationships`) and feed it through one **`buildGraph()`**. The builder:
+
+- filters each resource's raw properties down to the service's known
+  `configFields` keys,
+- lays nodes out on a simple grid (auto-layout),
+- keeps a `parentId` only when it resolves to another imported resource, and
+- emits typed `Relationship`s, **de-duplicated** with self-loops and dangling
+  targets dropped (all `source: "imported"`).
+
+Containment and relationships are **derived** per format:
+
+- CloudFormation: `parentId` from the first matching `CFN_CONTAINMENT_PROPS`
+  property (`SubnetId`, `VpcId`, `ClusterArn`, …) whose `Ref`/`Fn::GetAtt`
+  (`cfnRefTarget` / `collectCfnRefs`) points at another in-template resource;
+  remaining `Ref`/`GetAtt` references plus `DependsOn` become `depends_on` edges.
+- Terraform: a resource's `id` attribute is indexed so a resolved `subnet_id` /
+  `vpc_id` value yields a `parentId`; `depends_on` addresses become `depends_on`
+  edges.
+
+### Registry gaps: `unmappedTypes`
+
+Source resource types with no registry mapping (an unknown `cfnType`, or a
+Terraform type absent from `TF_TYPE_TO_SERVICE_ID`) are **skipped** and collected
+into `IacImportResult.unmappedTypes`, with a count surfaced in `warnings`. These
+are the direct candidates for new catalog entries (§2) or new
+`TF_TYPE_TO_SERVICE_ID` rows.
+
+---
+
+## 9. Gaps, Risks & Recommended Next Steps
 
 Candid assessment of what is incomplete or will break at scale.
 
