@@ -5,9 +5,30 @@ import type { RelationshipKind } from "../aws/types";
 import type { CanvasMode, Pan } from "../types";
 import { getService } from "../aws/registry";
 import { DEFAULT_NODE_SIZE } from "../aws/model";
+import {
+  zoomAbout,
+  fitView,
+  boundsOf,
+  screenToWorld as toWorld,
+  type Vec2,
+} from "../canvas/geometry";
+
+/** Wheel-zoom sensitivity: factor = exp(-deltaY * k). Smooth for pinch + ⌘-wheel. */
+const ZOOM_SENSITIVITY = 0.0015;
 
 function pos(r: ResourceInstance) {
   return r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
+}
+
+/** Canvas-wrap-local pointer coordinates for a native event (subtract the rect). */
+function localPoint(e: {
+  clientX: number;
+  clientY: number;
+  currentTarget: EventTarget | null;
+}): Vec2 {
+  const el = e.currentTarget as HTMLElement | null;
+  const rect = el?.getBoundingClientRect();
+  return { x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) };
 }
 
 export function useCanvasInteraction() {
@@ -20,10 +41,7 @@ export function useCanvasInteraction() {
   const connectStartRef = useRef<string | null>(null);
 
   const screenToWorld = useCallback(
-    (pt: { x: number; y: number }, pan: Pan) => ({
-      x: (pt.x - pan.x) / pan.scale,
-      y: (pt.y - pan.y) / pan.scale,
-    }),
+    (pt: { x: number; y: number }, pan: Pan) => toWorld(pt, pan),
     [],
   );
 
@@ -121,13 +139,16 @@ export function useCanvasInteraction() {
   }, []);
 
   const onWheelZoom = useCallback((e: WheelEvent, pan: Pan, updatePan: (newPan: Pan) => void) => {
+    // The caller attaches this via a non-passive listener so preventDefault
+    // actually blocks the browser's page zoom/scroll.
+    e.preventDefault();
+    // ⌘/Ctrl+wheel and trackpad pinch (which reports ctrlKey) → cursor-anchored
+    // zoom. Plain wheel / two-finger scroll → pan. This matches pro design tools.
     if (e.ctrlKey || e.metaKey) {
-      // Caller attaches this via a non-passive listener so preventDefault
-      // actually blocks the page from zooming/scrolling.
-      e.preventDefault();
-      const scale = pan.scale * (e.deltaY < 0 ? 1.1 : 0.9);
-      const clamped = Math.min(2.0, Math.max(0.4, scale));
-      updatePan({ ...pan, scale: clamped });
+      const factor = Math.exp(-e.deltaY * ZOOM_SENSITIVITY);
+      updatePan(zoomAbout(pan, localPoint(e), pan.scale * factor));
+    } else {
+      updatePan({ ...pan, x: pan.x - e.deltaX, y: pan.y - e.deltaY });
     }
   }, []);
 
@@ -168,23 +189,10 @@ export function useCanvasInteraction() {
         updatePan({ x: 200, y: 120, scale: 1 });
         return;
       }
-      const ps = resources.map(pos);
-      const minx = Math.min(...ps.map((p) => p.x));
-      const miny = Math.min(...ps.map((p) => p.y));
-      const maxx = Math.max(...ps.map((p) => p.x + p.w));
-      const maxy = Math.max(...ps.map((p) => p.y + p.h));
-      const worldW = maxx - minx;
-      const worldH = maxy - miny;
-
+      const bounds = boundsOf(resources.map(pos));
+      if (!bounds) return;
       const view = (worldRef.current!.parentElement as HTMLElement).getBoundingClientRect();
-      const margin = 80;
-      const sx = (view.width - margin * 2) / worldW;
-      const sy = (view.height - margin * 2) / worldH;
-      const scale = Math.max(0.4, Math.min(1.6, Math.min(sx, sy)));
-      const centerX = (view.width - worldW * scale) / 2 - minx * scale;
-      const centerY = (view.height - worldH * scale) / 2 - miny * scale;
-
-      updatePan({ x: centerX, y: centerY, scale });
+      updatePan(fitView(bounds, { width: view.width, height: view.height }));
     },
     [],
   );
