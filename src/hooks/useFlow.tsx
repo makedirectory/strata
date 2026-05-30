@@ -93,6 +93,11 @@ interface FlowContextValue {
   focusContainer: (id: string | null) => void;
   /** Double-click handler for a node id (toggles container focus). */
   onNodeDoubleClick: (id: string) => void;
+  /** Select + centre on a node (⌘K jump / search). */
+  goToResource: (id: string) => void;
+  /** Highlighted search-match node ids + setter (live search). */
+  searchMatches: ReadonlySet<string>;
+  setSearchMatches: (ids: ReadonlySet<string>) => void;
   /** Ancestor path of the focus target, root → leaf (clickable crumbs). */
   breadcrumb: Array<{ id: string; name: string }>;
   /** Currently focused container id, or null. */
@@ -105,6 +110,9 @@ interface FlowContextValue {
   environmentTint: boolean;
   edgeStyle: "curved" | "orthogonal";
   setEdgeStyle: (s: "curved" | "orthogonal") => void;
+  /** Presentation / read-only mode (hides editing chrome, gates edits). */
+  presentation: boolean;
+  setPresentation: (on: boolean) => void;
   toggleCategory: (id: ServiceCategoryId) => void;
   toggleRelClass: (id: RelationshipClass) => void;
   setFilterMode: (m: "dim" | "hide") => void;
@@ -472,11 +480,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       iOnCanvasMouseDown(e, {
         pan: store.viewport,
         mode: store.mode,
+        readOnly: store.presentation,
         setMarquee,
         clearSelection,
       });
     },
-    [iOnCanvasMouseDown, store.viewport, store.mode, clearSelection],
+    [iOnCanvasMouseDown, store.viewport, store.mode, store.presentation, clearSelection],
   );
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
@@ -539,6 +548,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resources: store.resources,
         selectedIds: store.selectedIds,
         rects: layout.rects,
+        readOnly: store.presentation,
         connect: storeConnect,
         selectSingle,
       });
@@ -550,6 +560,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.resources,
       store.selectedIds,
       layout,
+      store.presentation,
       storeConnect,
       selectSingle,
     ],
@@ -604,6 +615,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       envTintById,
       cullViewport,
       store.edgeStyle,
+      store.searchMatches,
       onNodeMouseDown,
       onConnectCb,
       storeSetSelection,
@@ -629,6 +641,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.filterMode,
     envTintById,
     store.edgeStyle,
+    store.searchMatches,
     onNodeMouseDown,
     onConnectCb,
     storeSetSelection,
@@ -716,6 +729,24 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (bounds) storeSetViewport(fitView(bounds, viewSize(), { maxScale: 1.2 }));
     },
     [store, layout, storeSetViewport, viewSize],
+  );
+
+  /** Select a node and centre the viewport on it (⌘K jump / search). */
+  const goToResource = useCallback(
+    (id: string) => {
+      selectSingle(id);
+      const rect = layout.rects.get(id);
+      if (rect) {
+        storeSetViewport(
+          panToCenter(
+            { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 },
+            viewSize(),
+            getViewport().scale,
+          ),
+        );
+      }
+    },
+    [selectSingle, layout, storeSetViewport, viewSize, getViewport],
   );
 
   /** Double-clicking a container toggles focus on it (zoom-to-fit + dim others). */
@@ -1130,6 +1161,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDensity: store.setDensity,
     focusContainer,
     onNodeDoubleClick,
+    goToResource,
+    searchMatches: store.searchMatches,
+    setSearchMatches: store.setSearchMatches,
     breadcrumb,
     focusedContainerId: store.focusedContainerId,
 
@@ -1139,6 +1173,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     environmentTint: store.environmentTint,
     edgeStyle: store.edgeStyle,
     setEdgeStyle: store.setEdgeStyle,
+    presentation: store.presentation,
+    setPresentation: store.setPresentation,
     toggleCategory: store.toggleCategory,
     toggleRelClass: store.toggleRelClass,
     setFilterMode: store.setFilterMode,

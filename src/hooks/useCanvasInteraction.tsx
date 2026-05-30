@@ -95,13 +95,19 @@ export function useCanvasInteraction() {
         resources: ResourceInstance[];
         selectedIds: string[];
         rects: Map<string, Rect>;
+        readOnly: boolean;
         connect: (from: string, to: string, kind: RelationshipKind) => void;
         selectSingle: (id: string) => void;
       },
     ) => {
       e.preventDefault();
       e.stopPropagation();
-      const { pan, mode, resources, selectedIds, rects, connect, selectSingle } = ctx;
+      const { pan, mode, resources, selectedIds, rects, readOnly, connect, selectSingle } = ctx;
+      // Presentation / read-only: select for inspection, but never drag or wire.
+      if (readOnly) {
+        selectSingle(resource.id);
+        return;
+      }
       // In "connect" mode, clicking nodes wires them: first click picks the
       // source, second click on a different node creates the relationship.
       if (mode === "connect") {
@@ -152,6 +158,7 @@ export function useCanvasInteraction() {
       ctx: {
         pan: Pan;
         mode: CanvasMode;
+        readOnly: boolean;
         setMarquee: (rect: Rect | null) => void;
         clearSelection: () => void;
       },
@@ -167,6 +174,11 @@ export function useCanvasInteraction() {
         return;
       }
       if (e.button !== 0) return;
+      // Presentation / read-only: pan only; an empty click clears selection.
+      if (ctx.readOnly) {
+        ctx.clearSelection();
+        return;
+      }
       if (ctx.mode === "connect") {
         // No marquee while wiring; an empty-canvas press just clears selection.
         ctx.clearSelection();
