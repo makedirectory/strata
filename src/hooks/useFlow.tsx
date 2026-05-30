@@ -21,6 +21,10 @@ import {
   zoomByFactor,
   fitView,
   boundsOf,
+  viewportWorldRect,
+  minimapTransform,
+  minimapToWorld,
+  panToCenter,
   type Rect,
   type GuideLine,
 } from "../canvas/geometry";
@@ -71,6 +75,8 @@ interface FlowContextValue {
   zoomOut: () => void;
   zoomReset: () => void;
   zoomToSelection: () => void;
+  /** Centre the viewport on the world point under a minimap client pixel. */
+  minimapNavigate: (clientX: number, clientY: number) => void;
 
   // History
   undo: () => void;
@@ -285,6 +291,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [iOnConnect, store.resources, storeConnect],
   );
 
+  /** Canvas-wrap pixel size (falls back to the window if not yet mounted). */
+  const viewSize = useCallback(() => {
+    const el = worldRef.current?.parentElement as HTMLElement | null;
+    const r = el?.getBoundingClientRect();
+    return { width: r?.width ?? window.innerWidth, height: r?.height ?? window.innerHeight };
+  }, []);
+
   const draw = useCallback(() => {
     rDraw(
       store.resources,
@@ -306,8 +319,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storeSetSelection,
   ]);
   const drawMinimap = useCallback(
-    () => rDrawMinimap(store.resources),
-    [rDrawMinimap, store.resources],
+    () => rDrawMinimap(store.resources, store.viewport, viewSize()),
+    [rDrawMinimap, store.resources, store.viewport, viewSize],
   );
   const fitToView = useCallback(
     () => iFitToView(store.resources, worldRef, storeSetViewport),
@@ -317,13 +330,6 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => iCenter(store.viewport, storeSetViewport),
     [iCenter, store.viewport, storeSetViewport],
   );
-
-  /** Canvas-wrap pixel size (falls back to the window if not yet mounted). */
-  const viewSize = useCallback(() => {
-    const el = worldRef.current?.parentElement as HTMLElement | null;
-    const r = el?.getBoundingClientRect();
-    return { width: r?.width ?? window.innerWidth, height: r?.height ?? window.innerHeight };
-  }, []);
 
   /** Zoom about the viewport centre by a multiplicative factor. */
   const zoomBy = useCallback(
@@ -361,6 +367,35 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!bounds) return;
     storeSetViewport(fitView(bounds, viewSize(), { maxScale: 1.4 }));
   }, [store.selectedIds, store.selection, store.resources, iFitToView, storeSetViewport, viewSize]);
+
+  /**
+   * Centre the viewport on the world point under a minimap pixel (client
+   * coords). Used by minimap click + drag-to-navigate. The minimap transform is
+   * recomputed from the same inputs the renderer uses so clicks land precisely.
+   */
+  const minimapNavigate = useCallback(
+    (clientX: number, clientY: number) => {
+      const el = minimapRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const bw = el.width || 180;
+      const bh = el.height || 120;
+      // Map display pixels → canvas backing-store pixels (they match today, but
+      // stay correct if the minimap is ever resized in CSS).
+      const mx = (clientX - rect.left) * (bw / rect.width);
+      const my = (clientY - rect.top) * (bh / rect.height);
+      const vp = getViewport();
+      const view = viewSize();
+      const content = boundsOf(
+        store.resources.map((r) => r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE }),
+      );
+      const t = minimapTransform(content, viewportWorldRect(vp, view), { w: bw, h: bh });
+      const world = minimapToWorld(t, { x: mx, y: my });
+      storeSetViewport(panToCenter(world, view, vp.scale));
+    },
+    [minimapRef, getViewport, viewSize, store.resources, storeSetViewport],
+  );
 
   // ---- Validation + rule suggestions -------------------------------------
   // Expose STRUCTURED results; the Inspector renders them as React elements
@@ -629,6 +664,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     zoomOut,
     zoomReset,
     zoomToSelection,
+    minimapNavigate,
 
     undo: store.undo,
     redo: store.redo,

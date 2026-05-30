@@ -34,7 +34,12 @@ export const Canvas: React.FC = () => {
     zoomToSelection,
     fitToView,
     guides,
+    minimapNavigate,
   } = useFlow();
+
+  // Whether a minimap click-drag is in progress (window-level so the drag keeps
+  // navigating even when the pointer leaves the small minimap box).
+  const minimapDragRef = useRef(false);
 
   // Drag and drop — scoped to the canvas element so drops elsewhere in the
   // window (e.g. over the palette or inspector) are not swallowed.
@@ -136,6 +141,23 @@ export const Canvas: React.FC = () => {
       window.removeEventListener("mouseup", onMouseUp);
     };
   }, [onMouseMove, onMouseUp]);
+
+  // Minimap drag-to-navigate: while the pointer is down on the minimap, keep
+  // recentring on each move (window listeners so it survives leaving the box).
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (minimapDragRef.current) minimapNavigate(e.clientX, e.clientY);
+    };
+    const onUp = () => {
+      minimapDragRef.current = false;
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [minimapNavigate]);
 
   // Wheel zoom — attach a NON-passive listener so preventDefault() actually
   // blocks the browser's page zoom/scroll (React's onWheel is passive).
@@ -255,8 +277,17 @@ export const Canvas: React.FC = () => {
           ⤢
         </button>
       </div>
-      <div className="minimap">
-        <canvas ref={minimapRef} aria-hidden="true" />
+      <div className="minimap" title="Click or drag to navigate">
+        <canvas
+          ref={minimapRef}
+          aria-hidden="true"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            minimapDragRef.current = true;
+            minimapNavigate(e.clientX, e.clientY);
+          }}
+        />
       </div>
     </>
   );
