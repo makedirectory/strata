@@ -81,6 +81,8 @@ export function useFlowStore() {
   );
   const [filterMode, setFilterMode] = useState<"dim" | "hide">("dim");
   const [environmentTint, setEnvironmentTint] = useState(false);
+  // Edge routing style (view-only).
+  const [edgeStyle, setEdgeStyle] = useState<"curved" | "orthogonal">("curved");
   // Summary group keys (`${parentId}::${serviceId}`) that are expanded (shown
   // as individual nodes rather than a single "N× …" summary). View-only.
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
@@ -461,6 +463,7 @@ export function useFlowStore() {
     hiddenRelClasses,
     filterMode,
     environmentTint,
+    edgeStyle,
     expandedGroups,
     selection,
     selectedIds,
@@ -481,6 +484,7 @@ export function useFlowStore() {
     toggleExpandedGroup,
     setFilterMode,
     setEnvironmentTint,
+    setEdgeStyle,
     setLayers,
     setSelection,
     setSelectedIds,

@@ -103,6 +103,8 @@ interface FlowContextValue {
   hiddenRelClasses: ReadonlySet<string>;
   filterMode: "dim" | "hide";
   environmentTint: boolean;
+  edgeStyle: "curved" | "orthogonal";
+  setEdgeStyle: (s: "curved" | "orthogonal") => void;
   toggleCategory: (id: ServiceCategoryId) => void;
   toggleRelClass: (id: RelationshipClass) => void;
   setFilterMode: (m: "dim" | "hide") => void;
@@ -601,6 +603,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.filterMode,
       envTintById,
       cullViewport,
+      store.edgeStyle,
       onNodeMouseDown,
       onConnectCb,
       storeSetSelection,
@@ -625,6 +628,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.hiddenRelClasses,
     store.filterMode,
     envTintById,
+    store.edgeStyle,
     onNodeMouseDown,
     onConnectCb,
     storeSetSelection,
@@ -1133,6 +1137,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     hiddenRelClasses: store.hiddenRelClasses,
     filterMode: store.filterMode,
     environmentTint: store.environmentTint,
+    edgeStyle: store.edgeStyle,
+    setEdgeStyle: store.setEdgeStyle,
     toggleCategory: store.toggleCategory,
     toggleRelClass: store.toggleRelClass,
     setFilterMode: store.setFilterMode,

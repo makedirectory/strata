@@ -27,6 +27,8 @@ function LayersPanel() {
     setFilterMode,
     environmentTint,
     setEnvironmentTint,
+    edgeStyle,
+    setEdgeStyle,
     applyViewPreset,
     savedViews,
     saveView,
@@ -103,6 +105,24 @@ function LayersPanel() {
             onClick={() => setFilterMode("hide")}
           >
             Hide
+          </button>
+        </div>
+      </div>
+
+      <div className="layers-row">
+        <span className="layers-sub">Edges</span>
+        <div className="seg">
+          <button
+            className={edgeStyle === "curved" ? "active" : ""}
+            onClick={() => setEdgeStyle("curved")}
+          >
+            Curved
+          </button>
+          <button
+            className={edgeStyle === "orthogonal" ? "active" : ""}
+            onClick={() => setEdgeStyle("orthogonal")}
+          >
+            Orthogonal
           </button>
         </div>
       </div>

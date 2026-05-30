@@ -121,6 +121,8 @@ interface DrawInputs {
   /** When set (large graphs), only render nodes/edges intersecting this world
    *  rect; null keeps the small-graph viewport-only fast path. */
   cullViewport: Rect | null;
+  /** Edge routing style. */
+  edgeStyle: "curved" | "orthogonal";
   onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void;
   onConnect: (id: string, type: "start" | "end") => void;
   onSelect: (sel: Selection) => void;
@@ -189,6 +191,7 @@ export function useCanvasRenderer(
         filterMode,
         envTintById,
         cullViewport,
+        edgeStyle,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -647,7 +650,11 @@ export function useCanvasRenderer(
         const p1 = { x: ra.x + ra.w, y: ra.y + ra.h / 2 };
         const p2 = { x: rb.x, y: rb.y + rb.h / 2 };
         const dx = Math.max(40, Math.abs(p2.x - p1.x) / 2);
-        const d = `M ${p1.x} ${p1.y} C ${p1.x + dx} ${p1.y}, ${p2.x - dx} ${p2.y}, ${p2.x} ${p2.y}`;
+        const d =
+          edgeStyle === "orthogonal"
+            ? // Manhattan elbow: out horizontally, across, in horizontally.
+              `M ${p1.x} ${p1.y} L ${(p1.x + p2.x) / 2} ${p1.y} L ${(p1.x + p2.x) / 2} ${p2.y} L ${p2.x} ${p2.y}`
+            : `M ${p1.x} ${p1.y} C ${p1.x + dx} ${p1.y}, ${p2.x - dx} ${p2.y}, ${p2.x} ${p2.y}`;
 
         const def = RELATIONSHIPS[rel.kind as RelationshipKind];
         // Encode by relationship class: colour + dash (arrowhead via marker).
@@ -774,6 +781,7 @@ export function useCanvasRenderer(
       filterMode: "dim" | "hide",
       envTintById: ReadonlyMap<string, string> | null,
       cullViewport: Rect | null,
+      edgeStyle: "curved" | "orthogonal",
       onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void,
       onConnect: (id: string, type: "start" | "end") => void,
       onSelect: (sel: Selection) => void,
@@ -812,6 +820,7 @@ export function useCanvasRenderer(
         filterMode,
         envTintById,
         cullViewport,
+        edgeStyle,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -840,6 +849,7 @@ export function useCanvasRenderer(
         last.filterMode === filterMode &&
         last.envTintById === envTintById &&
         last.cullViewport === cullViewport &&
+        last.edgeStyle === edgeStyle &&
         last.onNodeMouseDown === onNodeMouseDown &&
         last.onConnect === onConnect &&
         last.onSelect === onSelect &&
