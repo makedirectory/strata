@@ -32,13 +32,15 @@ import {
   type Vec2,
   type GuideLine,
 } from "../canvas/geometry";
-
-/** Above this many resources the renderer culls to the viewport. */
-const CULL_THRESHOLD = 250;
-import { computeLayout, type LayoutResult } from "../canvas/layout";
+import { computeLayout, summaryKey, type LayoutResult } from "../canvas/layout";
 import { RELATIONSHIP_CLASS_ORDER, type RelationshipClass } from "../aws/relationshipClasses";
 import type { ServiceCategoryId } from "../aws/types";
 import type { LayerState } from "./useFlowStore";
+
+/** Above this many resources the renderer culls to the viewport. */
+const CULL_THRESHOLD = 250;
+/** Collapse this many same-type leaf children of a container into a summary. */
+const SUMMARY_THRESHOLD = 5;
 
 /** Built-in view-mode presets → relationship-class emphasis. */
 export type ViewPreset = "all" | "network" | "security" | "data" | "high-level";
@@ -242,8 +244,16 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isContainer: isContainerPred,
         density: store.density,
         override: store.dragOverride,
+        summarize: { threshold: SUMMARY_THRESHOLD, expandedGroups: store.expandedGroups },
       }),
-    [store.resources, store.collapsed, store.density, store.dragOverride, isContainerPred],
+    [
+      store.resources,
+      store.collapsed,
+      store.density,
+      store.dragOverride,
+      store.expandedGroups,
+      isContainerPred,
+    ],
   );
   // Environment-tint overlay: resource id → tint colour, from its account's
   // environment (or an Environment tag), null when the overlay is off.
@@ -561,6 +571,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { width: r?.width ?? window.innerWidth, height: r?.height ?? window.innerHeight };
   }, []);
 
+  const { toggleExpandedGroup: storeToggleExpandedGroup } = store;
+  const onExpandGroup = useCallback(
+    (parentId: string, serviceId: string) =>
+      storeToggleExpandedGroup(summaryKey(parentId, serviceId)),
+    [storeToggleExpandedGroup],
+  );
+
   const draw = useCallback(() => {
     // Cull to the viewport only for large graphs; keep the fast path otherwise.
     let cullViewport: Rect | null = null;
@@ -589,6 +606,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storeSetSelection,
       onHover,
       store.toggleCollapsed,
+      onExpandGroup,
     );
   }, [
     viewSize,
@@ -612,6 +630,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storeSetSelection,
     onHover,
     store.toggleCollapsed,
+    onExpandGroup,
   ]);
   const drawMinimap = useCallback(
     () => rDrawMinimap(store.resources, layout, store.viewport, viewSize()),

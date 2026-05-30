@@ -407,6 +407,24 @@ text.dimmed {
   background: color-mix(in srgb, var(--env-tint, #24406b) 26%, transparent);
 }
 
+/* ---- Leaf summary node ("N× service", click to expand) ---- */
+.node.summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  cursor: pointer;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--accent-color, #24406b) 14%, #0f1a31);
+}
+.node.summary:hover {
+  background: color-mix(in srgb, var(--accent-color, #24406b) 24%, #0f1a31);
+}
+.node.summary .node-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
 /* ---- Breadcrumb (containment focus path) ---- */
 .breadcrumb {
   position: absolute;

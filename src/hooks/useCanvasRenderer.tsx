@@ -126,6 +126,23 @@ interface DrawInputs {
   onSelect: (sel: Selection) => void;
   onHover: (id: string | null) => void;
   onToggleCollapse: (id: string) => void;
+  /** Expand a summarized leaf group (parent container id + service id). */
+  onExpandGroup: (parentId: string, serviceId: string) => void;
+}
+
+/** Live DOM handle for a "N× service" summary node. */
+interface SummaryRecord {
+  div: HTMLDivElement;
+  cleanups: Array<() => void>;
+  prev: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    text: string;
+    depth: number;
+    dimmed: boolean;
+  };
 }
 
 export function useCanvasRenderer(
@@ -136,6 +153,7 @@ export function useCanvasRenderer(
   /** Persistent DOM caches, keyed by resource/relationship id, across draws. */
   const nodesRef = useRef<Map<string, NodeRecord>>(new Map());
   const edgesRef = useRef<Map<string, EdgeRecord>>(new Map());
+  const summaryNodesRef = useRef<Map<string, SummaryRecord>>(new Map());
 
   /** Pending rAF id for coalescing structural redraws, plus the latest args. */
   const rafRef = useRef<number | null>(null);
@@ -176,6 +194,7 @@ export function useCanvasRenderer(
         onSelect,
         onHover,
         onToggleCollapse,
+        onExpandGroup,
       } = input;
       const rectOf = layout.rects;
 
@@ -526,6 +545,80 @@ export function useCanvasRenderer(
         nodes.delete(id);
       }
 
+      // ---- summary nodes ("N× service", click to expand) ----
+      const summaryNodes = summaryNodesRef.current;
+      const seenSummaries = new Set<string>();
+      for (const s of layout.summaries) {
+        const rect = rectOf.get(s.id);
+        if (!rect) continue;
+        if (cullViewport && !rectsIntersect(rect, cullViewport)) continue;
+        const cat = getService(s.serviceId)?.category;
+        const filteredOut = cat ? hiddenCategories.has(cat) : false;
+        if (filteredOut && filterMode === "hide") continue;
+        seenSummaries.add(s.id);
+
+        const svc = getService(s.serviceId);
+        const text = `${s.count}× ${svc?.name ?? s.serviceId}`;
+        const depthVal = layout.depth.get(s.id) ?? 0;
+        const dimmed =
+          (filteredOut && filterMode === "dim") ||
+          (focusSubtree !== null && !focusSubtree.has(s.parentId));
+
+        let rec = summaryNodes.get(s.id);
+        if (!rec) {
+          const div = document.createElement("div");
+          div.className = "node summary";
+          const icon = document.createElement("span");
+          icon.className = "node-icon";
+          const label = document.createElement("div");
+          label.className = "node-title";
+          div.appendChild(icon);
+          div.appendChild(label);
+          world.appendChild(div);
+          rec = {
+            div,
+            cleanups: [],
+            prev: { x: NaN, y: NaN, w: NaN, h: NaN, text: "", depth: -1, dimmed: false },
+          };
+          summaryNodes.set(s.id, rec);
+        }
+        const icon = rec.div.querySelector<HTMLSpanElement>(".node-icon")!;
+        icon.textContent = serviceIcon(s.serviceId);
+        rec.div.style.setProperty("--accent-color", serviceColor(s.serviceId));
+
+        const prev = rec.prev;
+        if (rect.x !== prev.x) rec.div.style.left = rect.x + "px";
+        if (rect.y !== prev.y) rec.div.style.top = rect.y + "px";
+        if (rect.w !== prev.w) rec.div.style.width = rect.w + "px";
+        if (rect.h !== prev.h) rec.div.style.height = rect.h + "px";
+        if (depthVal !== prev.depth) rec.div.style.zIndex = String(depthVal);
+        if (text !== prev.text) rec.div.querySelector(".node-title")!.textContent = text;
+        if (dimmed !== prev.dimmed) rec.div.classList.toggle("dimmed", dimmed);
+
+        for (const c of rec.cleanups) c();
+        rec.cleanups = [];
+        const onClick = (e: MouseEvent) => {
+          e.stopPropagation();
+          onExpandGroup(s.parentId, s.serviceId);
+        };
+        rec.div.addEventListener("mousedown", onClick);
+        rec.cleanups.push(() => rec!.div.removeEventListener("mousedown", onClick));
+
+        prev.x = rect.x;
+        prev.y = rect.y;
+        prev.w = rect.w;
+        prev.h = rect.h;
+        prev.text = text;
+        prev.depth = depthVal;
+        prev.dimmed = dimmed;
+      }
+      for (const [id, rec] of summaryNodes) {
+        if (seenSummaries.has(id)) continue;
+        for (const c of rec.cleanups) c();
+        rec.div.remove();
+        summaryNodes.delete(id);
+      }
+
       // ---- edges ----
       const edges = edgesRef.current;
       const seenEdges = new Set<string>();
@@ -686,6 +779,7 @@ export function useCanvasRenderer(
       onSelect: (sel: Selection) => void,
       onHover: (id: string | null) => void,
       onToggleCollapse: (id: string) => void,
+      onExpandGroup: (parentId: string, serviceId: string) => void,
     ) => {
       const world = worldRef.current;
       const svg = svgRef.current;
@@ -723,6 +817,7 @@ export function useCanvasRenderer(
         onSelect,
         onHover,
         onToggleCollapse,
+        onExpandGroup,
       };
 
       // Finding 2: if only the viewport changed (same tier), the transform above
@@ -749,7 +844,8 @@ export function useCanvasRenderer(
         last.onConnect === onConnect &&
         last.onSelect === onSelect &&
         last.onHover === onHover &&
-        last.onToggleCollapse === onToggleCollapse
+        last.onToggleCollapse === onToggleCollapse &&
+        last.onExpandGroup === onExpandGroup
       ) {
         return;
       }

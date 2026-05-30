@@ -43,19 +43,45 @@ export interface LayoutOptions {
    * reads naturally and reparents on drop.
    */
   override?: { id: string; x: number; y: number } | null;
+  /**
+   * Leaf summarization: collapse ≥`threshold` same-type leaf children of a
+   * container into one summary node, unless its `${parentId}::${serviceId}` key
+   * is in `expandedGroups`. Omit to disable.
+   */
+  summarize?: { threshold: number; expandedGroups: ReadonlySet<string> };
+}
+
+/** A synthetic node standing in for N summarized same-type leaves. */
+export interface SummaryNode {
+  /** Synthetic rect id, `summary::${parentId}::${serviceId}`. */
+  id: string;
+  parentId: string;
+  serviceId: string;
+  count: number;
+  memberIds: string[];
+}
+
+/** Group key for an expandable summary. */
+export function summaryKey(parentId: string, serviceId: string): string {
+  return `${parentId}::${serviceId}`;
+}
+export function summaryId(parentId: string, serviceId: string): string {
+  return `summary::${summaryKey(parentId, serviceId)}`;
 }
 
 export interface LayoutResult {
-  /** Effective world rect for every VISIBLE node (collapsed descendants omitted). */
+  /** Effective world rect for every VISIBLE node (+ summary nodes). */
   rects: Map<string, Rect>;
   /** Nesting depth (0 = root) for z-stacking; visible nodes only. */
   depth: Map<string, number>;
-  /** For a node hidden inside a collapsed container, its nearest visible ancestor. */
+  /** For a node hidden inside a collapsed/summarized container, its representative. */
   visibleAncestor: Map<string, string>;
   /** Whether a node is rendered as a container (registry flag or has children). */
   isContainerNode: (id: string) => boolean;
   /** Visible direct-child count for a container id (for the header badge). */
   childCount: (id: string) => number;
+  /** Synthetic summary nodes the renderer must draw (keyed in `rects`). */
+  summaries: SummaryNode[];
 }
 
 /** A sized subtree with children placed relative to the parent's content origin. */
@@ -85,7 +111,10 @@ export function computeLayout(
     isContainer,
     density = "comfortable",
     override = null,
+    summarize,
   } = opts;
+
+  const summaries: SummaryNode[] = [];
 
   const byId = new Map<string, ResourceInstance>();
   for (const r of resources) byId.set(r.id, r);
@@ -152,7 +181,8 @@ export function computeLayout(
     if (collapsed.has(id)) {
       return { id, w: COLLAPSED_W, h: COLLAPSED_H, container, children: [] };
     }
-    const kids = kidsOf(id).filter((k) => !onPath.has(k.id));
+    // Exclude the dragged node so its former parent repacks without it.
+    const kids = kidsOf(id).filter((k) => !onPath.has(k.id) && k.id !== override?.id);
     if (!container || kids.length === 0) {
       if (container) {
         // Empty (or childless) container: header + a small drop area.
@@ -170,7 +200,49 @@ export function computeLayout(
 
     const nextPath = new Set(onPath);
     nextPath.add(id);
-    const childBoxes = kids.map((k) => build(k.id, nextPath));
+
+    // Leaf summarization: group same-type leaf children; a group of ≥threshold
+    // that isn't expanded becomes one summary box (its members are hidden and
+    // represented by the summary). Containers/expanded groups render normally.
+    const shown: ResourceInstance[] = [];
+    const summaryBoxes: Box[] = [];
+    if (summarize) {
+      const leafGroups = new Map<string, ResourceInstance[]>();
+      for (const k of kids) {
+        if (isContainerNode(k.id)) {
+          shown.push(k);
+        } else {
+          const g = leafGroups.get(k.serviceId);
+          if (g) g.push(k);
+          else leafGroups.set(k.serviceId, [k]);
+        }
+      }
+      for (const [serviceId, members] of leafGroups) {
+        const key = summaryKey(id, serviceId);
+        if (members.length >= summarize.threshold && !summarize.expandedGroups.has(key)) {
+          const sid = summaryId(id, serviceId);
+          summaries.push({
+            id: sid,
+            parentId: id,
+            serviceId,
+            count: members.length,
+            memberIds: members.map((m) => m.id),
+          });
+          for (const m of members) {
+            hidden.add(m.id);
+            visibleAncestor.set(m.id, sid);
+          }
+          const s = leafSize(members[0], density);
+          summaryBoxes.push({ id: sid, w: s.w, h: s.h, container: false, children: [] });
+        } else {
+          shown.push(...members);
+        }
+      }
+    } else {
+      shown.push(...kids);
+    }
+
+    const childBoxes = [...shown.map((k) => build(k.id, nextPath)), ...summaryBoxes];
 
     // Flow-pack into rows of `c` columns; rows left-aligned with GAP spacing.
     const c = cols(childBoxes.length);
@@ -241,7 +313,18 @@ export function computeLayout(
     place(build(override.id, new Set<string>()), override.x, override.y, 0);
   }
 
-  const childCount = (id: string) => kidsOf(id).filter((k) => rects.has(k.id)).length;
+  // Direct children that are still rendered (real child placed, or summarized
+  // into a summary box) — for the container header badge.
+  const summarizedParents = new Set(summaries.map((s) => s.parentId));
+  const childCount = (id: string) => {
+    if (!summarizedParents.has(id)) return kidsOf(id).filter((k) => rects.has(k.id)).length;
+    // Count visible real children + members hidden behind this container's summaries.
+    const direct = kidsOf(id).filter((k) => rects.has(k.id)).length;
+    const summarizedMembers = summaries
+      .filter((s) => s.parentId === id)
+      .reduce((n, s) => n + s.count, 0);
+    return direct + summarizedMembers;
+  };
 
-  return { rects, depth, visibleAncestor, isContainerNode, childCount };
+  return { rects, depth, visibleAncestor, isContainerNode, childCount, summaries };
 }

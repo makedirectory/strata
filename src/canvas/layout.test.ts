@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeLayout,
+  summaryKey,
   HEADER_H,
   PAD,
   COLLAPSED_H,
@@ -119,6 +120,46 @@ describe("computeLayout", () => {
     const { rects } = computeLayout([a, b], { isContainer });
     expect(rects.has("a")).toBe(true);
     expect(rects.has("b")).toBe(true);
+  });
+
+  it("summarizes >= threshold same-type leaves into one summary node", () => {
+    const vpc = res("vpc", { serviceId: "vpc" }, 0, 0);
+    const lambdas = [1, 2, 3, 4, 5].map((i) =>
+      res(`l${i}`, { serviceId: "lambda", parentId: "vpc" }),
+    );
+    const { rects, summaries, childCount } = computeLayout([vpc, ...lambdas], {
+      isContainer,
+      summarize: { threshold: 4, expandedGroups: new Set() },
+    });
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].count).toBe(5);
+    expect(rects.has("l1")).toBe(false); // members hidden behind the summary
+    expect(rects.has(summaries[0].id)).toBe(true);
+    expect(childCount("vpc")).toBe(5); // badge still reflects the real count
+  });
+
+  it("expands a summarized group when its key is in expandedGroups", () => {
+    const vpc = res("vpc", { serviceId: "vpc" }, 0, 0);
+    const lambdas = [1, 2, 3, 4, 5].map((i) =>
+      res(`l${i}`, { serviceId: "lambda", parentId: "vpc" }),
+    );
+    const { rects, summaries } = computeLayout([vpc, ...lambdas], {
+      isContainer,
+      summarize: { threshold: 4, expandedGroups: new Set([summaryKey("vpc", "lambda")]) },
+    });
+    expect(summaries).toHaveLength(0);
+    expect(rects.has("l1")).toBe(true);
+  });
+
+  it("does not summarize below the threshold", () => {
+    const vpc = res("vpc", { serviceId: "vpc" }, 0, 0);
+    const lambdas = [1, 2].map((i) => res(`l${i}`, { serviceId: "lambda", parentId: "vpc" }));
+    const { rects, summaries } = computeLayout([vpc, ...lambdas], {
+      isContainer,
+      summarize: { threshold: 4, expandedGroups: new Set() },
+    });
+    expect(summaries).toHaveLength(0);
+    expect(rects.has("l1")).toBe(true);
   });
 
   it("uses the compact leaf height under Compact density", () => {
