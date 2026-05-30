@@ -1,68 +1,55 @@
 "use client";
-import React, { createContext, useContext, useRef } from "react";
+import React, { createContext, useContext, useRef, useCallback, useEffect } from "react";
 import { useFlowStore } from "./useFlowStore";
-import type { FlowNode, FlowEdge, NodeType } from "../types";
 import { useCanvasInteraction } from "./useCanvasInteraction";
 import { useCanvasRenderer } from "./useCanvasRenderer";
+import type { ResourceInstance, Relationship, InfrastructureGraph } from "../aws/model";
+import { emptyGraph } from "../aws/model";
+import type { CanvasMode, Selection } from "../types";
+import type { RelationshipKind } from "../aws/types";
+import { defaultConfig, getService } from "../aws/registry";
+import {
+  validateArchitecture,
+  suggestRules as suggestRulesEngine,
+  type ValidationResult,
+  type RuleSuggestion,
+} from "../aws/rules";
+import { listGraphs, getGraph, createGraph, updateGraph } from "../lib/api";
 
-// ---------- Palette ----------
-const PALETTE = [
-  { type: "VPC" as NodeType, color: "var(--accent)", defaults: { name: "VPC", cidr: "10.0.0.0/16" } },
-  { type: "Subnet (Public)" as NodeType, color: "var(--accent)", defaults: { name: "Public Subnet", cidr: "10.0.1.0/24", public: true } },
-  { type: "Subnet (Private)" as NodeType, color: "var(--accent)", defaults: { name: "Private Subnet", cidr: "10.0.2.0/24", public: false } },
-  { type: "Route Table" as NodeType, color: "var(--accent)", defaults: { name: "Route Table" } },
-  { type: "NACL" as NodeType, color: "var(--accent)", defaults: { name: "NACL" } },
-  { type: "Internet Gateway" as NodeType, color: "var(--yellow)", defaults: { name: "IGW" } },
-  { type: "NAT Gateway" as NodeType, color: "var(--yellow)", defaults: { name: "NAT GW" } },
-  { type: "ECS Cluster" as NodeType, color: "var(--accent-2)", defaults: { name: "ECS Cluster" } },
-  { type: "ECS Service" as NodeType, color: "var(--accent-2)", defaults: { name: "Service", notes: "port 80" } },
-  { type: "EC2" as NodeType, color: "var(--accent-2)", defaults: { name: "EC2" } },
-  { type: "ALB" as NodeType, color: "var(--yellow)", defaults: { name: "ALB" } },
-  { type: "Target Group" as NodeType, color: "var(--yellow)", defaults: { name: "Target Group" } },
-  { type: "Security Group" as NodeType, color: "var(--yellow)", defaults: { name: "SG" } },
-  { type: "RDS" as NodeType, color: "var(--green)", defaults: { name: "RDS" } },
-  { type: "S3" as NodeType, color: "var(--green)", defaults: { name: "S3 Bucket" } },
-  { type: "ECR" as NodeType, color: "var(--green)", defaults: { name: "ECR" } },
-  { type: "CloudWatch" as NodeType, color: "var(--blue)", defaults: { name: "CloudWatch" } },
-  { type: "IAM Role" as NodeType, color: "var(--blue)", defaults: { name: "IAM Role" } }
-];
-
-// ---------- Context Interface ----------
 interface FlowContextValue {
-  PALETTE: typeof PALETTE;
   state: {
-    nodes: ReturnType<typeof useFlowStore>['nodes'];
-    edges: ReturnType<typeof useFlowStore>['edges'];
-    pan: ReturnType<typeof useFlowStore>['pan'];
-    mode: ReturnType<typeof useFlowStore>['mode'];
-    nextId: ReturnType<typeof useFlowStore>['nextId'];
+    resources: ResourceInstance[];
+    relationships: Relationship[];
+    viewport: ReturnType<typeof useFlowStore>["viewport"];
+    mode: CanvasMode;
   };
   worldRef: React.RefObject<HTMLDivElement>;
   svgRef: React.RefObject<SVGSVGElement>;
   minimapRef: React.RefObject<HTMLCanvasElement>;
-  selection: ReturnType<typeof useFlowStore>['selection'];
-  
+  selection: Selection;
+
   // Actions
-  setMode: ReturnType<typeof useFlowStore>['setMode'];
+  setMode: (m: CanvasMode) => void;
   toggleMode: () => void;
-  select: ReturnType<typeof useFlowStore>['setSelection'];
-  addNode: ReturnType<typeof useFlowStore>['addNode'];
-  addNodeFromPalette: (type: NodeType, x: number, y: number) => void;
-  removeSelection: ReturnType<typeof useFlowStore>['removeSelection'];
-  duplicateSelection: ReturnType<typeof useFlowStore>['duplicateSelection'];
+  select: (sel: Selection) => void;
+  addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
+  removeSelection: () => void;
+  duplicateSelection: () => void;
   groupIntoVPC: () => void;
-  connect: ReturnType<typeof useFlowStore>['connect'];
-  updateInspectorFields: (patch: any) => void;
+  updateResourceField: (patch: {
+    name?: string;
+    region?: string;
+    config?: Record<string, unknown>;
+  }) => void;
+  updateRelationshipKind: (kind: RelationshipKind) => void;
 
   // Canvas interaction
-  onNodeMouseDown: (e: React.MouseEvent, node: any) => void;
   onCanvasMouseDown: (e: React.MouseEvent) => void;
   onCanvasClick: () => void;
   onMouseMove: (e: MouseEvent) => void;
   onMouseUp: () => void;
-  onWheelZoom: (e: React.WheelEvent) => void;
+  onWheelZoom: (e: WheelEvent) => void;
   setSpacePressed: (pressed: boolean) => void;
-  screenToWorld: (pt: { x: number; y: number }) => { x: number; y: number };
 
   // Canvas rendering
   draw: () => void;
@@ -71,481 +58,473 @@ interface FlowContextValue {
   center: () => void;
 
   // History
-  undo: ReturnType<typeof useFlowStore>['undo'];
-  redo: ReturnType<typeof useFlowStore>['redo'];
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 
-  // Placeholder functions (to be implemented)
+  // Sidebar / IO
+  /** Alias of {@link runValidateUI}, consumed by the top toolbar. */
   validate: () => void;
+  /** Alias of {@link runRulesUI}, consumed by the top toolbar. */
   suggestRules: () => void;
   exportJSON: () => void;
   importJSONDialog: () => void;
-  clear: ReturnType<typeof useFlowStore>['clear'];
+  clear: () => void;
   loadPreset: (presetName: string) => void;
   runValidateUI: () => void;
   runRulesUI: () => void;
-  validationHtml: string;
-  rulesHtml: string;
+  saveToServer: () => void;
+  loadFromServer: () => void;
+  /** Structured validation findings, or `null` before the first run. */
+  validationResults: ValidationResult[] | null;
+  /** Structured rule suggestions, or `null` before the first run. */
+  ruleSuggestions: RuleSuggestion[] | null;
   status: string;
 }
 
-const FlowContext = createContext<FlowContextValue>(null as any);
-export const useFlow = () => useContext(FlowContext);
+const FlowContext = createContext<FlowContextValue | null>(null);
 
-// ---------- Provider ----------
+/** Access the Flow context. Throws if used outside a {@link FlowProvider}. */
+export const useFlow = (): FlowContextValue => {
+  const ctx = useContext(FlowContext);
+  if (ctx === null) {
+    throw new Error("useFlow must be used within a <FlowProvider>.");
+  }
+  return ctx;
+};
+
 export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const worldRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const minimapRef = useRef<HTMLCanvasElement>(null);
 
-  // Use our new hooks
   const store = useFlowStore();
   const interaction = useCanvasInteraction();
   const renderer = useCanvasRenderer(worldRef, svgRef, minimapRef);
 
-  // Derived state
+  // Destructure the stable (useCallback) members so handler deps below stay
+  // referentially stable across renders.
+  const {
+    screenToWorld,
+    onMouseMove: iOnMouseMove,
+    onMouseUp: iOnMouseUp,
+    onWheelZoom: iOnWheelZoom,
+    onNodeMouseDown: iOnNodeMouseDown,
+    onConnect: iOnConnect,
+    fitToView: iFitToView,
+    center: iCenter,
+  } = interaction;
+  const { draw: rDraw, drawMinimap: rDrawMinimap } = renderer;
+
+  const [validationResults, setValidationResults] = React.useState<ValidationResult[] | null>(null);
+  const [ruleSuggestions, setRuleSuggestions] = React.useState<RuleSuggestion[] | null>(null);
+  const [status, setStatus] = React.useState<string>("Pan with space ⎵ + drag. Connect mode: C.");
+
   const state = {
-    nodes: store.nodes,
-    edges: store.edges,
-    pan: store.pan,
+    resources: store.resources,
+    relationships: store.relationships,
+    viewport: store.viewport,
     mode: store.mode,
-    nextId: store.nextId
   };
 
-  // Helper functions
-  const toggleMode = () => store.setMode(store.mode === "connect" ? "move" : "connect");
-  
-  const addNodeFromPalette = (type: NodeType, x: number, y: number) => {
-    const paletteItem = PALETTE.find(p => p.type === type);
-    const worldPos = interaction.screenToWorld({ x, y }, store.pan);
-    store.addNode(type, worldPos.x, worldPos.y, paletteItem?.defaults || {});
-  };
+  /** Assemble the current model into an InfrastructureGraph. */
+  const buildGraph = useCallback((): InfrastructureGraph => {
+    const base = emptyGraph("AWS Architecture");
+    return {
+      ...base,
+      id: store.graphId || "",
+      accounts: store.accounts,
+      resources: store.resources,
+      relationships: store.relationships,
+      viewport: store.viewport,
+    };
+  }, [store.graphId, store.accounts, store.resources, store.relationships, store.viewport]);
 
-  const groupIntoVPC = () => {
-    if (!store.selection || store.selection.type !== 'node') return;
-    const n = store.nodes.find(x => x.id === store.selection?.id);
-    if (!n) return;
-    store.addNode('VPC', n.x - 80, n.y - 80, { name: 'VPC', cidr: '10.0.0.0/16' });
-  };
+  const { setMode: storeSetMode, addResource: storeAddResource } = store;
 
-  const updateInspectorFields = (patch: any) => {
-    if (!store.selection) return;
-    if (store.selection.type === "node") {
-      store.updateNodeProps(store.selection.id, patch);
-      // Update selection to reflect new node props
-      const updatedNode = store.nodes.find(n => n.id === store.selection?.id);
-      if (updatedNode) {
-        store.setSelection({ type: "node", id: updatedNode.id, node: updatedNode });
+  const toggleMode = useCallback(
+    () => storeSetMode(store.mode === "connect" ? "move" : "connect"),
+    [storeSetMode, store.mode],
+  );
+
+  const addResourceFromPalette = useCallback(
+    (serviceId: string, x: number, y: number) => {
+      const world = screenToWorld({ x, y }, store.viewport);
+      storeAddResource(serviceId, world.x, world.y);
+    },
+    [screenToWorld, storeAddResource, store.viewport],
+  );
+
+  // Keep the selection's cached `resource` / `relationship` snapshot fresh
+  // when the underlying model changes (e.g. after an inspector edit).
+  const {
+    selection: storeSelection,
+    resources: storeResources,
+    relationships: storeRelationships,
+    setSelection,
+  } = store;
+  useEffect(() => {
+    const sel = storeSelection;
+    if (!sel) return;
+    if (sel.type === "node") {
+      const r = storeResources.find((x) => x.id === sel.id);
+      if (r && r !== sel.resource) {
+        setSelection({ type: "node", id: r.id, resource: r });
       }
-    } else if (store.selection.type === "edge" && patch.rel) {
-      // TODO: Implement edge update in store
-      console.log('Update edge rel:', patch.rel);
+    } else if (sel.type === "edge") {
+      const rel = storeRelationships.find((x) => x.id === sel.id);
+      if (rel) {
+        const from = storeResources.find((x) => x.id === rel.from);
+        const to = storeResources.find((x) => x.id === rel.to);
+        if (rel !== sel.relationship) {
+          setSelection({
+            type: "edge",
+            id: rel.id,
+            relationship: rel,
+            fromName: from?.name ?? rel.from,
+            toName: to?.name ?? rel.to,
+          });
+        }
+      }
     }
-  };
+  }, [storeSelection, storeResources, storeRelationships, setSelection]);
 
-  // Canvas interaction handlers
-  const onNodeMouseDown = (e: React.MouseEvent, node: any) => {
-    interaction.onNodeMouseDown(e, node, store.pan, store.commitCurrentState);
-    store.setSelection({ type: "node", id: node.id, node });
-  };
+  const {
+    updateResource: storeUpdateResource,
+    updateRelationshipKind: storeUpdateRelationshipKind,
+    updateResourcePosition,
+    setViewport: storeSetViewport,
+    commitCurrentState,
+    setSelection: storeSetSelection,
+    connect: storeConnect,
+  } = store;
 
-  const onCanvasMouseDown = (e: React.MouseEvent) => {
-    interaction.onCanvasMouseDown(e);
-  };
+  const updateResourceField = useCallback(
+    (patch: { name?: string; region?: string; config?: Record<string, unknown> }) => {
+      if (store.selection?.type !== "node") return;
+      storeUpdateResource(store.selection.id, patch);
+    },
+    [store.selection, storeUpdateResource],
+  );
 
-  const onCanvasClick = () => {
-    // Only deselect when clicking canvas background
-    store.setSelection(null);
-  };
+  const updateRelationshipKind = useCallback(
+    (kind: RelationshipKind) => {
+      if (store.selection?.type !== "edge") return;
+      storeUpdateRelationshipKind(store.selection.id, kind);
+    },
+    [store.selection, storeUpdateRelationshipKind],
+  );
 
-  const onMouseMove = (e: MouseEvent) => {
-    interaction.onMouseMove(e, store.nodes, store.pan, store.updateNode, store.setPan);
-  };
+  const onMouseMove = useCallback(
+    (e: MouseEvent) => {
+      iOnMouseMove(e, store.resources, store.viewport, updateResourcePosition, storeSetViewport);
+    },
+    [iOnMouseMove, store.resources, store.viewport, updateResourcePosition, storeSetViewport],
+  );
+  const onMouseUp = useCallback(
+    () => iOnMouseUp(commitCurrentState),
+    [iOnMouseUp, commitCurrentState],
+  );
+  const onWheelZoom = useCallback(
+    (e: WheelEvent) => iOnWheelZoom(e, store.viewport, storeSetViewport),
+    [iOnWheelZoom, store.viewport, storeSetViewport],
+  );
 
-  const onMouseUp = () => {
-    interaction.onMouseUp(store.commitCurrentState);
-  };
+  const onNodeMouseDown = useCallback(
+    (e: React.MouseEvent, resource: ResourceInstance) => {
+      iOnNodeMouseDown(e, resource, store.viewport, store.mode, store.resources, storeConnect);
+      // Selecting is meaningful in move mode; in connect mode the click drives
+      // wiring but selecting the node is still useful feedback.
+      storeSetSelection({ type: "node", id: resource.id, resource });
+    },
+    [
+      iOnNodeMouseDown,
+      store.viewport,
+      store.mode,
+      store.resources,
+      storeConnect,
+      storeSetSelection,
+    ],
+  );
 
-  const onWheelZoom = (e: React.WheelEvent) => {
-    interaction.onWheelZoom(e, store.pan, store.setPan);
-  };
-
-  const screenToWorld = (pt: { x: number; y: number }) => {
-    return interaction.screenToWorld(pt, store.pan);
-  };
-
-  // Canvas rendering
-  const draw = () => {
-    renderer.draw(
-      store.nodes,
-      store.edges,
-      store.pan,
+  const draw = useCallback(() => {
+    rDraw(
+      store.resources,
+      store.relationships,
+      store.viewport,
       store.selection,
       onNodeMouseDown,
-      (nodeId: string, type: 'start' | 'end') => {
-        interaction.onConnect(nodeId, type, store.connect);
+      (id: string, type: "start" | "end") => {
+        iOnConnect(id, type, store.resources, storeConnect);
       },
-      store.setSelection
+      storeSetSelection,
     );
+  }, [
+    rDraw,
+    iOnConnect,
+    store.resources,
+    store.relationships,
+    store.viewport,
+    store.selection,
+    onNodeMouseDown,
+    storeConnect,
+    storeSetSelection,
+  ]);
+  const drawMinimap = useCallback(
+    () => rDrawMinimap(store.resources),
+    [rDrawMinimap, store.resources],
+  );
+  const fitToView = useCallback(
+    () => iFitToView(store.resources, worldRef, storeSetViewport),
+    [iFitToView, store.resources, storeSetViewport],
+  );
+  const center = useCallback(
+    () => iCenter(store.viewport, storeSetViewport),
+    [iCenter, store.viewport, storeSetViewport],
+  );
+
+  // ---- Validation + rule suggestions -------------------------------------
+  // Expose STRUCTURED results; the Inspector renders them as React elements
+  // (no raw HTML / dangerouslySetInnerHTML).
+  const runValidate = useCallback(() => {
+    setValidationResults(validateArchitecture(buildGraph()));
+  }, [buildGraph]);
+
+  const runSuggest = useCallback(() => {
+    setRuleSuggestions(suggestRulesEngine(buildGraph()));
+  }, [buildGraph]);
+
+  // ---- Export / Import ----------------------------------------------------
+  const exportJSON = () => {
+    const graph = buildGraph();
+    const blob = new Blob([JSON.stringify(graph, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "aws-architecture.json";
+    a.click();
   };
 
-  const drawMinimap = () => {
-    renderer.drawMinimap(store.nodes);
-  };
-
-  const fitToView = () => {
-    interaction.fitToView(store.nodes, worldRef, store.setPan);
-  };
-
-  const center = () => {
-    interaction.center(store.pan, store.setPan);
-  };
-
-  // Sidebar output state
-  const [validationHtml, setValidationHtml] = React.useState<string>("");
-  const [rulesHtml, setRulesHtml] = React.useState<string>("");
-
-  function cidrContains(parent: string, child: string) {
-    try {
-      const [pBase, pMaskStr] = parent.split('/');
-      const [cBase, cMaskStr] = child.split('/');
-      const pMask = Number(pMaskStr), cMask = Number(cMaskStr);
-      const toInt = (ip: string) => ip.split('.').reduce((acc, oct) => (acc << 8) + Number(oct), 0) >>> 0;
-      const pInt = toInt(pBase), cInt = toInt(cBase);
-      const pNet = pInt & (~0 << (32 - pMask));
-      const cNet = cInt & (~0 << (32 - cMask));
-      return (cNet >>> 0) >= (pNet >>> 0) && (cNet >>> 0) <= ((pNet | ((1 << (32 - pMask)) - 1)) >>> 0);
-    } catch { return true; }
-  }
-
-  function validateInner() {
-    const out: Array<["error"|"warn"|"ok", string]> = [];
-    const ofType = (t: NodeType) => store.nodes.filter(n => n.type === t);
-    const get = (id: string) => store.nodes.find(n => n.id === id);
-    const incoming = (id: string, rel?: FlowEdge["rel"]) => store.edges.filter(e => e.to === id && (!rel || e.rel === rel));
-    const outgoing = (id: string, rel?: FlowEdge["rel"]) => store.edges.filter(e => e.from === id && (!rel || e.rel === rel));
-
-    store.nodes.filter(n => /Subnet/.test(n.type)).forEach(sn => {
-      const parentVPC = incoming(sn.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'VPC');
-      if (!parentVPC) out.push(["error", `Subnet “${sn.props.name}” should be attached_to a VPC.`]);
-      if (parentVPC && sn.props.cidr && parentVPC.props.cidr) {
-        if (!cidrContains(parentVPC.props.cidr!, sn.props.cidr!)) out.push(["error", `Subnet ${sn.props.cidr} not inside VPC ${parentVPC.props.cidr}.`]);
-      }
-    });
-
-    ofType('Route Table').forEach(rt => {
-      const subs = outgoing(rt.id, 'attached_to').map(e => get(e.to)).filter(n => /Subnet/.test(n!.type));
-      if (subs.length === 0) out.push(["warn", `Route Table “${rt.props.name}” is not attached_to any Subnet.`]);
-    });
-
-    ofType('NACL').forEach(nacl => {
-      const subs = outgoing(nacl.id, 'attached_to').map(e => get(e.to)).filter(n => /Subnet/.test(n!.type));
-      if (subs.length === 0) out.push(["warn", `NACL “${nacl.props.name}” is not attached_to any Subnet.`]);
-    });
-
-    ofType('Internet Gateway').forEach(igw => {
-      const vpc = outgoing(igw.id, 'attached_to').map(e => get(e.to)).find(n => n && n.type === 'VPC');
-      if (!vpc) out.push(["error", `IGW “${igw.props.name}” must be attached_to a VPC.`]);
-    });
-
-    store.nodes.filter(n => /Subnet/.test(n.type) && n.props.public).forEach(sn => {
-      const rt = incoming(sn.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Route Table');
-      const hasIGW = store.edges.some(e => rt && e.from === rt.id && e.rel === 'routes_to' && get(e.to)?.type === 'Internet Gateway');
-      if (sn.props.public && (!rt || !hasIGW)) out.push(["error", `Public Subnet “${sn.props.name}” should have Route Table → routes_to → IGW.`]);
-    });
-
-    ofType('NAT Gateway').forEach(nat => {
-      const subnet = incoming(nat.id, 'attached_to').map(e => get(e.from)).find(n => /Subnet/.test(n!.type));
-      if (!subnet || !subnet.props.public) out.push(["error", `NAT Gateway should be placed in a public Subnet (attached_to).`]);
-    });
-
-    store.nodes.filter(n => /Subnet/.test(n.type) && !n.props.public).forEach(sn => {
-      const rt = incoming(sn.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Route Table');
-      const hasNAT = store.edges.some(e => rt && e.from === rt.id && e.rel === 'routes_to' && get(e.to)?.type === 'NAT Gateway');
-      if (!rt || !hasNAT) out.push(["warn", `Private Subnet “${sn.props.name}” usually needs Route Table → routes_to → NAT GW for egress.`]);
-    });
-
-    ofType('ALB').forEach(alb => {
-      const subs = incoming(alb.id, 'attached_to').map(e => get(e.from)).filter(n => /Subnet/.test(n!.type));
-      const publicCount = subs.filter(s => s!.props.public).length;
-      if (publicCount === 0) out.push(["warn", `ALB “${alb.props.name}” is not placed in any public Subnet (attach via attached_to).`]);
-      const tg = outgoing(alb.id, 'targets').map(e => get(e.to)).find(n => n && n.type === 'Target Group');
-      if (!tg) out.push(["warn", `ALB should targets a Target Group.`]);
-    });
-
-    ofType('Target Group').forEach(tg => {
-      const target = outgoing(tg.id, 'targets').map(e => get(e.to)).find(n => n && /ECS Service|EC2/.test(n!.type));
-      if (!target) out.push(["warn", `Target Group “${tg.props.name}” should targets an ECS Service or EC2.`]);
-    });
-
-    ofType('ECS Service').forEach(svc => {
-      const subs = incoming(svc.id, 'attached_to').map(e => get(e.from)).filter(n => /Subnet/.test(n!.type));
-      if (subs.length === 0) out.push(["error", `ECS Service “${svc.props.name}” must be attached_to Subnet(s).`]);
-      const sg = incoming(svc.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Security Group');
-      if (!sg) out.push(["error", `ECS Service “${svc.props.name}” should be attached_to a Security Group.`]);
-    });
-
-    ofType('RDS').forEach(rds => {
-      const subs = incoming(rds.id, 'attached_to').map(e => get(e.from)).filter(n => /Subnet/.test(n!.type));
-      if (subs.length === 0) out.push(["warn", `RDS “${rds.props.name}” should be attached_to private Subnet(s).`]);
-      subs.forEach(s => { if (s!.props.public) out.push(["warn", `RDS ideally not in public Subnet “${s!.props.name}”.`]); });
-      const sg = incoming(rds.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Security Group');
-      if (!sg) out.push(["warn", `RDS should be attached_to a Security Group.`]);
-    });
-
-    const html = out.map(([level, msg]) => `<div class="mt-1">
-      <span class="badge" style="border-color:${level === 'error' ? 'var(--danger)' : level === 'warn' ? 'var(--yellow)' : 'var(--green)'}; color:${level === 'error' ? 'var(--danger)' : level === 'warn' ? 'var(--yellow)' : 'var(--green)'}">${level}</span>
-      <span class="ml-1">${msg}</span>
-    </div>`).join('');
-    setValidationHtml(html || '<span style="color:var(--green)">No issues found.</span>');
-    return out;
-  }
-
-  function guessServicePort(svc: FlowNode) {
-    const m = /port\s+(\d{2,5})/i.exec(svc.props.notes || '');
-    return m ? m[1] : '80';
-  }
-
-  function suggestRulesInner() {
-    const out: Array<{ scope: string; type: string; rules: any[] }> = [];
-    const get = (id: string) => store.nodes.find(n => n.id === id)!;
-    const incoming = (id: string, rel?: FlowEdge["rel"]) => store.edges.filter(e => e.to === id && (!rel || e.rel === rel));
-    const outgoing = (id: string, rel?: FlowEdge["rel"]) => store.edges.filter(e => e.from === id && (!rel || e.rel === rel));
-
-    const albs = store.nodes.filter(n => n.type === 'ALB');
-    albs.forEach(alb => {
-      out.push({ scope: alb.props.name, type: 'Security Group', rules: [
-        { dir: 'ingress', proto: 'tcp', port: '80,443', src: '0.0.0.0/0', comment: 'Public HTTP/HTTPS to ALB' }
-      ]});
-      const tg = outgoing(alb.id, 'targets').map(e => get(e.to)).find(n => n && n.type === 'Target Group');
-      const svc = tg ? outgoing(tg.id, 'targets').map(e => get(e.to)).find(n => n && /ECS Service|EC2/.test(n.type)) : null;
-      if (svc) {
-        const svcSg = incoming(svc.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Security Group');
-        if (svcSg) {
-          out.push({ scope: svcSg.props.name, type: 'Security Group', rules: [
-            { dir: 'ingress', proto: 'tcp', port: guessServicePort(svc), src: `sg:${alb.props.name}`, comment: 'ALB to Service' }
-          ]});
-        }
-      }
-    });
-
-    store.nodes.filter(n => /Subnet/.test(n.type) && !n.props.public).forEach(sn => {
-      out.push({ scope: sn.props.name, type: 'Route Table', rules: [
-        { route: '0.0.0.0/0', target: 'NAT Gateway', comment: 'Egress for private subnet' }
-      ]});
-    });
-
-    store.nodes.filter(n => /Subnet/.test(n.type) && n.props.public).forEach(sn => {
-      out.push({ scope: sn.props.name, type: 'Route Table', rules: [
-        { route: '0.0.0.0/0', target: 'Internet Gateway', comment: 'Public internet access' }
-      ]});
-    });
-
-    store.nodes.filter(n => n.type === 'NACL').forEach(nacl => {
-      out.push({ scope: nacl.props.name, type: 'NACL', rules: [
-        { num: 100, dir: 'ingress', proto: 'tcp', port: '1024-65535', src: '0.0.0.0/0', allow: true, comment: 'Ephemeral return traffic' },
-        { num: 110, dir: 'egress', proto: 'tcp', port: '0-65535', dst: '0.0.0.0/0', allow: true, comment: 'All egress' }
-      ]});
-    });
-
-    const html = out.map(block => {
-      const rows = (block.rules || []).map(r => `<li>${Object.entries(r).map(([k, v]) => `<span style=\"color:#9fb3c8\">${k}</span>: ${v}`).join(', ')}</li>`).join('');
-      return `<div style=\"margin:6px 0 10px; padding:8px; border:1px solid #223055; border-radius:10px; background:#0d1831;\">
-        <div style=\"font-weight:700;\">${block.type} — <span style=\"color:#a5b4fc\">${block.scope}</span></div>
-        <ul style=\"margin:6px 0 0 16px;\">${rows}</ul>
-      </div>`;
-    }).join('');
-    setRulesHtml(html || '<span style="color:var(--sub)">No suggestions yet—add ALB/Service, Subnets, NACLs…</span>');
-  }
-
-  const validate = () => { validateInner(); };
-  const suggestRules = () => { suggestRulesInner(); };
-  const runValidateUI = () => { validateInner(); };
-  const runRulesUI = () => { suggestRulesInner(); };
-
-  function exportJSON() {
-    const data = { nodes: store.nodes, edges: store.edges, pan: store.pan, nextId: store.nextId };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'aws-flow.json'; a.click();
-  }
-
-  function importJSONDialog() {
-    const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/json';
-    input.onchange = (e: any) => {
-      const f = e.target.files?.[0]; if (!f) return;
+  const importJSONDialog = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
       const reader = new FileReader();
+      reader.onerror = () => setStatus("Import failed: could not read file.");
       reader.onload = () => {
         try {
-          const data = JSON.parse(String(reader.result));
-          store.setNodes(data.nodes || []); store.setEdges(data.edges || []); store.setPan(data.pan || store.pan); store.nextId = data.nextId || 1; store.setSelection(null);
-        } catch { alert('Invalid JSON'); }
+          const parsed = JSON.parse(String(reader.result)) as unknown;
+          if (typeof parsed !== "object" || parsed === null) {
+            throw new Error("not an object");
+          }
+          const g = parsed as Partial<InfrastructureGraph>;
+          if (!Array.isArray(g.resources)) {
+            throw new Error("missing resources array");
+          }
+          store.replaceAll({
+            resources: g.resources ?? [],
+            relationships: g.relationships ?? [],
+            viewport: g.viewport,
+            accounts: g.accounts ?? [],
+            graphId: g.id ?? "",
+          });
+          setStatus(`Imported "${g.name ?? "architecture"}".`);
+        } catch {
+          // Swallow the underlying parse/validation detail to avoid surfacing
+          // internal error text to the user.
+          setStatus("Import failed: not a valid architecture file.");
+        }
       };
-      reader.readAsText(f);
+      reader.readAsText(file);
     };
     input.click();
-  }
-  function loadPreset(presetName: string) {
-    if (presetName === "aws-basic") {
-      loadBasicAWSSetup();
-    } else if (presetName === "ecs-alb") {
-      loadECSALBSetup();
+  };
+
+  // ---- Server save / load -------------------------------------------------
+  const saveToServer = useCallback(async () => {
+    try {
+      setStatus("Saving to server…");
+      const graph = buildGraph();
+      const saved = store.graphId
+        ? await updateGraph(store.graphId, graph)
+        : await createGraph(graph);
+      store.setGraphId(saved.id);
+      setStatus(`Saved "${saved.name}" (${saved.id}).`);
+    } catch {
+      setStatus("Save failed: API unavailable.");
     }
-  }
+  }, [buildGraph, store]);
 
-  function loadBasicAWSSetup() {
-    const newNodes: FlowNode[] = [];
-    const newEdges: FlowEdge[] = [];
-    const addSeed = (type: NodeType, x: number, y: number, props: any) => {
+  const loadFromServer = useCallback(async () => {
+    try {
+      setStatus("Loading from server…");
+      const summaries = await listGraphs();
+      if (summaries.length === 0) {
+        setStatus("No saved graphs on server.");
+        return;
+      }
+      const list = summaries
+        .map((s, i) => `${i + 1}. ${s.name} (${s.resourceCount} resources)`)
+        .join("\n");
+      const pick = typeof prompt === "function" ? prompt(`Load which graph?\n${list}`, "1") : "1";
+      if (!pick) {
+        setStatus("Load cancelled.");
+        return;
+      }
+      const idx = Math.max(1, Math.min(summaries.length, Number(pick))) - 1;
+      const g = await getGraph(summaries[idx].id);
+      store.replaceAll({
+        resources: g.resources ?? [],
+        relationships: g.relationships ?? [],
+        viewport: g.viewport,
+        accounts: g.accounts ?? [],
+        graphId: g.id,
+      });
+      setStatus(`Loaded "${g.name}".`);
+    } catch {
+      setStatus("Load failed: API unavailable.");
+    }
+  }, [store]);
+
+  // ---- Presets ------------------------------------------------------------
+  const loadPreset = (presetName: string) => {
+    const resources: ResourceInstance[] = [];
+    const relationships: Relationship[] = [];
+    const seed = (
+      serviceId: string,
+      x: number,
+      y: number,
+      name: string,
+      config: Record<string, unknown> = {},
+    ) => {
       const id = store.uid();
-      const node: FlowNode = {
+      const svc = getService(serviceId);
+      resources.push({
         id,
-        type,
-        x,
-        y,
-        w: 200,
-        h: 96,
-        props: {
-          name: props.name || type + ' ' + id,
-          cidr: props.cidr || '',
-          public: !!props.public,
-          az: props.az || '',
-          notes: props.notes || ''
-        }
-      };
-      newNodes.push(node);
+        serviceId,
+        name: name || svc?.name || serviceId,
+        config: { ...defaultConfig(serviceId), ...config },
+        source: "manual",
+        position: { x, y, w: 200, h: 96 },
+      });
       return id;
     };
-    const linkSeed = (a: string, b: string, rel: FlowEdge["rel"]) => {
-      const id = store.uid();
-      newEdges.push({ id, from: a, to: b, rel });
+    const link = (from: string, to: string, kind: RelationshipKind) => {
+      relationships.push({ id: store.uid(), from, to, kind, source: "manual" });
     };
 
-    const vpc = addSeed('VPC', 80, 120, { name: 'VPC', cidr: '10.0.0.0/16' });
-    const pubA = addSeed('Subnet (Public)', 140, 220, { name: 'Public A', cidr: '10.0.1.0/24', public: true, az: 'us-east-1a' });
-    const priA = addSeed('Subnet (Private)', 140, 360, { name: 'Private A', cidr: '10.0.2.0/24', public: false, az: 'us-east-1a' });
-    const igw = addSeed('Internet Gateway', 420, 180, { name: 'IGW' });
+    if (presetName === "aws-basic") {
+      const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
+      const pubA = seed("subnet-public", 140, 220, "Public A", {
+        cidr: "10.0.1.0/24",
+        az: "us-east-1a",
+      });
+      const priA = seed("subnet-private", 140, 360, "Private A", {
+        cidr: "10.0.2.0/24",
+        az: "us-east-1a",
+      });
+      const igw = seed("internet-gateway", 420, 180, "IGW");
+      link(vpc, pubA, "contains");
+      link(vpc, priA, "contains");
+      link(igw, vpc, "attached_to");
+    } else if (presetName === "ecs-alb") {
+      const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
+      const pubA = seed("subnet-public", 140, 220, "Public A", {
+        cidr: "10.0.1.0/24",
+        az: "us-east-1a",
+      });
+      const priA = seed("subnet-private", 140, 360, "Private A", {
+        cidr: "10.0.2.0/24",
+        az: "us-east-1a",
+      });
+      const igw = seed("internet-gateway", 420, 180, "IGW");
+      const nat = seed("nat-gateway", 420, 260, "NAT GW");
+      const rtPub = seed("route-table", 390, 220, "RT Public");
+      const rtPri = seed("route-table", 390, 340, "RT Private");
+      const nacl = seed("nacl", 390, 420, "App NACL");
+      const alb = seed("elastic-load-balancer", 700, 200, "ALB");
+      const sgAlb = seed("security-group", 620, 140, "SG-ALB");
+      const ecs = seed("ecs-service", 820, 340, "App Service", { port: 3000 });
+      const sgApp = seed("security-group", 760, 300, "SG-App");
+      const tg = seed("target-group", 760, 240, "TG-App", { port: 3000 });
 
-    linkSeed(vpc, pubA, 'attached_to');
-    linkSeed(vpc, priA, 'attached_to');
-    linkSeed(igw, vpc, 'attached_to');
+      link(vpc, pubA, "contains");
+      link(vpc, priA, "contains");
+      link(igw, vpc, "attached_to");
+      link(nat, pubA, "attached_to");
+      link(rtPub, pubA, "attached_to");
+      link(rtPri, priA, "attached_to");
+      link(rtPub, igw, "routes_to");
+      link(rtPri, nat, "routes_to");
+      link(nacl, priA, "attached_to");
+      link(alb, pubA, "attached_to");
+      link(sgAlb, alb, "attached_to");
+      link(alb, tg, "targets");
+      link(tg, ecs, "targets");
+      link(sgApp, ecs, "attached_to");
+    } else {
+      return;
+    }
 
-    store.setNodes(newNodes);
-    store.setEdges(newEdges);
-    store.setSelection(null);
-    store.setPan({ x: 200, y: 120, scale: 1 });
-  }
-
-  function loadECSALBSetup() {
-    const newNodes: FlowNode[] = [];
-    const newEdges: FlowEdge[] = [];
-    const addSeed = (type: NodeType, x: number, y: number, props: any) => {
-      const id = store.uid();
-      const node: FlowNode = {
-        id,
-        type,
-        x,
-        y,
-        w: 200,
-        h: 96,
-        props: {
-          name: props.name || type + ' ' + id,
-          cidr: props.cidr || '',
-          public: !!props.public,
-          az: props.az || '',
-          notes: props.notes || ''
-        }
-      };
-      newNodes.push(node);
-      return id;
-    };
-    const linkSeed = (a: string, b: string, rel: FlowEdge["rel"]) => {
-      const id = store.uid();
-      newEdges.push({ id, from: a, to: b, rel });
-    };
-
-    const vpc = addSeed('VPC', 80, 120, { name: 'VPC', cidr: '10.0.0.0/16' });
-    const pubA = addSeed('Subnet (Public)', 140, 220, { name: 'Public A', cidr: '10.0.1.0/24', public: true, az: 'us-east-1a' });
-    const priA = addSeed('Subnet (Private)', 140, 360, { name: 'Private A', cidr: '10.0.2.0/24', public: false, az: 'us-east-1a' });
-    const igw = addSeed('Internet Gateway', 420, 180, { name: 'IGW' });
-    const nat = addSeed('NAT Gateway', 420, 260, { name: 'NAT GW' });
-    const rtp = addSeed('Route Table', 390, 340, { name: 'RT Private' });
-    const rtpb = addSeed('Route Table', 390, 220, { name: 'RT Public' });
-    const nacl = addSeed('NACL', 390, 420, { name: 'App NACL' });
-    const alb = addSeed('ALB', 700, 200, { name: 'ALB' });
-    const sgAlb = addSeed('Security Group', 620, 140, { name: 'SG-ALB' });
-    const ecs = addSeed('ECS Service', 820, 340, { name: 'App Service', notes: 'port 3000' });
-    const sgApp = addSeed('Security Group', 760, 300, { name: 'SG-App' });
-    const tg = addSeed('Target Group', 760, 240, { name: 'TG-App' });
-
-    linkSeed(vpc, pubA, 'attached_to'); linkSeed(vpc, priA, 'attached_to');
-    linkSeed(igw, vpc, 'attached_to');
-    linkSeed(nat, pubA, 'attached_to');
-    linkSeed(rtpb, pubA, 'attached_to'); linkSeed(rtp, priA, 'attached_to');
-    linkSeed(rtpb, igw, 'routes_to'); linkSeed(rtp, nat, 'routes_to');
-    linkSeed(nacl, priA, 'attached_to');
-    linkSeed(alb, pubA, 'attached_to');
-    linkSeed(sgAlb, alb, 'attached_to');
-    linkSeed(alb, tg, 'targets');
-    linkSeed(tg, ecs, 'targets');
-    linkSeed(sgApp, ecs, 'attached_to');
-
-    store.setNodes(newNodes);
-    store.setEdges(newEdges);
-    store.setSelection(null);
-    store.setPan({ x: 200, y: 120, scale: 1 });
-  }
+    store.replaceAll({
+      resources,
+      relationships,
+      viewport: { x: 200, y: 120, scale: 1 },
+      accounts: [],
+      graphId: "",
+    });
+  };
 
   const value: FlowContextValue = {
-    PALETTE,
     state,
     worldRef,
     svgRef,
     minimapRef,
     selection: store.selection,
 
-    // Actions
     setMode: store.setMode,
     toggleMode,
     select: store.setSelection,
-    addNode: store.addNode,
-    addNodeFromPalette,
+    addResourceFromPalette,
     removeSelection: store.removeSelection,
     duplicateSelection: store.duplicateSelection,
-    groupIntoVPC,
-    connect: store.connect,
-    updateInspectorFields,
+    groupIntoVPC: store.groupIntoVPC,
+    updateResourceField,
+    updateRelationshipKind,
 
-    // Canvas interaction
-    onNodeMouseDown,
-    onCanvasMouseDown,
-    onCanvasClick,
+    onCanvasMouseDown: interaction.onCanvasMouseDown,
+    onCanvasClick: () => store.setSelection(null),
     onMouseMove,
     onMouseUp,
     onWheelZoom,
     setSpacePressed: interaction.setSpacePressed,
-    screenToWorld,
 
-    // Canvas rendering
     draw,
     drawMinimap,
     fitToView,
     center,
 
-    // History
     undo: store.undo,
     redo: store.redo,
+    canUndo: store.canUndo(),
+    canRedo: store.canRedo(),
 
-    // Placeholders
-    validate,
-    suggestRules,
+    validate: runValidate,
+    suggestRules: runSuggest,
     exportJSON,
     importJSONDialog,
     clear: store.clear,
     loadPreset,
-    runValidateUI,
-    runRulesUI,
-  validationHtml,
-  rulesHtml,
-    status: "Pan with space ⎵ + drag. Connect mode: C."
+    runValidateUI: runValidate,
+    runRulesUI: runSuggest,
+    saveToServer,
+    loadFromServer,
+    validationResults,
+    ruleSuggestions,
+    status,
   };
 
   return <FlowContext.Provider value={value}>{children}</FlowContext.Provider>;

@@ -1,190 +1,332 @@
 "use client";
-import { useState, useCallback, useRef } from 'react';
-import type { FlowNode, FlowEdge, Pan, NodeType } from '../types';
-import { useHistory, type HistoryState } from './useHistory';
+import { useState, useCallback, useRef, useEffect } from "react";
+import type { ResourceInstance, Relationship, Viewport, Account } from "../aws/model";
+import { DEFAULT_NODE_SIZE } from "../aws/model";
+import type { CanvasMode, Selection } from "../types";
+import type { RelationshipKind } from "../aws/types";
+import { defaultConfig, getService } from "../aws/registry";
+import { useHistory, type HistoryState } from "./useHistory";
 
 interface FlowState extends HistoryState {
-  nodes: FlowNode[];
-  edges: FlowEdge[];
-  pan: Pan;
-  nextId: number;
+  resources: ResourceInstance[];
+  relationships: Relationship[];
+  viewport: Viewport;
+  accounts: Account[];
+  graphId: string;
 }
 
-interface SelectionNode { type: "node"; id: string; node: FlowNode }
-interface SelectionEdge { type: "edge"; id: string; edge: FlowEdge; edgeFromTo: { fromName: string; toName: string } }
-type Selection = SelectionNode | SelectionEdge | null;
+const DEFAULT_VIEWPORT: Viewport = { x: 200, y: 120, scale: 1 };
+
+/** Build a UI Selection object for a resource. */
+function nodeSelection(resource: ResourceInstance): Selection {
+  return { type: "node", id: resource.id, resource };
+}
+
+/** Build a UI Selection object for a relationship. */
+function edgeSelection(rel: Relationship, resources: ResourceInstance[]): Selection {
+  const from = resources.find((r) => r.id === rel.from);
+  const to = resources.find((r) => r.id === rel.to);
+  return {
+    type: "edge",
+    id: rel.id,
+    relationship: rel,
+    fromName: from?.name ?? rel.from,
+    toName: to?.name ?? rel.to,
+  };
+}
 
 export function useFlowStore() {
-  const [nodes, setNodes] = useState<FlowNode[]>([]);
-  const [edges, setEdges] = useState<FlowEdge[]>([]);
-  const [pan, setPan] = useState<Pan>({ x: 200, y: 120, scale: 1 });
-  const [mode, setMode] = useState<"move"|"connect">("move");
+  const [resources, setResources] = useState<ResourceInstance[]>([]);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [viewport, setViewport] = useState<Viewport>({ ...DEFAULT_VIEWPORT });
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [mode, setMode] = useState<CanvasMode>("move");
   const [selection, setSelection] = useState<Selection>(null);
-  const nextIdRef = useRef<number>(1);
+  const [graphId, setGraphId] = useState<string>("");
+  // Guards against re-committing to history while an undo/redo restore is in
+  // flight. Set synchronously in `applyState` and cleared on the next
+  // microtask so any synchronous commit calls triggered by the restore are
+  // ignored.
   const isRestoringRef = useRef<boolean>(false);
 
   const { commit, undo, redo, canUndo, canRedo } = useHistory<FlowState>();
 
-  const uid = useCallback(() => String(nextIdRef.current++), []);
+  const uid = useCallback(() => crypto.randomUUID(), []);
 
-  const getCurrentState = useCallback((): FlowState => ({
-    nodes,
-    edges,
-    pan,
-    nextId: nextIdRef.current
-  }), [nodes, edges, pan]);
+  // Live mirror of the canvas-relevant state so commit-after-mutate actions can
+  // snapshot the *new* values without waiting for a re-render. Updated through
+  // the `apply*` helpers below.
+  const liveRef = useRef<FlowState>({
+    resources,
+    relationships,
+    viewport,
+    accounts,
+    graphId,
+  });
 
-  const applyState = useCallback((state: FlowState) => {
-    isRestoringRef.current = true;
-    setNodes(state.nodes);
-    setEdges(state.edges);
-    setPan(state.pan);
-    nextIdRef.current = state.nextId;
-    setSelection(null);
-    // Reset the flag after state updates
-    setTimeout(() => {
-      isRestoringRef.current = false;
-    }, 0);
+  /** Record a snapshot in history (ignored while restoring undo/redo). */
+  const record = useCallback(
+    (state: FlowState) => {
+      if (isRestoringRef.current) return;
+      commit(state);
+    },
+    [commit],
+  );
+
+  // Seed history with the initial (empty) state once so the very first edit has
+  // a baseline to undo back to. Without this the first mutation's pre-state is
+  // lost and undo stops one step short of the start.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current) return;
+    seededRef.current = true;
+    commit({ ...liveRef.current });
+  }, [commit]);
+
+  /** Apply a committed/new state to React + the live mirror. */
+  const setLive = useCallback((next: FlowState) => {
+    liveRef.current = next;
+    setResources(next.resources);
+    setRelationships(next.relationships);
+    setViewport(next.viewport);
+    setAccounts(next.accounts);
+    setGraphId(next.graphId);
   }, []);
 
-  const commitCurrentState = useCallback(() => {
-    // Don't commit if we're in the middle of restoring state from undo/redo
-    if (isRestoringRef.current) return;
-    commit(getCurrentState());
-  }, [commit, getCurrentState]);
+  /**
+   * Apply a mutation to the canvas-relevant state AND record the resulting
+   * state in history (commit-AFTER-mutate). `patch` receives the current live
+   * state and returns the changed fields.
+   */
+  const mutate = useCallback(
+    (patch: (cur: FlowState) => Partial<FlowState>) => {
+      const cur = liveRef.current;
+      const next: FlowState = { ...cur, ...patch(cur) };
+      setLive(next);
+      record(next);
+      return next;
+    },
+    [setLive, record],
+  );
+
+  const applyState = useCallback(
+    (state: FlowState) => {
+      isRestoringRef.current = true;
+      setLive(state);
+      setSelection(null);
+      // Clear on the next microtask rather than a macrotask (setTimeout): this
+      // runs before any subsequent user-triggered macrotask could synchronously
+      // call a commit, closing the race window.
+      void Promise.resolve().then(() => {
+        isRestoringRef.current = false;
+      });
+    },
+    [setLive],
+  );
 
   const undoAction = useCallback(() => {
-    const prevState = undo();
-    if (prevState) {
-      applyState(prevState);
-    }
+    const prev = undo();
+    if (prev) applyState(prev);
   }, [undo, applyState]);
 
   const redoAction = useCallback(() => {
-    const nextState = redo();
-    if (nextState) {
-      applyState(nextState);
-    }
+    const next = redo();
+    if (next) applyState(next);
   }, [redo, applyState]);
 
-  const addNode = useCallback((type: NodeType, x: number, y: number, props: Partial<FlowNode["props"]> = {}) => {
-    commitCurrentState(); // Commit before making changes
-    
-    const id = uid();
-    const node: FlowNode = {
-      id,
-      type,
-      x,
-      y,
-      w: 200,
-      h: 96,
-      props: {
-        name: `${props.name || type} ${id}`,
-        cidr: props.cidr || "",
-        public: !!props.public,
-        az: props.az || "",
-        notes: props.notes || ""
-      }
-    };
-    
-    setNodes(n => [...n, node]);
-    setSelection({ type: "node", id, node });
-  }, [commitCurrentState, uid]);
+  /** Create a new resource from a service id at world coordinates. */
+  const addResource = useCallback(
+    (serviceId: string, x: number, y: number) => {
+      const svc = getService(serviceId);
+      if (!svc) return;
+      const id = uid();
+      const resource: ResourceInstance = {
+        id,
+        serviceId,
+        name: svc.name,
+        config: defaultConfig(serviceId),
+        source: "manual",
+        position: { x: Math.round(x / 4) * 4, y: Math.round(y / 4) * 4, ...DEFAULT_NODE_SIZE },
+      };
+      mutate((cur) => ({ resources: [...cur.resources, resource] }));
+      setSelection(nodeSelection(resource));
+    },
+    [mutate, uid],
+  );
 
   const removeSelection = useCallback(() => {
     if (!selection) return;
-    
-    commitCurrentState(); // Commit before making changes
-    
     if (selection.type === "node") {
-      setNodes(ns => ns.filter(n => n.id !== selection.id));
-      setEdges(es => es.filter(e => e.from !== selection.id && e.to !== selection.id));
+      const id = selection.id;
+      mutate((cur) => ({
+        resources: cur.resources.filter((r) => r.id !== id),
+        relationships: cur.relationships.filter((e) => e.from !== id && e.to !== id),
+      }));
     } else {
-      setEdges(es => es.filter(e => e.id !== selection.id));
+      const id = selection.id;
+      mutate((cur) => ({ relationships: cur.relationships.filter((e) => e.id !== id) }));
     }
     setSelection(null);
-  }, [selection, commitCurrentState]);
+  }, [selection, mutate]);
 
-  const updateNode = useCallback((nodeId: string, updates: Partial<FlowNode>) => {
-    // Don't commit during live updates (like dragging) - only commit when done
-    setNodes(ns => ns.map(n => n.id === nodeId ? { ...n, ...updates } : n));
+  /** Live position update during drag — not committed to history here. */
+  const updateResourcePosition = useCallback((id: string, pos: { x: number; y: number }) => {
+    const cur = liveRef.current;
+    const nextResources = cur.resources.map((r) => {
+      if (r.id !== id) return r;
+      const prev = r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
+      return { ...r, position: { ...prev, x: pos.x, y: pos.y } };
+    });
+    liveRef.current = { ...cur, resources: nextResources };
+    setResources(nextResources);
   }, []);
 
-  const updateNodeProps = useCallback((nodeId: string, propUpdates: Partial<FlowNode["props"]>) => {
-    commitCurrentState(); // Commit before making changes
-    setNodes(ns => ns.map(n => n.id === nodeId ? { ...n, props: { ...n.props, ...propUpdates } } : n));
-  }, [commitCurrentState]);
+  /** Inspector field writes: name / region / config[key]. Committed. */
+  const updateResource = useCallback(
+    (id: string, patch: { name?: string; region?: string; config?: Record<string, unknown> }) => {
+      mutate((cur) => ({
+        resources: cur.resources.map((r) => {
+          if (r.id !== id) return r;
+          const next: ResourceInstance = { ...r };
+          if (patch.name !== undefined) next.name = patch.name;
+          if (patch.region !== undefined) next.region = patch.region || undefined;
+          if (patch.config) next.config = { ...r.config, ...patch.config };
+          return next;
+        }),
+      }));
+      // The selection's cached `resource` is refreshed by the effect in
+      // useFlow once the new `resources` array is committed.
+    },
+    [mutate],
+  );
 
-  const connect = useCallback((fromId: string, toId: string, rel: FlowEdge["rel"] = "depends_on") => {
-    if (fromId === toId) return;
-    
-    commitCurrentState(); // Commit before making changes
-    
-    const id = uid();
-    const edge: FlowEdge = { id, from: fromId, to: toId, rel };
-    setEdges(es => [...es, edge]);
-    
-    const fromNode = nodes.find(n => n.id === fromId);
-    const toNode = nodes.find(n => n.id === toId);
-    const fromName = fromNode ? `${fromNode.props.name} (${fromNode.type})` : fromId;
-    const toName = toNode ? `${toNode.props.name} (${toNode.type})` : toId;
-    
-    setSelection({ type: "edge", id, edge, edgeFromTo: { fromName, toName } });
-  }, [commitCurrentState, uid, nodes]);
+  const updateRelationshipKind = useCallback(
+    (id: string, kind: RelationshipKind) => {
+      mutate((cur) => ({
+        relationships: cur.relationships.map((e) => (e.id === id ? { ...e, kind } : e)),
+      }));
+    },
+    [mutate],
+  );
+
+  const connect = useCallback(
+    (fromId: string, toId: string, kind: RelationshipKind = "connects_to") => {
+      if (fromId === toId) return;
+      const id = uid();
+      const rel: Relationship = { id, from: fromId, to: toId, kind, source: "manual" };
+      const next = mutate((cur) => ({ relationships: [...cur.relationships, rel] }));
+      setSelection(edgeSelection(rel, next.resources));
+    },
+    [mutate, uid],
+  );
 
   const duplicateSelection = useCallback(() => {
     if (!selection || selection.type !== "node") return;
-    
-    const n = nodes.find(n => n.id === selection.id);
-    if (!n) return;
-    
-    addNode(n.type, n.x + 24, n.y + 24, n.props);
-  }, [selection, nodes, addNode]);
+    const r = liveRef.current.resources.find((x) => x.id === selection.id);
+    if (!r) return;
+    const id = uid();
+    const pos = r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
+    const copy: ResourceInstance = {
+      ...r,
+      id,
+      config: { ...r.config },
+      position: { ...pos, x: pos.x + 24, y: pos.y + 24 },
+      source: "manual",
+    };
+    mutate((cur) => ({ resources: [...cur.resources, copy] }));
+    setSelection(nodeSelection(copy));
+  }, [selection, mutate, uid]);
+
+  /** Add a containing VPC around the selected node. */
+  const groupIntoVPC = useCallback(() => {
+    if (!selection || selection.type !== "node") return;
+    const r = liveRef.current.resources.find((x) => x.id === selection.id);
+    if (!r) return;
+    const pos = r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
+    addResource("vpc", pos.x - 80, pos.y - 80);
+  }, [selection, addResource]);
 
   const clear = useCallback(() => {
-    if (confirm('Clear canvas?')) {
-      commitCurrentState(); // Commit before making changes
-      setNodes([]);
-      setEdges([]);
+    if (typeof confirm === "function" && !confirm("Clear canvas?")) return;
+    mutate(() => ({ resources: [], relationships: [] }));
+    setSelection(null);
+  }, [mutate]);
+
+  /** Replace the entire model (import / preset / server load). */
+  const replaceAll = useCallback(
+    (next: {
+      resources: ResourceInstance[];
+      relationships: Relationship[];
+      viewport?: Viewport;
+      accounts?: Account[];
+      graphId?: string;
+    }) => {
+      mutate((cur) => ({
+        resources: next.resources,
+        relationships: next.relationships,
+        viewport: next.viewport ?? { ...DEFAULT_VIEWPORT },
+        accounts: next.accounts ?? [],
+        graphId: next.graphId ?? cur.graphId,
+      }));
       setSelection(null);
-    }
-  }, [commitCurrentState]);
+    },
+    [mutate],
+  );
+
+  /** Commit the current live state to history (e.g. at the END of a drag). */
+  const commitCurrentState = useCallback(() => {
+    record({ ...liveRef.current });
+  }, [record]);
+
+  // Viewport pan/zoom: keep the live mirror in sync. Viewport changes are not
+  // independently committed (they ride along with the next structural commit).
+  const setViewportSynced = useCallback((vp: Viewport) => {
+    liveRef.current = { ...liveRef.current, viewport: vp };
+    setViewport(vp);
+  }, []);
+
+  // Keep graphId in the live mirror when set directly (e.g. after a save).
+  const setGraphIdSynced = useCallback((id: string) => {
+    liveRef.current = { ...liveRef.current, graphId: id };
+    setGraphId(id);
+  }, []);
 
   return {
     // State
-    nodes,
-    edges,
-    pan,
+    resources,
+    relationships,
+    viewport,
+    accounts,
     mode,
     selection,
-    nextId: nextIdRef.current,
-    
-    // State setters
-    setNodes,
-    setEdges,
-    setPan,
+    graphId,
+
+    // Setters
+    setViewport: setViewportSynced,
     setMode,
     setSelection,
-    
+    setGraphId: setGraphIdSynced,
+
     // Actions
-    addNode,
+    addResource,
     removeSelection,
-    updateNode,
-    updateNodeProps,
+    updateResource,
+    updateResourcePosition,
+    updateRelationshipKind,
     connect,
     duplicateSelection,
+    groupIntoVPC,
     clear,
-    
+    replaceAll,
+
     // History
     undo: undoAction,
     redo: redoAction,
     canUndo,
     canRedo,
     commitCurrentState,
-    
+
     // Utilities
     uid,
-    getCurrentState,
-    applyState
   };
 }
