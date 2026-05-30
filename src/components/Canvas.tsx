@@ -38,6 +38,7 @@ export const Canvas: React.FC = () => {
     focusContainer,
     breadcrumb,
     focusedContainerId,
+    presentation,
   } = useFlow();
 
   // Whether a minimap click-drag is in progress (window-level so the drag keeps
@@ -54,6 +55,7 @@ export const Canvas: React.FC = () => {
     };
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
+      if (presentation) return; // read-only: no drops
       const raw = e.dataTransfer?.getData("application/json");
       if (!raw) return;
       try {
@@ -83,7 +85,7 @@ export const Canvas: React.FC = () => {
       el.removeEventListener("dragover", onDragOver);
       el.removeEventListener("drop", onDrop);
     };
-  }, [addResourceFromPalette, worldRef]);
+  }, [addResourceFromPalette, worldRef, presentation]);
 
   // Keyboard/click activation from the Palette: add the service near the
   // centre of the canvas viewport.
@@ -187,6 +189,8 @@ export const Canvas: React.FC = () => {
       // Ignore single-key shortcuts when a modifier is held so we don't hijack
       // browser/OS shortcuts (⌘C, Ctrl+D, ⌘G, etc.).
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Read-only / presentation mode gates every editing shortcut.
+      if (presentation) return;
       if (e.key === "c" || e.key === "C") toggleMode();
       if (e.key === "Delete" || e.key === "Backspace") removeSelection();
       if (e.key === "d" || e.key === "D") duplicateSelection();
@@ -206,7 +210,14 @@ export const Canvas: React.FC = () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [toggleMode, removeSelection, duplicateSelection, groupIntoVPC, setSpacePressed]);
+  }, [
+    toggleMode,
+    removeSelection,
+    duplicateSelection,
+    groupIntoVPC,
+    setSpacePressed,
+    presentation,
+  ]);
 
   return (
     <>

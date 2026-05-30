@@ -425,6 +425,13 @@ text.dimmed {
   font-weight: 700;
 }
 
+/* ---- Search-match highlight ---- */
+.node.search-match {
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.25);
+}
+
 /* ---- Breadcrumb (containment focus path) ---- */
 .breadcrumb {
   position: absolute;
@@ -747,6 +754,102 @@ svg.guides {
   font-size: 12px;
   color: #cbd5e1;
   margin: 6px 16px 10px;
+}
+
+/* ---- Command palette (⌘K) ---- */
+.cmdk-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(3, 7, 18, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.cmdk {
+  width: min(640px, 92vw);
+  background: #0e172a;
+  border: 1px solid #223055;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.cmdk-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #1a2540;
+  color: var(--text);
+  padding: 14px 16px;
+  font-size: 15px;
+  outline: none;
+}
+.cmdk-list {
+  max-height: 50vh;
+  overflow: auto;
+  padding: 6px;
+}
+.cmdk-group {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--sub);
+  padding: 8px 10px 4px;
+  font-weight: 700;
+}
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.cmdk-item.active {
+  background: #17213a;
+}
+.cmdk-hint {
+  width: 18px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+.cmdk-title {
+  flex: 1 1 auto;
+}
+.cmdk-empty {
+  padding: 16px;
+  color: var(--sub);
+  font-size: 13px;
+}
+
+/* ---- Presentation / read-only mode ---- */
+.app--present {
+  grid-template-columns: 0 1fr 0;
+  grid-template-rows: 0 1fr;
+}
+.app--present .topbar,
+.app--present .panel,
+.app--present .right {
+  display: none;
+}
+.present-exit {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  background: rgba(23, 33, 58, 0.9);
+  color: var(--text);
+  border: 1px solid #223055;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+}
+.present-exit:hover {
+  background: #1b2644;
 }
 
 /* ---- Layers / filters / views panel ---- */

@@ -83,6 +83,10 @@ export function useFlowStore() {
   const [environmentTint, setEnvironmentTint] = useState(false);
   // Edge routing style (view-only).
   const [edgeStyle, setEdgeStyle] = useState<"curved" | "orthogonal">("curved");
+  // Nodes matching the active search query (highlighted; view-only, transient).
+  const [searchMatches, setSearchMatches] = useState<ReadonlySet<string>>(new Set());
+  // Presentation / read-only mode: hides editing chrome and gates edits.
+  const [presentation, setPresentation] = useState(false);
   // Summary group keys (`${parentId}::${serviceId}`) that are expanded (shown
   // as individual nodes rather than a single "N× …" summary). View-only.
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
@@ -166,6 +170,7 @@ export function useFlowStore() {
       setSelectedIds([]);
       setFocusedContainerId(null);
       setDragOverride(null);
+      setSearchMatches(new Set());
       // Clear on the next microtask rather than a macrotask (setTimeout): this
       // runs before any subsequent user-triggered macrotask could synchronously
       // call a commit, closing the race window.
@@ -394,6 +399,7 @@ export function useFlowStore() {
     setSelectedIds([]);
     setCollapsed(new Set());
     setExpandedGroups(new Set());
+    setSearchMatches(new Set());
     setFocusedContainerId(null);
     setDragOverride(null);
   }, [mutate]);
@@ -418,6 +424,7 @@ export function useFlowStore() {
       setSelectedIds([]);
       setCollapsed(new Set());
       setExpandedGroups(new Set());
+      setSearchMatches(new Set());
       setFocusedContainerId(null);
       setDragOverride(null);
     },
@@ -464,6 +471,8 @@ export function useFlowStore() {
     filterMode,
     environmentTint,
     edgeStyle,
+    searchMatches,
+    presentation,
     expandedGroups,
     selection,
     selectedIds,
@@ -485,6 +494,8 @@ export function useFlowStore() {
     setFilterMode,
     setEnvironmentTint,
     setEdgeStyle,
+    setSearchMatches,
+    setPresentation,
     setLayers,
     setSelection,
     setSelectedIds,

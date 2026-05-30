@@ -74,6 +74,7 @@ interface NodeRecord {
     collapsed: boolean;
     depth: number;
     envTint: string;
+    searchMatch: boolean;
   };
 }
 
@@ -123,6 +124,8 @@ interface DrawInputs {
   cullViewport: Rect | null;
   /** Edge routing style. */
   edgeStyle: "curved" | "orthogonal";
+  /** Nodes matching the active search query (highlighted). */
+  searchMatches: ReadonlySet<string>;
   onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void;
   onConnect: (id: string, type: "start" | "end") => void;
   onSelect: (sel: Selection) => void;
@@ -192,6 +195,7 @@ export function useCanvasRenderer(
         envTintById,
         cullViewport,
         edgeStyle,
+        searchMatches,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -290,6 +294,7 @@ export function useCanvasRenderer(
           const containerDim = focusSubtree !== null && !focusSubtree.has(r.id);
           const dimmed = hoverDim || containerDim || (nodeFilteredOut && filterMode === "dim");
           const envTint = envTintById?.get(r.id) ?? "";
+          const searchMatch = searchMatches.has(r.id);
 
           let rec = nodes.get(r.id);
           if (!rec) {
@@ -365,6 +370,7 @@ export function useCanvasRenderer(
                 collapsed: false,
                 depth: -1,
                 envTint: "",
+                searchMatch: false,
               },
             };
             nodes.set(r.id, rec);
@@ -426,6 +432,8 @@ export function useCanvasRenderer(
           }
           if (compact !== prev.compact) rec.div.classList.toggle("dense-compact", compact);
           if (dimmed !== prev.dimmed) rec.div.classList.toggle("dimmed", dimmed);
+          if (searchMatch !== prev.searchMatch)
+            rec.div.classList.toggle("search-match", searchMatch);
           // Environment-tint overlay (background tint by account environment).
           if (envTint !== prev.envTint) {
             if (envTint) {
@@ -535,6 +543,7 @@ export function useCanvasRenderer(
           prev.collapsed = nodeCollapsed;
           prev.depth = depthVal;
           prev.envTint = envTint;
+          prev.searchMatch = searchMatch;
         } catch (err) {
           console.error("draw node failed", r, err);
         }
@@ -782,6 +791,7 @@ export function useCanvasRenderer(
       envTintById: ReadonlyMap<string, string> | null,
       cullViewport: Rect | null,
       edgeStyle: "curved" | "orthogonal",
+      searchMatches: ReadonlySet<string>,
       onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void,
       onConnect: (id: string, type: "start" | "end") => void,
       onSelect: (sel: Selection) => void,
@@ -821,6 +831,7 @@ export function useCanvasRenderer(
         envTintById,
         cullViewport,
         edgeStyle,
+        searchMatches,
         onNodeMouseDown,
         onConnect,
         onSelect,
@@ -850,6 +861,7 @@ export function useCanvasRenderer(
         last.envTintById === envTintById &&
         last.cullViewport === cullViewport &&
         last.edgeStyle === edgeStyle &&
+        last.searchMatches === searchMatches &&
         last.onNodeMouseDown === onNodeMouseDown &&
         last.onConnect === onConnect &&
         last.onSelect === onSelect &&

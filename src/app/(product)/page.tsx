@@ -4,6 +4,7 @@ import { FlowProvider, useFlow } from "../../hooks/useFlow";
 import { Palette } from "../../components/Palette";
 import { Canvas } from "../../components/Canvas";
 import { Inspector } from "../../components/Inspector";
+import { CommandPalette } from "../../components/CommandPalette";
 import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
 import { RELATIONSHIP_CLASSES, RELATIONSHIP_CLASS_ORDER } from "../../aws/relationshipClasses";
 import type { GraphSummary } from "../../aws/model";
@@ -258,6 +259,7 @@ function TopBar() {
     canUndo,
     canRedo,
     saveToServer,
+    setPresentation,
   } = useFlow();
   return (
     <div className="topbar">
@@ -292,6 +294,9 @@ function TopBar() {
           Save to Server
         </button>
         <LoadMenu />
+        <button onClick={() => setPresentation(true)} title="Presentation / read-only mode">
+          Present
+        </button>
         <button onClick={clear} title="Clear canvas">
           Clear
         </button>
@@ -363,7 +368,16 @@ function FooterControls() {
 export default function Page() {
   return (
     <FlowProvider>
-      <div className="app">
+      <Workspace />
+    </FlowProvider>
+  );
+}
+
+function Workspace() {
+  const { presentation, setPresentation } = useFlow();
+  return (
+    <>
+      <div className={`app${presentation ? " app--present" : ""}`}>
         <TopBar />
         <aside className="panel">
           <h3>Palette</h3>
@@ -400,7 +414,13 @@ export default function Page() {
           <FooterControls />
         </aside>
       </div>
+      <CommandPalette />
+      {presentation && (
+        <button className="present-exit" onClick={() => setPresentation(false)}>
+          Exit presentation
+        </button>
+      )}
       <div className="toast" id="toast" />
-    </FlowProvider>
+    </>
   );
 }
