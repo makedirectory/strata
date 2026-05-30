@@ -1,0 +1,107 @@
+---
+sidebar_position: 5
+title: Persistence & the Server
+---
+
+# Persistence & the Server Side
+
+## The Route Handlers _are_ the server
+
+There is no separate backend service. The Next.js App Router Route Handlers
+under `src/app/api/graphs/` are the entire server tier:
+
+- `src/app/api/graphs/route.ts`
+  - `GET /api/graphs` → `repo.list()` → `{ graphs: GraphSummary[] }`.
+  - `POST /api/graphs` → merges the body over `emptyGraph(name)`, runs
+    `validateGraph()` (422 on failure), then `repo.create()` → `201`.
+- `src/app/api/graphs/[id]/route.ts`
+  - `GET /api/graphs/:id` → full graph or `404`.
+  - `PUT /api/graphs/:id` → `validateGraph()` then `repo.update()` (`404` if
+    absent).
+  - `DELETE /api/graphs/:id` → `repo.remove()`.
+
+Both files set `export const dynamic = "force-dynamic"` so reads/writes always
+hit the store. They never talk to a concrete store — only to a `Repository`.
+
+## The `Repository` interface (`src/server/repository.ts`)
+
+The application talks to this interface, never to a concrete store:
+
+```ts
+export interface Repository {
+  list(): Promise<GraphSummary[]>;
+  get(id: string): Promise<InfrastructureGraph | null>;
+  create(graph: InfrastructureGraph): Promise<InfrastructureGraph>; // assigns id + timestamps
+  update(id: string, graph: InfrastructureGraph): Promise<InfrastructureGraph | null>; // null if absent
+  remove(id: string): Promise<boolean>;
+}
+```
+
+## Default: file-backed (`src/server/fileRepository.ts`)
+
+`FileRepository` stores each graph as JSON under `.data/graphs/<id>.json`
+(override the directory with `AWS_FLOW_DATA_DIR`). It runs with **zero external
+infrastructure** — ideal for local dev and demos. It assigns `randomUUID()` ids
+and `createdAt`/`updatedAt` timestamps on write, stamps `SCHEMA_VERSION`, sorts
+list results by `updatedAt`, and guards `fileFor()` against path traversal.
+
+## Selecting a backend (`src/server/index.ts`)
+
+`getRepository()` lazily constructs and memoizes the active store, chosen by the
+`AWS_FLOW_REPOSITORY` env var (default `"file"`). The `switch` already has
+commented slots for `"postgres"` and `"dynamodb"`:
+
+```ts
+const kind = process.env.AWS_FLOW_REPOSITORY ?? "file";
+switch (kind) {
+  // case "postgres": instance = new PostgresRepository(); break;
+  // case "dynamodb": instance = new DynamoRepository(); break;
+  case "file":
+  default:
+    instance = new FileRepository();
+    break;
+}
+```
+
+The instance is memoized as a process-wide singleton, so `AWS_FLOW_REPOSITORY`
+must be set before the first request. `resetRepository()` clears the memo (used
+in tests that switch backends).
+
+## Swapping to Postgres/RDS or DynamoDB
+
+A new backend implements the five-method `Repository` interface and is
+registered in the `getRepository()` switch — **no caller changes**. Sketch:
+
+```ts
+// src/server/postgresRepository.ts
+export class PostgresRepository implements Repository {
+  async list() {
+    /* SELECT id,name,description,jsonb_array_length(resources),updated_at … */
+  }
+  async get(id) {
+    /* SELECT doc FROM graphs WHERE id = $1 */
+  }
+  async create(g) {
+    /* INSERT … RETURNING; set id=gen_random_uuid(), created_at/updated_at=now() */
+  }
+  async update(id, g) {
+    /* UPDATE … WHERE id=$1 RETURNING; null if 0 rows */
+  }
+  async remove(id) {
+    /* DELETE … WHERE id=$1; return rowCount>0 */
+  }
+}
+```
+
+Store the full `InfrastructureGraph` as a JSONB column (Postgres) or a single
+item (DynamoDB, partition key = `id`); `list()` projects to `GraphSummary`.
+Preserve the contract the file store establishes: server-assigned ids,
+server-stamped timestamps, `SCHEMA_VERSION` on every write, and `null`/`false`
+on missing records.
+
+## Environment variables
+
+| Env var               | Default        | Purpose                                                               |
+| --------------------- | -------------- | --------------------------------------------------------------------- |
+| `AWS_FLOW_REPOSITORY` | `file`         | Persistence backend (`file`; `postgres`/`dynamodb` are designed-for). |
+| `AWS_FLOW_DATA_DIR`   | `.data/graphs` | Directory for the file-backed store.                                  |

@@ -1,0 +1,88 @@
+---
+sidebar_position: 3
+title: Domain Data Model
+---
+
+# The Domain Data Model
+
+The persisted representation of an AWS environment lives in `src/aws/model.ts`.
+It is **deliberately decoupled from rendering**: a resource references a
+`ServiceDefinition` by id and stores config keyed by that service's
+`ConfigField` keys. This is exactly what the server stores and what the MCP
+importer produces.
+
+## Entities
+
+- **`Account`** — an AWS account in scope: `accountId` (12-digit), `name`,
+  optional `environment` (`"prod" | "staging" | …`) and `color`.
+- **`RegionRef`** — `{ code, name }`. The common set lives in
+  `src/aws/regions.ts` (`REGIONS`, `regionName(code)`); extend freely.
+- **`ResourceInstance`** — a concrete instance of a service:
+  - `serviceId` references `ServiceDefinition.id`.
+  - **Placement / scoping:** `accountId`, `region`, and `parentId`.
+  - `config: Record<string, unknown>` keyed by the service's `ConfigField` keys.
+  - `tags`, `arn` (real ARN when known), and `source`
+    (`"manual" | "imported" | "mcp"` — drives trust/edit affordances).
+  - `position?: CanvasPosition` (`x, y, w, h`) — presentation kept separate from
+    data.
+- **`Relationship`** — a typed, directional (or symmetric) edge:
+  `{ id, from, to, kind, label?, source? }` where `from`/`to` are
+  `ResourceInstance.id`s and `kind` is a `RelationshipKind`.
+- **`InfrastructureGraph`** — the top-level persisted entity: `id`, `name`,
+  `accounts[]`, `resources[]`, `relationships[]`, optional `viewport`,
+  `createdAt`/`updatedAt` (stamped by the repository, never by scripts), and
+  `schemaVersion` (`SCHEMA_VERSION = 1`, for forward migration).
+
+```ts
+export interface InfrastructureGraph {
+  id: string;
+  name: string;
+  description?: string;
+  accounts: Account[];
+  resources: ResourceInstance[];
+  relationships: Relationship[];
+  viewport?: Viewport;
+  createdAt?: string;
+  updatedAt?: string;
+  schemaVersion: number;
+}
+```
+
+## Containment via `parentId`
+
+Logical containment is modeled as a single field, `ResourceInstance.parentId`: a
+VPC contains subnets, a subnet contains EC2 instances, etc. This is a tree
+reference, distinct from the relationship graph. Helpers:
+
+- `childrenOf(graph, parentId)` — direct children.
+- `resourcesByAccount(graph, accountId)`.
+- `relationshipsOf(graph, resourceId)`.
+
+:::note
+Containment is _modeled_ today but nested visual rendering (drawing children
+inside their parent container) is phase-2. See [Roadmap](./roadmap.md).
+:::
+
+## Placement scopes
+
+`ServiceDefinition.scope` (`global | region | az | vpc | subnet`) describes where
+a resource conceptually belongs and is the basis for placement validation and
+future layout: IAM is `global`, an S3 bucket is `region`-scoped, a subnet is
+`az`-scoped, an EC2 instance must sit inside a subnet, and so on.
+
+## Validation & summaries
+
+- `validateGraph(graph)` returns structural errors: duplicate resource ids,
+  `parentId`s pointing at missing resources, and relationships referencing
+  missing `from`/`to`. The API enforces this on every write (see
+  [Persistence](./persistence.md)). **Wire into CI** (see
+  [Roadmap](./roadmap.md)).
+- `summarize(graph) → GraphSummary` produces the lightweight shape list
+  endpoints return (avoids shipping full graphs).
+- `emptyGraph(name)` produces a minimal valid graph; `id`/timestamps are
+  assigned on persist.
+
+A separate runtime shape check lives in `src/server/graphSchema.ts`
+(`isInfrastructureGraph`, `hasGraphCollections`): the model is a compile-time
+contract only, so data crossing a trust boundary (request bodies, JSON on disk)
+is structurally validated before being treated as an `InfrastructureGraph`.
