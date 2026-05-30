@@ -1,0 +1,7 @@
+.next
+node_modules
+.data
+*.tsbuildinfo
+package-lock.json
+website/build
+website/.docusaurus
