@@ -1,8 +1,6 @@
-/* Debug: ensure edges and minimap do not block mouse events */
+/* Edges are a passive render layer; the minimap opts back into pointer events
+   in its own rule below so it can be clicked/dragged to navigate. */
 .edges {
-  pointer-events: none;
-}
-.minimap {
   pointer-events: none;
 }
 .world,
@@ -417,11 +415,77 @@ svg.edges {
   border-radius: 12px;
   overflow: hidden;
   backdrop-filter: blur(6px);
+  /* Interactive: click/drag the minimap to navigate. */
+  pointer-events: auto;
+  z-index: 4;
 }
 .minimap canvas {
   width: 100%;
   height: 100%;
   display: block;
+  cursor: pointer;
+}
+
+/* On-canvas zoom controls */
+.zoom-controls {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 4;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(12, 20, 38, 0.85);
+  border: 1px solid #203055;
+  border-radius: 12px;
+  backdrop-filter: blur(6px);
+}
+.zoom-controls button {
+  background: #17213a;
+  color: var(--text);
+  border: 1px solid #223055;
+  border-radius: 8px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  transition: 0.15s ease;
+}
+.zoom-controls button:hover {
+  background: #1b2644;
+}
+.zoom-controls .zoom-level {
+  font-size: 12px;
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty-state hint on a blank canvas */
+.empty-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 1;
+  color: var(--sub);
+}
+.empty-hint-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #c3d2ea;
+}
+.empty-hint-sub {
+  font-size: 13px;
+  color: var(--sub);
 }
 
 .help {

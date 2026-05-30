@@ -16,6 +16,7 @@ import {
 } from "../aws/rules";
 import { listGraphs, getGraph, createGraph, updateGraph } from "../lib/api";
 import { importIaC } from "../aws/iac";
+import { zoomAbout, zoomByFactor, fitView, boundsOf, type Rect } from "../canvas/geometry";
 
 interface FlowContextValue {
   state: {
@@ -57,6 +58,10 @@ interface FlowContextValue {
   drawMinimap: () => void;
   fitToView: () => void;
   center: () => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  zoomReset: () => void;
+  zoomToSelection: () => void;
 
   // History
   undo: () => void;
@@ -197,6 +202,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateRelationshipKind: storeUpdateRelationshipKind,
     updateResourcePosition,
     setViewport: storeSetViewport,
+    getViewport,
     commitCurrentState,
     setSelection: storeSetSelection,
     connect: storeConnect,
@@ -229,8 +235,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [iOnMouseUp, commitCurrentState],
   );
   const onWheelZoom = useCallback(
-    (e: WheelEvent) => iOnWheelZoom(e, store.viewport, storeSetViewport),
-    [iOnWheelZoom, store.viewport, storeSetViewport],
+    (e: WheelEvent) => iOnWheelZoom(e, getViewport(), storeSetViewport),
+    [iOnWheelZoom, getViewport, storeSetViewport],
   );
 
   const onNodeMouseDown = useCallback(
@@ -293,6 +299,50 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => iCenter(store.viewport, storeSetViewport),
     [iCenter, store.viewport, storeSetViewport],
   );
+
+  /** Canvas-wrap pixel size (falls back to the window if not yet mounted). */
+  const viewSize = useCallback(() => {
+    const el = worldRef.current?.parentElement as HTMLElement | null;
+    const r = el?.getBoundingClientRect();
+    return { width: r?.width ?? window.innerWidth, height: r?.height ?? window.innerHeight };
+  }, []);
+
+  /** Zoom about the viewport centre by a multiplicative factor. */
+  const zoomBy = useCallback(
+    (factor: number) => {
+      const v = viewSize();
+      storeSetViewport(zoomByFactor(getViewport(), { x: v.width / 2, y: v.height / 2 }, factor));
+    },
+    [viewSize, getViewport, storeSetViewport],
+  );
+  const zoomIn = useCallback(() => zoomBy(1.2), [zoomBy]);
+  const zoomOut = useCallback(() => zoomBy(1 / 1.2), [zoomBy]);
+
+  /** Reset to 100% (scale 1) keeping the viewport centre fixed. */
+  const zoomReset = useCallback(() => {
+    const v = viewSize();
+    storeSetViewport(zoomAbout(getViewport(), { x: v.width / 2, y: v.height / 2 }, 1));
+  }, [viewSize, getViewport, storeSetViewport]);
+
+  /** Frame the current selection (falls back to fit-all when nothing is selected). */
+  const zoomToSelection = useCallback(() => {
+    const ids = store.selectedIds.length
+      ? store.selectedIds
+      : store.selection?.type === "node"
+        ? [store.selection.id]
+        : [];
+    if (ids.length === 0) {
+      iFitToView(store.resources, worldRef, storeSetViewport);
+      return;
+    }
+    const idSet = new Set(ids);
+    const boxes: Rect[] = store.resources
+      .filter((r) => idSet.has(r.id))
+      .map((r) => r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE });
+    const bounds = boundsOf(boxes);
+    if (!bounds) return;
+    storeSetViewport(fitView(bounds, viewSize(), { maxScale: 1.4 }));
+  }, [store.selectedIds, store.selection, store.resources, iFitToView, storeSetViewport, viewSize]);
 
   // ---- Validation + rule suggestions -------------------------------------
   // Expose STRUCTURED results; the Inspector renders them as React elements
@@ -556,6 +606,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     drawMinimap,
     fitToView,
     center,
+    zoomIn,
+    zoomOut,
+    zoomReset,
+    zoomToSelection,
 
     undo: store.undo,
     redo: store.redo,

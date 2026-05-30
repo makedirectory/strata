@@ -42,6 +42,10 @@ export function useFlowStore() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [mode, setMode] = useState<CanvasMode>("move");
   const [selection, setSelection] = useState<Selection>(null);
+  // Multi-selection set (marquee / group operations). The single `selection`
+  // above still drives the Inspector detail view; `selectedIds` drives group
+  // move, multi-delete and the selected outline for every member.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [graphId, setGraphId] = useState<string>("");
   // Guards against re-committing to history while an undo/redo restore is in
   // flight. Set synchronously in `applyState` and cleared on the next
@@ -114,6 +118,7 @@ export function useFlowStore() {
       isRestoringRef.current = true;
       setLive(state);
       setSelection(null);
+      setSelectedIds([]);
       // Clear on the next microtask rather than a macrotask (setTimeout): this
       // runs before any subsequent user-triggered macrotask could synchronously
       // call a commit, closing the race window.
@@ -285,6 +290,12 @@ export function useFlowStore() {
     setViewport(vp);
   }, []);
 
+  // Read the live viewport synchronously. Rapid wheel/pinch/momentum events can
+  // fire several times before React re-renders, so handlers that chain off the
+  // current viewport must read the mirror (updated in `setViewportSynced`)
+  // rather than the closed-over React state to avoid dropping deltas.
+  const getViewport = useCallback(() => liveRef.current.viewport, []);
+
   // Keep graphId in the live mirror when set directly (e.g. after a save).
   const setGraphIdSynced = useCallback((id: string) => {
     liveRef.current = { ...liveRef.current, graphId: id };
@@ -299,12 +310,15 @@ export function useFlowStore() {
     accounts,
     mode,
     selection,
+    selectedIds,
     graphId,
 
     // Setters
     setViewport: setViewportSynced,
+    getViewport,
     setMode,
     setSelection,
+    setSelectedIds,
     setGraphId: setGraphIdSynced,
 
     // Actions

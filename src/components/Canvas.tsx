@@ -23,6 +23,11 @@ export const Canvas: React.FC = () => {
     duplicateSelection,
     groupIntoVPC,
     setSpacePressed,
+    zoomIn,
+    zoomOut,
+    zoomReset,
+    zoomToSelection,
+    fitToView,
   } = useFlow();
 
   // Drag and drop — scoped to the canvas element so drops elsewhere in the
@@ -158,6 +163,31 @@ export const Canvas: React.FC = () => {
         onMouseDown={onCanvasMouseDown}
       />
       <div className="overlay" aria-hidden="true" onClick={onCanvasClick} />
+      {state.resources.length === 0 && (
+        <div className="empty-hint" aria-hidden="true">
+          <div className="empty-hint-title">Nothing here yet</div>
+          <div className="empty-hint-sub">
+            Drag a service from the palette, load a preset, or Import IaC.
+          </div>
+        </div>
+      )}
+      <div className="zoom-controls" role="group" aria-label="Zoom controls">
+        <button type="button" onClick={zoomIn} title="Zoom in">
+          +
+        </button>
+        <button type="button" onClick={zoomOut} title="Zoom out">
+          −
+        </button>
+        <button type="button" className="zoom-level" onClick={zoomReset} title="Reset to 100%">
+          {Math.round(state.viewport.scale * 100)}%
+        </button>
+        <button type="button" onClick={fitToView} title="Fit all to view">
+          Fit
+        </button>
+        <button type="button" onClick={zoomToSelection} title="Zoom to selection">
+          ⤢
+        </button>
+      </div>
       <div className="minimap">
         <canvas ref={minimapRef} aria-hidden="true" />
       </div>
