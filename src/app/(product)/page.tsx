@@ -904,15 +904,29 @@ const COMMON_DISCOVERY_TYPES = new Set([
   "AWS::DynamoDB::Table",
 ]);
 
+/**
+ * True on a shared/hosted deployment. The hosted instance must NOT fall back to
+ * the operator's ambient credentials, so the UI requires the user to bring
+ * their own keys (and the /api/discover route enforces the same). Inlined at
+ * build time from the public env var.
+ */
+const STRATA_HOSTED =
+  process.env.NEXT_PUBLIC_STRATA_HOSTED === "1" ||
+  process.env.NEXT_PUBLIC_STRATA_HOSTED === "true";
+
 /** "Connect to AWS" discovery sub-flow: source → scope → discover → review →
- *  import. Live scans run server-side via /api/discover (ambient credentials,
- *  never in the browser); the paste path normalises an existing export. */
+ *  import. Live scans run server-side via /api/discover; on a hosted deployment
+ *  the user brings their own credentials (sent per-request, never stored). The
+ *  paste path normalises an existing export with no credentials at all. */
 function ConnectDialog() {
   const { connectOpen, closeConnect, importDiscoveredGraph } = useFlow();
   const allTypes = React.useMemo<DiscoveryType[]>(() => listDiscoverableTypes(), []);
 
   const [source, setSource] = React.useState<"live" | "paste">("live");
   const [region, setRegion] = React.useState("us-east-1");
+  const [accessKeyId, setAccessKeyId] = React.useState("");
+  const [secretAccessKey, setSecretAccessKey] = React.useState("");
+  const [sessionToken, setSessionToken] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(
     () =>
       new Set(allTypes.filter((t) => COMMON_DISCOVERY_TYPES.has(t.cfnType)).map((t) => t.cfnType)),
@@ -956,7 +970,14 @@ function ConnectDialog() {
     setError(null);
     setPhase("running");
     try {
-      const result = await runDiscovery({ region, types: [...selected] });
+      const creds = accessKeyId.trim()
+        ? {
+            accessKeyId: accessKeyId.trim(),
+            secretAccessKey: secretAccessKey.trim(),
+            sessionToken: sessionToken.trim() || undefined,
+          }
+        : undefined;
+      const result = await runDiscovery({ region, types: [...selected], creds });
       setFound(result.resources);
       setScanned(result.scanned);
       setWarnings(result.warnings);
@@ -1029,6 +1050,38 @@ function ConnectDialog() {
         {source === "live" ? (
           <div className="connect-body">
             <label className="export-field">
+              <span>Access key ID{STRATA_HOSTED ? "" : " (optional)"}</span>
+              <input
+                value={accessKeyId}
+                onChange={(e) => setAccessKeyId(e.target.value)}
+                placeholder="AKIA… / ASIA…"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label className="export-field">
+              <span>Secret access key</span>
+              <input
+                type="password"
+                value={secretAccessKey}
+                onChange={(e) => setSecretAccessKey(e.target.value)}
+                placeholder="••••••••••••••••"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label className="export-field">
+              <span>Session token (recommended)</span>
+              <input
+                type="password"
+                value={sessionToken}
+                onChange={(e) => setSessionToken(e.target.value)}
+                placeholder="Temporary STS credentials — leave blank for permanent keys"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label className="export-field">
               <span>Region</span>
               <input
                 value={region}
@@ -1059,14 +1112,23 @@ function ConnectDialog() {
               ))}
             </div>
             <div className="connect-note">
-              Runs on this server using its AWS credentials (SSO / profile / env). Credentials never
-              reach the browser or the diagram. Relationships aren&apos;t inferred from Cloud
-              Control — discovered resources land as nodes you can wire up.
+              Use <strong>temporary, read-only</strong> credentials — run{" "}
+              <code>aws sts get-session-token</code> or assume a read-only role, and prefer the{" "}
+              <code>ReadOnlyAccess</code> policy. Keys are sent over HTTPS, used for this one scan,
+              and never stored, logged, or saved into the diagram.
+              {!STRATA_HOSTED &&
+                " Leave the keys blank to use this server's own credentials (local use only)."}{" "}
+              Relationships aren&apos;t inferred from Cloud Control — discovered resources land as
+              nodes you can wire up.
             </div>
             <div className="connect-actions">
               <button
                 className="btn-start"
-                disabled={phase === "running" || selected.size === 0}
+                disabled={
+                  phase === "running" ||
+                  selected.size === 0 ||
+                  (STRATA_HOSTED && !(accessKeyId.trim() && secretAccessKey.trim()))
+                }
                 onClick={runLive}
               >
                 {phase === "running" ? "Scanning…" : "Discover"}

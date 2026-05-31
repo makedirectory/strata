@@ -106,11 +106,27 @@ export async function deleteGraph(id: string): Promise<void> {
   if (!res.ok) await throwError(res);
 }
 
-/** POST /api/discover → run a live Cloud Control scan (server-side, ambient creds). */
+/**
+ * Static AWS credentials a user supplies to scan their own account. Sent over
+ * HTTPS for a single request and used only in-memory server-side — never stored.
+ */
+export interface ScanCreds {
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+}
+
+/**
+ * POST /api/discover → run a live Cloud Control scan.
+ * Pass `creds` to scan with the caller's own credentials (the only option on a
+ * hosted deployment). Omit them to use the server's default credential chain —
+ * appropriate only for a single-user local deployment.
+ */
 export async function runDiscovery(opts: {
   region: string;
   types: string[];
   accountId?: string;
+  creds?: ScanCreds;
 }): Promise<DiscoverResult> {
   const res = await fetch("/api/discover", {
     method: "POST",
