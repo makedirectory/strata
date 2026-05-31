@@ -53,10 +53,28 @@ npm test        # run the Vitest suite
 
 ### Configuration
 
-| Env var               | Default        | Purpose                                                               |
-| --------------------- | -------------- | --------------------------------------------------------------------- |
-| `AWS_FLOW_REPOSITORY` | `file`         | Persistence backend (`file`; `postgres`/`dynamodb` are designed-for). |
-| `AWS_FLOW_DATA_DIR`   | `.data/graphs` | Directory for the file-backed store.                                  |
+| Env var                     | Default        | Purpose                                                               |
+| --------------------------- | -------------- | --------------------------------------------------------------------- |
+| `AWS_FLOW_REPOSITORY`       | `file`         | Persistence backend (`file`; `postgres`/`dynamodb` are designed-for). |
+| `AWS_FLOW_DATA_DIR`         | `.data/graphs` | Directory for the file-backed store.                                  |
+| `AWS_FLOW_API_TOKEN`        | _(unset)_      | If set, the graph API requires `Authorization: Bearer <token>`.       |
+| `NEXT_PUBLIC_STRATA_HOSTED` | _(unset)_      | Set to `1` on any **shared/hosted** deployment (see below).           |
+
+#### Live discovery & credentials
+
+The **Connect to AWS → Live scan** flow runs server-side. With no credentials in
+the request, it uses the server process's _default credential chain_ (env vars /
+shared profile / SSO / instance role) — fine for a **single-user local** run,
+where those are your own credentials.
+
+On a **shared/hosted** deployment that ambient chain would be the _operator's_
+account, so any visitor could enumerate it. Set **`NEXT_PUBLIC_STRATA_HOSTED=1`**
+(at build _and_ runtime) to disable the ambient fallback: each user must then
+bring their own AWS credentials, entered in the modal and sent over HTTPS for a
+single scan. Those keys are used in-memory only — never written to disk, logged,
+returned, or saved into a diagram. Users should supply **temporary, read-only**
+credentials (e.g. `aws sts get-session-token`, or an assumed `ReadOnlyAccess`
+role). The credential-free **Paste export** tab remains available either way.
 
 ## Project Structure
 
