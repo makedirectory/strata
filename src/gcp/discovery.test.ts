@@ -51,7 +51,12 @@ describe("GCP discoverable types", () => {
   it("derives the allow-list from the registry (gcp only)", () => {
     const types = listGcpDiscoverableTypes();
     expect(types.length).toBeGreaterThan(20);
-    expect(types.every((t) => t.assetType.includes("googleapis.com/"))).toBe(true);
+    // Every entry is a fully-formed Cloud Asset Inventory asset type
+    // (`<service>.googleapis.com/<Kind>`) — anchored so it's a format check, not
+    // a URL-host substring match.
+    expect(
+      types.every((t) => /^[a-z][a-z0-9-]*\.googleapis\.com\/[A-Za-z]+$/.test(t.assetType)),
+    ).toBe(true);
   });
 });
 
