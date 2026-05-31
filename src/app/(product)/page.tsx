@@ -386,6 +386,15 @@ function TopBar() {
         </span>{" "}
         <span style={{ fontWeight: 800 }}>Strata</span>
       </div>
+      <a
+        className="topbar-link"
+        href="/docs"
+        target="_blank"
+        rel="noreferrer"
+        title="Open the documentation (User Guide & Architecture) in a new tab"
+      >
+        Docs ↗
+      </a>
       <div className="status" id="status">
         {status}
       </div>
