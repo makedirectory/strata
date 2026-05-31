@@ -99,6 +99,10 @@ export function useFlowStore() {
   // move, multi-delete and the selected outline for every member.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [graphId, setGraphId] = useState<string>("");
+  // True when the model has changed since the last save/load — i.e. there is
+  // unsaved work that a replace (import / preset / load / clear) would lose. Set
+  // on every committed change; cleared by `markSaved` after save/server-load.
+  const [dirty, setDirty] = useState<boolean>(false);
   // Guards against re-committing to history while an undo/redo restore is in
   // flight. Set synchronously in `applyState` and cleared on the next
   // microtask so any synchronous commit calls triggered by the restore are
@@ -124,6 +128,10 @@ export function useFlowStore() {
   const record = useCallback(
     (state: FlowState) => {
       if (isRestoringRef.current) return;
+      // Any committed change (edit, import, preset, clear) is unsaved work until
+      // the next save/server-load. The initial history seed uses `commit`
+      // directly, so it never trips this.
+      setDirty(true);
       commit(state);
     },
     [commit],
@@ -399,8 +407,9 @@ export function useFlowStore() {
     addResource("vpc", pos.x - 80, pos.y - 80);
   }, [selection, addResource]);
 
+  // Reset to an empty model. Confirmation now lives in the useFlow unsaved-work
+  // guard (which wraps every replace path), so this primitive never prompts.
   const clear = useCallback(() => {
-    if (typeof confirm === "function" && !confirm("Clear canvas?")) return;
     mutate(() => ({ resources: [], relationships: [] }));
     setSelection(null);
     setSelectedIds([]);
@@ -462,6 +471,10 @@ export function useFlowStore() {
     setGraphId(id);
   }, []);
 
+  /** Mark the current model as persisted (clears the unsaved-work flag). Call
+   *  after a successful save or server load. */
+  const markSaved = useCallback(() => setDirty(false), []);
+
   return {
     // State
     resources,
@@ -485,6 +498,7 @@ export function useFlowStore() {
     selection,
     selectedIds,
     graphId,
+    dirty,
 
     // Setters
     setViewport: setViewportSynced,
@@ -510,6 +524,7 @@ export function useFlowStore() {
     setSelection,
     setSelectedIds,
     setGraphId: setGraphIdSynced,
+    markSaved,
 
     // Actions
     addResource,

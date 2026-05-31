@@ -187,6 +187,20 @@ interface FlowContextValue {
   importIaCDialog: () => void;
   clear: () => void;
   loadPreset: (presetName: string) => void;
+
+  // ---- Start hub + unsaved-work guard (Flow 2) ----
+  /** True when there are unsaved changes a replace action would lose. */
+  dirty: boolean;
+  /** Whether the "Start a diagram" hub modal is open. */
+  startHubOpen: boolean;
+  openStartHub: () => void;
+  closeStartHub: () => void;
+  /** Start a fresh blank diagram (guarded by the unsaved-work check). */
+  startBlank: () => void;
+  /** Whether the replace-confirmation dialog is showing. */
+  replaceConfirmOpen: boolean;
+  /** Resolve the pending replace confirmation. "save" persists first. */
+  resolveReplaceConfirm: (choice: "save" | "discard" | "cancel") => void;
   runValidateUI: () => void;
   runRulesUI: () => void;
   saveToServer: () => void;
@@ -245,6 +259,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCollapsedIds,
     expandGroup,
     setFocusedContainerId,
+    clear: storeClear,
+    markSaved: storeMarkSaved,
   } = store;
 
   // Destructure the stable (useCallback) members so handler deps below stay
@@ -268,6 +284,27 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
   // Transient alignment guides shown while dragging a node (world coordinates).
   const [guides, setGuides] = React.useState<GuideLine[]>([]);
+
+  // ---- Start hub + unsaved-work guard (Flow 2) --------------------------
+  const [startHubOpen, setStartHubOpen] = React.useState(false);
+  const [replaceConfirmOpen, setReplaceConfirmOpen] = React.useState(false);
+  // Resolver for the in-flight confirmReplaceIfDirty() promise.
+  const replaceResolverRef = useRef<((proceed: boolean) => void) | null>(null);
+  const openStartHub = useCallback(() => setStartHubOpen(true), []);
+  const closeStartHub = useCallback(() => setStartHubOpen(false), []);
+
+  /**
+   * Gate any graph-replacing action behind an unsaved-work check. Resolves
+   * `true` immediately when there is nothing to lose; otherwise opens the
+   * confirm dialog and resolves once the user chooses (true = proceed).
+   */
+  const confirmReplaceIfDirty = useCallback((): Promise<boolean> => {
+    if (!store.dirty || store.resources.length === 0) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      replaceResolverRef.current = resolve;
+      setReplaceConfirmOpen(true);
+    });
+  }, [store.dirty, store.resources.length]);
 
   // `viewport` is intentionally NOT here — it lives in the Canvas-only context
   // so panels don't re-render on pan/zoom.
@@ -1039,7 +1076,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!file) return;
       const reader = new FileReader();
       reader.onerror = () => setStatus("Import failed: could not read file.");
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const parsed = JSON.parse(String(reader.result)) as unknown;
           if (typeof parsed !== "object" || parsed === null) {
@@ -1048,6 +1085,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const g = parsed as Partial<InfrastructureGraph>;
           if (!Array.isArray(g.resources)) {
             throw new Error("missing resources array");
+          }
+          // Confirm AFTER parsing, just before the destructive replace, so a
+          // bad file never costs the user their current work.
+          if (!(await confirmReplaceIfDirty())) {
+            setStatus("Import canceled.");
+            return;
           }
           storeReplaceAll({
             resources: g.resources ?? [],
@@ -1066,7 +1109,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reader.readAsText(file);
     };
     input.click();
-  }, [storeReplaceAll]);
+  }, [storeReplaceAll, confirmReplaceIfDirty]);
 
   const importIaCDialog = useCallback(() => {
     const input = document.createElement("input");
@@ -1077,11 +1120,15 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!file) return;
       const reader = new FileReader();
       reader.onerror = () => setStatus("Import failed: could not read file.");
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const text = String(reader.result);
           const result = importIaC(text, { name: file.name });
           const { graph, format, unmappedTypes, warnings } = result;
+          if (!(await confirmReplaceIfDirty())) {
+            setStatus("Import canceled.");
+            return;
+          }
           storeReplaceAll({
             resources: graph.resources ?? [],
             relationships: graph.relationships ?? [],
@@ -1106,7 +1153,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reader.readAsText(file);
     };
     input.click();
-  }, [storeReplaceAll, storeSetSelection]);
+  }, [storeReplaceAll, storeSetSelection, confirmReplaceIfDirty]);
 
   // ---- Server save / load -------------------------------------------------
   const saveToServer = useCallback(async () => {
@@ -1117,11 +1164,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? await updateGraph(store.graphId, graph)
         : await createGraph(graph);
       storeSetGraphId(saved.id);
+      storeMarkSaved();
       setStatus(`Saved "${saved.name}" (${saved.id}).`);
     } catch {
       setStatus("Save failed: API unavailable.");
     }
-  }, [buildGraph, store.graphId, storeSetGraphId]);
+  }, [buildGraph, store.graphId, storeSetGraphId, storeMarkSaved]);
 
   /** List saved graphs for the Load menu (returns [] and reports on failure). */
   const listSavedGraphs = useCallback(async (): Promise<GraphSummary[]> => {
@@ -1136,6 +1184,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /** Load a saved graph by id (replaces the current model). */
   const loadGraph = useCallback(
     async (id: string) => {
+      if (!(await confirmReplaceIfDirty())) return;
       try {
         setStatus("Loading from server…");
         const g = await getGraph(id);
@@ -1146,12 +1195,14 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           accounts: g.accounts ?? [],
           graphId: g.id,
         });
+        // Loaded state matches the server — not unsaved work.
+        storeMarkSaved();
         setStatus(`Loaded "${g.name}".`);
       } catch {
         setStatus("Load failed: API unavailable.");
       }
     },
-    [storeReplaceAll],
+    [storeReplaceAll, confirmReplaceIfDirty, storeMarkSaved],
   );
 
   /** Delete a saved graph by id (clears graphId if it was the open one). */
@@ -1170,7 +1221,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // ---- Presets ------------------------------------------------------------
   const loadPreset = useCallback(
-    (presetName: string) => {
+    async (presetName: string) => {
       const resources: ResourceInstance[] = [];
       const relationships: Relationship[] = [];
       const seed = (
@@ -1257,6 +1308,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      if (!(await confirmReplaceIfDirty())) return;
       storeReplaceAll({
         resources,
         relationships,
@@ -1265,8 +1317,51 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         graphId: "",
       });
     },
-    [storeUid, storeReplaceAll],
+    [storeUid, storeReplaceAll, confirmReplaceIfDirty],
   );
+
+  // Guarded clear — both the toolbar and ⌘K route through here, so the
+  // unsaved-work check applies everywhere. storeClear no longer prompts.
+  const clear = useCallback(async () => {
+    if (await confirmReplaceIfDirty()) storeClear();
+  }, [confirmReplaceIfDirty, storeClear]);
+
+  // Start a fresh blank diagram from the hub (guarded), then dismiss the hub.
+  const startBlank = useCallback(async () => {
+    if (await confirmReplaceIfDirty()) {
+      storeClear();
+      setStartHubOpen(false);
+    }
+  }, [confirmReplaceIfDirty, storeClear]);
+
+  // Resolve the pending replace confirmation. "save" persists the current graph
+  // first (so "Save & continue" really saves) before proceeding.
+  const resolveReplaceConfirm = useCallback(
+    async (choice: "save" | "discard" | "cancel") => {
+      setReplaceConfirmOpen(false);
+      const resolve = replaceResolverRef.current;
+      replaceResolverRef.current = null;
+      if (!resolve) return;
+      if (choice === "save") {
+        await saveToServer();
+        resolve(true);
+      } else {
+        resolve(choice === "discard");
+      }
+    },
+    [saveToServer],
+  );
+
+  // Auto-open the hub once per session on a blank canvas — an empty-state
+  // launcher, never a forced gate for a session that already has content.
+  const autoOpenedHubRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedHubRef.current) return;
+    autoOpenedHubRef.current = true;
+    if (store.resources.length === 0) setStartHubOpen(true);
+    // Mount-only: deliberately not reacting to later resource changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Locals so the memoized panel value re-computes when history depth changes
   // (the booleans, not the stable canUndo/canRedo functions, are the deps).
@@ -1358,8 +1453,15 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       exportJSON,
       importJSONDialog,
       importIaCDialog,
-      clear: store.clear,
+      clear,
       loadPreset,
+      dirty: store.dirty,
+      startHubOpen,
+      openStartHub,
+      closeStartHub,
+      startBlank,
+      replaceConfirmOpen,
+      resolveReplaceConfirm,
       runValidateUI: runValidate,
       runRulesUI: runSuggest,
       saveToServer,
@@ -1429,8 +1531,15 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       exportJSON,
       importJSONDialog,
       importIaCDialog,
-      store.clear,
+      clear,
       loadPreset,
+      store.dirty,
+      startHubOpen,
+      openStartHub,
+      closeStartHub,
+      startBlank,
+      replaceConfirmOpen,
+      resolveReplaceConfirm,
       saveToServer,
       listSavedGraphs,
       loadGraph,

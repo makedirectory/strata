@@ -184,6 +184,12 @@ export const CommandPalette: React.FC = () => {
         run: flow.toggleMode,
         editing: true,
       },
+      {
+        id: "start",
+        title: "Start / New diagram…",
+        group: "Edit",
+        run: flow.openStartHub,
+      },
       { id: "undo", title: "Undo", group: "Edit", run: flow.undo, editing: true },
       { id: "redo", title: "Redo", group: "Edit", run: flow.redo, editing: true },
       { id: "clear", title: "Clear canvas", group: "Edit", run: flow.clear, editing: true },

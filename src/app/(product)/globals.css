@@ -909,6 +909,213 @@ svg.guides {
   font-size: 13px;
 }
 
+/* ---- Primary (accent) button ---- */
+.btn-start {
+  background: var(--accent);
+  color: #0b1220;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.btn-start:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+/* ---- Start hub + replace-confirm modals ---- */
+.hub-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: rgba(3, 7, 18, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10vh;
+}
+.hub-backdrop--top {
+  z-index: 130;
+  align-items: center;
+  padding-top: 0;
+}
+.hub {
+  width: min(720px, 94vw);
+  max-height: 80vh;
+  overflow: auto;
+  background: #0e172a;
+  border: 1px solid #223055;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  padding: 20px;
+}
+.hub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.hub-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+.hub-close {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--sub);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+}
+.hub-close:hover {
+  background: #17213a;
+  border-color: #223055;
+}
+.hub-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  background: #111a2e;
+  border: 1px solid #223055;
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  color: var(--text);
+}
+.hub-card:hover:not(.hub-card--disabled) {
+  background: #17213a;
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.hub-card--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.hub-card-icon {
+  font-size: 22px;
+}
+.hub-card-title {
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hub-card-desc {
+  font-size: 12px;
+  color: var(--sub);
+  line-height: 1.4;
+}
+.hub-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--sub);
+  background: #0b1220;
+  border: 1px solid #223055;
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.hub-saved {
+  margin-top: 18px;
+  border-top: 1px solid #1a2540;
+  padding-top: 14px;
+}
+.hub-saved-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--sub);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.hub-saved-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.hub-saved-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid #223055;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text);
+}
+.hub-saved-item:hover {
+  background: #17213a;
+  border-color: var(--accent);
+}
+.hub-saved-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.hub-saved-meta {
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.confirm {
+  width: min(440px, 92vw);
+  background: #0e172a;
+  border: 1px solid #223055;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  padding: 20px;
+}
+.confirm-title {
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.confirm-msg {
+  font-size: 13px;
+  color: var(--sub);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.confirm-actions button:not(.btn-start) {
+  background: #17213a;
+  color: var(--text);
+  border: 1px solid #223055;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.confirm-actions button:not(.btn-start):hover {
+  background: #1b2644;
+}
+
+/* Start-here CTA on the empty canvas (the hint itself is non-interactive). */
+.empty-hint-cta {
+  margin-top: 10px;
+  pointer-events: auto;
+}
+
 /* ---- Presentation / read-only mode ---- */
 .app--present {
   grid-template-columns: 0 1fr 0;

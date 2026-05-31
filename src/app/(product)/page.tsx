@@ -376,6 +376,7 @@ function TopBar() {
     canRedo,
     saveToServer,
     setPresentation,
+    openStartHub,
   } = useFlow();
   return (
     <div className="topbar">
@@ -389,7 +390,11 @@ function TopBar() {
         {status}
       </div>
       <div className="toolbar">
-        {/* TODO(flow-2): mount the "Start" hub trigger here (New / Start a diagram). */}
+        <button className="btn-start" onClick={openStartHub} title="Start a new diagram">
+          + New
+        </button>
+
+        <span className="toolbar-divider" aria-hidden="true" />
 
         {/* Edit-state controls — compact icon buttons. */}
         <button
@@ -533,6 +538,235 @@ function FooterControls() {
   );
 }
 
+/** Saved-graph list rendered inside the Start hub. Fetches on mount (the hub
+ *  only mounts this when open). */
+function HubSavedGraphs() {
+  const { listSavedGraphs, loadGraph, closeStartHub } = useFlow();
+  const [graphs, setGraphs] = React.useState<GraphSummary[] | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const list = await listSavedGraphs();
+      if (alive) setGraphs(list);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [listSavedGraphs]);
+
+  if (graphs !== null && graphs.length === 0) return null;
+  return (
+    <div className="hub-saved">
+      <div className="hub-saved-title">Open a saved diagram</div>
+      {graphs === null ? (
+        <div className="menu-empty">Loading…</div>
+      ) : (
+        <div className="hub-saved-list">
+          {graphs.map((g) => (
+            <button
+              key={g.id}
+              className="hub-saved-item"
+              onClick={async () => {
+                closeStartHub();
+                await loadGraph(g.id);
+              }}
+            >
+              <span className="hub-saved-name">{g.name}</span>
+              <span className="hub-saved-meta">
+                {g.resourceCount} resource{g.resourceCount === 1 ? "" : "s"}
+                {g.updatedAt ? ` · ${new Date(g.updatedAt).toLocaleDateString()}` : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Start a diagram" launcher — a hub of mutually-exclusive starting points,
+ *  not a linear wizard. Real entries call the existing (guarded) handlers;
+ *  unbuilt capabilities are shown disabled with a "Coming soon" badge. */
+function StartHub() {
+  const {
+    startHubOpen,
+    closeStartHub,
+    startBlank,
+    importIaCDialog,
+    importJSONDialog,
+    loadPreset,
+    state,
+  } = useFlow();
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const prevFocusRef = React.useRef<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    if (!startHubOpen) return;
+    prevFocusRef.current = document.activeElement as HTMLElement | null;
+    requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>("button, [tabindex]")?.focus();
+    });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeStartHub();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      prevFocusRef.current?.focus?.();
+    };
+  }, [startHubOpen, closeStartHub]);
+
+  if (!startHubOpen) return null;
+  const hasGraph = state.resources.length > 0;
+
+  return (
+    <div className="hub-backdrop" onMouseDown={closeStartHub}>
+      <div
+        className="hub"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Start a diagram"
+        ref={dialogRef}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Start a diagram</h2>
+          <button className="hub-close" onClick={closeStartHub} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="hub-grid">
+          <button className="hub-card" onClick={() => startBlank()}>
+            <span className="hub-card-icon" aria-hidden="true">
+              ✏️
+            </span>
+            <span className="hub-card-title">Start blank</span>
+            <span className="hub-card-desc">Design from the palette on an empty canvas.</span>
+          </button>
+
+          <button
+            className="hub-card"
+            onClick={() => {
+              closeStartHub();
+              importIaCDialog();
+            }}
+          >
+            <span className="hub-card-icon" aria-hidden="true">
+              📦
+            </span>
+            <span className="hub-card-title">Import IaC</span>
+            <span className="hub-card-desc">
+              Terraform or CloudFormation. Maps known resource types into an editable diagram;
+              unmapped types are listed after import.
+            </span>
+          </button>
+
+          <button
+            className="hub-card"
+            onClick={() => {
+              closeStartHub();
+              importJSONDialog();
+            }}
+          >
+            <span className="hub-card-icon" aria-hidden="true">
+              🗂️
+            </span>
+            <span className="hub-card-title">Import Strata JSON</span>
+            <span className="hub-card-desc">Open a diagram previously exported from Strata.</span>
+          </button>
+
+          <button
+            className="hub-card"
+            onClick={() => {
+              closeStartHub();
+              void loadPreset("aws-basic");
+            }}
+          >
+            <span className="hub-card-icon" aria-hidden="true">
+              🧩
+            </span>
+            <span className="hub-card-title">Start from a template</span>
+            <span className="hub-card-desc">Begin with a ready-made architecture (Basic AWS).</span>
+          </button>
+
+          {/* Gated: not built yet (Flow 4). Shown so the path is discoverable. */}
+          <div className="hub-card hub-card--disabled" aria-disabled="true">
+            <span className="hub-card-icon" aria-hidden="true">
+              ☁️
+            </span>
+            <span className="hub-card-title">
+              Connect to AWS <span className="hub-badge">Coming soon</span>
+            </span>
+            <span className="hub-card-desc">
+              Discover live resources from your account and map them automatically.
+            </span>
+          </div>
+
+          {/* Gated: export-to-IaC (Flow 3). Only meaningful with a graph. */}
+          {hasGraph && (
+            <div className="hub-card hub-card--disabled" aria-disabled="true">
+              <span className="hub-card-icon" aria-hidden="true">
+                📤
+              </span>
+              <span className="hub-card-title">
+                Export to IaC <span className="hub-badge">Coming soon</span>
+              </span>
+              <span className="hub-card-desc">
+                Generate Terraform / CloudFormation from your diagram.
+              </span>
+            </div>
+          )}
+        </div>
+
+        <HubSavedGraphs />
+      </div>
+    </div>
+  );
+}
+
+/** Confirmation shown before a replace action would discard unsaved work.
+ *  Renders above the hub. */
+function ReplaceConfirmDialog() {
+  const { replaceConfirmOpen, resolveReplaceConfirm } = useFlow();
+  React.useEffect(() => {
+    if (!replaceConfirmOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") resolveReplaceConfirm("cancel");
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [replaceConfirmOpen, resolveReplaceConfirm]);
+
+  if (!replaceConfirmOpen) return null;
+  return (
+    <div
+      className="hub-backdrop hub-backdrop--top"
+      onMouseDown={() => resolveReplaceConfirm("cancel")}
+    >
+      <div
+        className="confirm"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="Unsaved changes"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="confirm-title">Replace the current diagram?</div>
+        <div className="confirm-msg">
+          You have unsaved changes that will be lost. Save them first, or discard and continue.
+        </div>
+        <div className="confirm-actions">
+          <button className="btn-start" onClick={() => resolveReplaceConfirm("save")}>
+            Save &amp; continue
+          </button>
+          <button onClick={() => resolveReplaceConfirm("discard")}>Discard &amp; continue</button>
+          <button onClick={() => resolveReplaceConfirm("cancel")}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Page() {
   return (
     <FlowProvider>
@@ -583,6 +817,8 @@ function Workspace() {
         </aside>
       </div>
       <CommandPalette />
+      <StartHub />
+      <ReplaceConfirmDialog />
       {presentation && (
         <button className="present-exit" onClick={() => setPresentation(false)}>
           Exit presentation

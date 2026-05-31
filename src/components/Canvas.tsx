@@ -43,6 +43,7 @@ export const Canvas: React.FC = () => {
     breadcrumb,
     focusedContainerId,
     presentation,
+    openStartHub,
   } = useFlow();
 
   // Whether a minimap click-drag is in progress (window-level so the drag keeps
@@ -284,11 +285,14 @@ export const Canvas: React.FC = () => {
         </svg>
       )}
       {state.resources.length === 0 && (
-        <div className="empty-hint" aria-hidden="true">
+        <div className="empty-hint">
           <div className="empty-hint-title">Nothing here yet</div>
           <div className="empty-hint-sub">
-            Drag a service from the palette, load a preset, or Import IaC.
+            Drag a service from the palette, or pick a starting point.
           </div>
+          <button className="empty-hint-cta btn-start" onClick={openStartHub}>
+            Start here
+          </button>
         </div>
       )}
       {breadcrumb.length > 0 && (
