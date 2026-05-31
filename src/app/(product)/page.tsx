@@ -325,7 +325,12 @@ function LoadMenu() {
   }, [listSavedGraphs]);
 
   return (
-    <Menu label="Open ▾" title="Open a saved graph from the server" align="right" onOpen={refresh}>
+    <Menu
+      label="Open ▾"
+      title="Open a diagram saved in this browser"
+      align="right"
+      onOpen={refresh}
+    >
       {(close) => (
         <>
           {graphs === null && <div className="menu-empty">Loading…</div>}
@@ -378,7 +383,7 @@ function TopBar() {
     redo,
     canUndo,
     canRedo,
-    saveToServer,
+    saveGraph,
     setPresentation,
     openStartHub,
     openExportIaC,
@@ -433,12 +438,12 @@ function TopBar() {
 
         <span className="toolbar-divider" aria-hidden="true" />
 
-        {/* Server actions — Save + Open are the two server-side file ops. */}
+        {/* Save + Open persist diagrams in this browser (localStorage). */}
         <button
           className="icon-btn"
-          onClick={saveToServer}
-          title="Save graph to server"
-          aria-label="Save to server"
+          onClick={saveGraph}
+          title="Save diagram to this browser"
+          aria-label="Save diagram"
         >
           💾
         </button>
