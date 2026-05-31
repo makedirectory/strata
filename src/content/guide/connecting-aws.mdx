@@ -1,0 +1,74 @@
+---
+title: Connecting to AWS
+---
+
+# Connecting to AWS
+
+Map a **live** AWS account onto the canvas. Strata discovers resources through the
+**Cloud Control API** and renders them as a typed diagram — the same nodes and
+containment you'd get from an import, but sourced from what's actually running.
+
+Open it from the **Start hub → Connect to AWS**, or the `⌘K` command palette.
+
+## Two ways to discover
+
+The dialog has two sources:
+
+### Live scan
+
+1. Pick a **region** (e.g. `us-east-1`).
+2. Choose the **resource types** to scan from the registry-backed list (a common
+   set is pre-selected; filter to find more).
+3. Click **Discover**.
+
+The scan runs **on the server** — the local Next.js process that serves the app —
+using its **ambient AWS credentials** (your SSO session, shared profile, or
+environment variables). Make sure that process can authenticate to the target
+account with **read-only** permissions (`cloudcontrol:ListResources` /
+`GetResource`).
+
+### Paste an export
+
+No credentials on the machine running Strata? Run the scan yourself and paste the
+result:
+
+```bash
+aws cloudcontrol list-resources --type-name AWS::S3::Bucket > buckets.json
+```
+
+Paste that output (or a JSON array of resources) into the **Paste export** tab.
+Parsing happens entirely in your browser — nothing is sent anywhere.
+
+## Reviewing and importing
+
+After discovery, Strata shows a **review** summary before changing your canvas:
+
+- how many resources are **ready to import**,
+- how many **unmapped types** were skipped (services not yet in the catalog),
+- which types were **scanned**, and any per-type warnings.
+
+Then choose how to apply them:
+
+- **Merge into canvas** — add the discovered resources to your current diagram,
+  keeping everything you already have.
+- **Replace canvas** — swap in the discovered set (you'll be prompted first if you
+  have unsaved work).
+
+Discovered resources are marked as discovered, and you can edit, connect, and
+rearrange them like any other node.
+
+## What discovery does and doesn't do
+
+- **Read-only modeling.** Discovery only lists and describes resources — Strata
+  never mutates your account.
+- **Credentials never leave the server or reach the diagram.** They stay in the
+  server process for the duration of a scan; they're never returned to the browser,
+  written to disk, or stored in a graph. Because the model keeps only the
+  configuration fields Strata recognizes, stray properties (let alone secrets)
+  can't end up in a node either.
+- **Relationships aren't inferred from Cloud Control.** Discovered resources land as
+  nodes; wire up the connections you care about on the canvas. (Containment and
+  edges from a CloudFormation/Terraform [import](/docs/guide/importing-iac) are
+  richer if you have the source.)
+- **Nothing is scanned outside the types and region you chose** — the review makes
+  the scope explicit.

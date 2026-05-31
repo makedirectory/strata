@@ -20,16 +20,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # Resolve fresh from package.json (ignore the committed, macOS-generated
+        # lockfile): both `npm ci` and a lockfile-respecting `npm install` skip
+        # the Linux native bindings it doesn't pin (rolldown, simple-git,
+        # lightningcss…). --no-package-lock makes npm fetch each runner's correct
+        # platform binaries. See npm/cli#4828.
+        run: npm install --no-package-lock --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck
@@ -51,23 +56,28 @@ jobs:
         node: [22, 24]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # Resolve fresh from package.json (ignore the committed, macOS-generated
+        # lockfile): both `npm ci` and a lockfile-respecting `npm install` skip
+        # the Linux native bindings it doesn't pin (rolldown, simple-git,
+        # lightningcss…). --no-package-lock makes npm fetch each runner's correct
+        # platform binaries. See npm/cli#4828.
+        run: npm install --no-package-lock --no-audit --no-fund
 
       - name: Test with coverage
         run: npm run test:coverage
 
       - name: Upload coverage artifact
         if: matrix.node == 22
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage/
@@ -79,16 +89,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # Resolve fresh from package.json (ignore the committed, macOS-generated
+        # lockfile): both `npm ci` and a lockfile-respecting `npm install` skip
+        # the Linux native bindings it doesn't pin (rolldown, simple-git,
+        # lightningcss…). --no-package-lock makes npm fetch each runner's correct
+        # platform binaries. See npm/cli#4828.
+        run: npm install --no-package-lock --no-audit --no-fund
 
       - name: Build
         run: npm run build

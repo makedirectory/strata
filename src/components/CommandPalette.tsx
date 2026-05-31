@@ -198,6 +198,12 @@ export const CommandPalette: React.FC = () => {
       { id: "rules", title: "Suggest rules", group: "Tools", run: flow.runRulesUI },
       { id: "export", title: "Export JSON", group: "Tools", run: flow.exportJSON },
       {
+        id: "export-iac",
+        title: "Export to IaC (Terraform / CloudFormation)",
+        group: "Tools",
+        run: flow.openExportIaC,
+      },
+      {
         id: "import-json",
         title: "Import JSON",
         group: "Tools",
@@ -212,6 +218,12 @@ export const CommandPalette: React.FC = () => {
         editing: true,
       },
       { id: "save", title: "Save to server", group: "Tools", run: flow.saveToServer },
+      {
+        id: "connect-aws",
+        title: "Connect to AWS (discover live resources)",
+        group: "Tools",
+        run: flow.openConnect,
+      },
       {
         id: "preset-basic",
         title: "Load preset: Basic AWS",

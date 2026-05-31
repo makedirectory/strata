@@ -7,6 +7,7 @@
  * message (falling back to the HTTP status text) on a non-ok response.
  */
 import type { InfrastructureGraph, GraphSummary } from "../aws/model";
+import type { DiscoverResult } from "../aws/discovery";
 
 /** True for plain (non-null, non-array) objects — safe to read keys from. */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -103,4 +104,21 @@ export async function deleteGraph(id: string): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) await throwError(res);
+}
+
+/** POST /api/discover → run a live Cloud Control scan (server-side, ambient creds). */
+export async function runDiscovery(opts: {
+  region: string;
+  types: string[];
+  accountId?: string;
+}): Promise<DiscoverResult> {
+  const res = await fetch("/api/discover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return parseJson<DiscoverResult>(
+    res,
+    (v): v is DiscoverResult => isRecord(v) && Array.isArray(v.resources),
+  );
 }
