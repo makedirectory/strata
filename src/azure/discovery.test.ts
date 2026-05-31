@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeRows,
+  parseAzureExport,
   listAzureDiscoverableTypes,
   buildResourceGraphQuery,
   discoverAzureWithClient,
@@ -70,6 +71,20 @@ describe("Azure discoverable types", () => {
     const types = listAzureDiscoverableTypes();
     expect(types.length).toBeGreaterThan(20);
     expect(types.every((t) => t.armType.startsWith("Microsoft."))).toBe(true);
+  });
+});
+
+describe("Azure paste export", () => {
+  it("parses a JSON array and the az graph `{ data: [...] }` envelope", () => {
+    const arr = parseAzureExport(JSON.stringify(rows));
+    expect(arr).toHaveLength(3);
+    const env = parseAzureExport(JSON.stringify({ data: rows }));
+    expect(env).toHaveLength(3);
+    expect(env.every((r) => r.provider === "azure")).toBe(true);
+  });
+
+  it("throws a clear error on invalid JSON", () => {
+    expect(() => parseAzureExport("nope")).toThrow(/JSON/);
   });
 });
 

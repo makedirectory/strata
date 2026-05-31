@@ -64,6 +64,31 @@ function shortName(fullName: string | undefined): string | undefined {
  * Strata-native keys (`resourceType`, `properties`). Records without a
  * resolvable type are dropped. Every result is tagged `provider: "gcp"`.
  */
+/**
+ * Parse a pasted Cloud Asset Inventory export (`gcloud asset list --format=json`)
+ * into discovered resources. Accepts a JSON array, `{ assets: [...] }`, or
+ * `{ resources: [...] }`. Throws on invalid JSON / unrecognised shape.
+ */
+export function parseGcpExport(text: string): DiscoveredResource[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  let doc: unknown;
+  try {
+    doc = JSON.parse(trimmed);
+  } catch {
+    throw new Error("Not valid JSON.");
+  }
+  if (Array.isArray(doc)) return normalizeAssets(doc);
+  const r = asRecord(doc);
+  if (r) {
+    if (Array.isArray(r.assets)) return normalizeAssets(r.assets);
+    if (Array.isArray(r.resources)) return normalizeAssets(r.resources);
+  }
+  throw new Error(
+    "Unrecognised export. Expected a JSON array of assets or `gcloud asset list --format=json` output.",
+  );
+}
+
 export function normalizeAssets(records: unknown[]): DiscoveredResource[] {
   const out: DiscoveredResource[] = [];
   for (const raw of records) {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeAssets,
+  parseGcpExport,
   listGcpDiscoverableTypes,
   discoverGcpWithClient,
   type CloudAssetClientLike,
@@ -51,6 +52,20 @@ describe("GCP discoverable types", () => {
     const types = listGcpDiscoverableTypes();
     expect(types.length).toBeGreaterThan(20);
     expect(types.every((t) => t.assetType.includes("googleapis.com/"))).toBe(true);
+  });
+});
+
+describe("GCP paste export", () => {
+  it("parses a gcloud asset list array and an { assets: [...] } envelope", () => {
+    const arr = parseGcpExport(JSON.stringify(assets));
+    expect(arr).toHaveLength(3);
+    const env = parseGcpExport(JSON.stringify({ assets }));
+    expect(env).toHaveLength(3);
+    expect(env.every((r) => r.provider === "gcp")).toBe(true);
+  });
+
+  it("throws a clear error on invalid JSON", () => {
+    expect(() => parseGcpExport("not json")).toThrow(/JSON/);
   });
 });
 

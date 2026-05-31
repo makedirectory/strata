@@ -55,6 +55,31 @@ function str(v: unknown): string | undefined {
  * group becomes the containment parent. Records without a type are dropped;
  * every result is tagged `provider: "azure"`.
  */
+/**
+ * Parse a pasted Resource Graph export (`az graph query -q "…" -o json`) into
+ * discovered resources. Accepts a JSON array, `{ data: [...] }` (the `az graph
+ * query` envelope), or `{ resources: [...] }`. Throws on invalid JSON / shape.
+ */
+export function parseAzureExport(text: string): DiscoveredResource[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  let doc: unknown;
+  try {
+    doc = JSON.parse(trimmed);
+  } catch {
+    throw new Error("Not valid JSON.");
+  }
+  if (Array.isArray(doc)) return normalizeRows(doc);
+  const r = asRecord(doc);
+  if (r) {
+    if (Array.isArray(r.data)) return normalizeRows(r.data);
+    if (Array.isArray(r.resources)) return normalizeRows(r.resources);
+  }
+  throw new Error(
+    "Unrecognised export. Expected a JSON array of resources or `az graph query -o json` output.",
+  );
+}
+
 export function normalizeRows(records: unknown[]): DiscoveredResource[] {
   const out: DiscoveredResource[] = [];
   for (const raw of records) {
