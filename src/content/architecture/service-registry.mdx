@@ -98,11 +98,12 @@ category colour fallback), `serviceIcon`, `defaultConfig` (builds the initial
 config object from `ConfigField.default`s), and `searchServices` (free-text over
 name / fullName / description / id / keywords).
 
-`validateRegistry()` is a dev-time guardrail returning `RegistryIssue[]` (each
+`validateRegistry()` is a guardrail returning `RegistryIssue[]` (each
 `level: "error" | "warn"`): `error`s for duplicate ids and unknown categories, and
 `warn`s for dangling `commonConnections` targets and shared-`cfnType` collisions.
-**This should be wired into CI** (see [Testing](/docs/architecture/testing) and
-[Roadmap](/docs/architecture/roadmap)).
+**It is wired into CI** — `src/aws/registry.test.ts` asserts there are zero
+error-level issues, so a bad catalog entry fails the build (see
+[Testing](/docs/architecture/testing)).
 
 ## How to add a new service — one catalog entry, no UI changes
 

@@ -62,14 +62,20 @@ evaluation. They're a legibility aid, not a reachability or trust analysis.
 config) to back the overlays with real reachability, clearly distinguished from the
 hand-drawn topology.
 
-### 3. Auth and multi-tenancy are absent on the server
+### 3. No per-user / per-tenant model yet
 
-The Route Handlers and `Repository` have no concept of a user, tenant, or
-authorization — any caller can list/read/write/delete any graph. This is acceptable
-for local/demo use only.
+An **opt-in shared-secret guard already exists**: set `AWS_FLOW_API_TOKEN` and every
+API route (`graphs`, `graphs/[id]`, `discover`) requires a matching
+`Authorization: Bearer` header, else `401` (`requireAuth()`, `src/server/auth.ts`;
+see [Persistence → auth guard](/docs/architecture/persistence#auth-guard)). What's
+still missing is **identity**: the token is one shared secret, so the Route Handlers
+and `Repository` have no concept of a _user_ or _tenant_ — any authenticated caller
+can list/read/write/delete any graph. Fine for a single-tenant or local deployment;
+not enough for true multi-tenancy.
 
-**Next:** add authentication, per-tenant scoping on every `Repository` method, and
-authorization checks in the Route Handlers before any multi-user deployment.
+**Next:** add real authentication (sessions / JWT / OIDC) in `auth.ts`, per-tenant
+scoping on every `Repository` method, and authorization checks in the Route
+Handlers before any multi-user deployment.
 
 ### 4. Discovery is read-only and flat
 

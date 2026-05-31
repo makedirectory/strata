@@ -221,7 +221,7 @@ interface MenuProps {
 }
 
 /** Generalized dropdown menu: trigger button + panel, with click-outside and
- *  Esc to close. Extracted from the old LoadMenu so the toolbar's File / Analyze
+ *  Esc to close. Extracted from the old LoadMenu so the toolbar's Data / Analyze
  *  menus and LoadMenu all share one accessible implementation. */
 function Menu({
   label,
@@ -328,7 +328,12 @@ function LoadMenu() {
   }, [listSavedGraphs]);
 
   return (
-    <Menu label="Open ▾" title="Open a saved graph from the server" align="right" onOpen={refresh}>
+    <Menu
+      label="Open ▾"
+      title="Open a diagram saved in this browser"
+      align="right"
+      onOpen={refresh}
+    >
       {(close) => (
         <>
           {graphs === null && <div className="menu-empty">Loading…</div>}
@@ -381,10 +386,11 @@ function TopBar() {
     redo,
     canUndo,
     canRedo,
-    saveToServer,
+    saveGraph,
     setPresentation,
     openStartHub,
     openExportIaC,
+    openConnect,
   } = useFlow();
   return (
     <div className="topbar">
@@ -435,12 +441,12 @@ function TopBar() {
 
         <span className="toolbar-divider" aria-hidden="true" />
 
-        {/* Server actions — Save + Open are the two server-side file ops. */}
+        {/* Save + Open persist diagrams in this browser (localStorage). */}
         <button
           className="icon-btn"
-          onClick={saveToServer}
-          title="Save graph to server"
-          aria-label="Save to server"
+          onClick={saveGraph}
+          title="Save diagram to this browser"
+          aria-label="Save diagram"
         >
           💾
         </button>
@@ -448,8 +454,15 @@ function TopBar() {
 
         <span className="toolbar-divider" aria-hidden="true" />
 
-        {/* File: local import/export + clear. (⌘K palette remains the full index.) */}
-        <Menu label="File ▾" title="Import, export, and clear" align="right">
+        {/* Data: bring infrastructure in (connect / import), send it out (export),
+            or clear. (⌘K palette remains the full index.) */}
+        <Menu label="Data ▾" title="Connect, import, export, and clear" align="right">
+          <MenuItem
+            onClick={openConnect}
+            title="Discover live AWS, GCP or Azure resources, or paste an export"
+          >
+            Connect to cloud…
+          </MenuItem>
           <MenuItem onClick={importJSONDialog}>Import JSON…</MenuItem>
           <MenuItem onClick={importIaCDialog} title="Import Terraform or CloudFormation">
             Import IaC (Terraform / CloudFormation)…
@@ -1024,6 +1037,20 @@ function ConnectDialog() {
   // instance won't expose — so they're only available on a local deployment.
   const liveBlocked = STRATA_HOSTED && provider !== "aws";
 
+  // Select-all acts on the currently *visible* (filtered) types: filter, then
+  // "Select all" adds just the matches. Toggles to "Clear" once all are on.
+  const allVisibleSelected =
+    visibleTypes.length > 0 && visibleTypes.every((t) => selected.has(t.native));
+  const toggleAllVisible = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const t of visibleTypes) {
+        if (allVisibleSelected) next.delete(t.native);
+        else next.add(t.native);
+      }
+      return next;
+    });
+
   const runLive = async () => {
     setError(null);
     setPhase("running");
@@ -1144,6 +1171,29 @@ function ConnectDialog() {
 
         {source === "live" ? (
           <div className="connect-body">
+            <div className="connect-privacy" role="note">
+              <span className="connect-privacy-icon" aria-hidden="true">
+                🔒
+              </span>
+              <span>
+                {provider === "aws" ? (
+                  <>
+                    Your credentials are <strong>never stored</strong>. They&apos;re sent over
+                    HTTPS, used in-memory for this one scan, then discarded — never written to disk,
+                    logged, or saved into the diagram. Prefer <strong>temporary, read-only</strong>{" "}
+                    keys.
+                  </>
+                ) : (
+                  <>
+                    No credentials are entered or sent here. The scan runs server-side with the
+                    machine&apos;s{" "}
+                    <strong>ambient {provider === "gcp" ? "ADC" : "Azure"} credentials</strong> and
+                    returns only resource descriptions — credentials are{" "}
+                    <strong>never stored</strong>, returned, or saved into the diagram.
+                  </>
+                )}
+              </span>
+            </div>
             {provider === "aws" && (
               <>
                 <label className="export-field">
@@ -1210,6 +1260,20 @@ function ConnectDialog() {
             )}
             <div className="connect-types-head">
               <span>Resource types ({selected.size} selected)</span>
+              <button
+                type="button"
+                className="connect-selectall"
+                onClick={toggleAllVisible}
+                disabled={visibleTypes.length === 0}
+                title={
+                  filter
+                    ? `${allVisibleSelected ? "Clear" : "Select"} the ${visibleTypes.length} filtered type(s)`
+                    : undefined
+                }
+              >
+                {allVisibleSelected ? "Clear" : "Select all"}
+                {filter ? ` (${visibleTypes.length})` : ""}
+              </button>
               <input
                 className="connect-filter"
                 value={filter}

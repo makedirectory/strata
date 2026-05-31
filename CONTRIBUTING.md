@@ -32,8 +32,8 @@ before sinking time into a PR, so we can align on direction.
 
 Strata is a single Next.js app (product at `/`, docs at `/docs`).
 
-**Prerequisites:** Node.js `>=20` (the version in [`.nvmrc`](./.nvmrc) is what CI
-uses — run `nvm use` if you use nvm) and npm 10+.
+**Prerequisites:** Node.js `>=22` (the version in [`.nvmrc`](./.nvmrc) is what CI
+uses — run `nvm use` if you use nvm; CI tests on Node 22 and 24) and npm 10+.
 
 ```bash
 git clone https://github.com/makedirectory/aws-flow-builder.git
@@ -45,24 +45,67 @@ npm run dev
 - Product: http://localhost:3000/
 - Docs: http://localhost:3000/docs
 
-Graphs persist to a local file store under `.data/graphs/` by default — no external
-infrastructure required.
+Saved diagrams persist in the **browser** (`localStorage`, via `src/lib/localStore.ts`) —
+no external infrastructure required, and it works on a read-only serverless host. The
+server-side `Repository` + `/api/graphs` route remain in the tree for a future durable
+backend but are no longer on the save/load path.
 
 ## Project layout
 
 ```
 src/
-  aws/         Registry + domain model (the data foundation)
-    services/  Per-category service catalogs (networking.ts is the template)
-  server/      Persistence (Repository interface + file-backed store)
-  app/         Next.js App Router: (product) canvas, (docs) Nextra, api/graphs
-  components/  UI: Palette, Canvas, Inspector
-  hooks/       Canvas state, rendering, interaction, undo/redo
-  content/     Nextra MDX docs (User Guide + Architecture)
+  aws/                  Registry + domain model (the data foundation)
+    types.ts              ServiceDefinition, ConfigField, RelationshipKind, scopes
+    registry.ts           Aggregates catalogs; lookups, search, validateRegistry()
+    categories.ts         Category + relationship presentation metadata
+    model.ts              InfrastructureGraph / ResourceInstance / Relationship
+    regions.ts            AWS region reference list
+    rules.ts              Architecture validation + best-practice rule suggestions
+    relationshipClasses.ts  Edge visual encoding (colour/dash/arrow per class)
+    overlays.ts           Topology overlays (IAM-trust, network path, heat)
+    iac.ts                IaC import (CloudFormation + Terraform → graph)
+    iacExport.ts          IaC export (graph → CloudFormation / Terraform scaffold)
+    mcp.ts                Pure transform: DiscoveredResource[] → graph
+    discovery.ts          Cloud Control descriptions → DiscoveredResource[] (no SDK)
+    services/             Per-category service catalogs (networking.ts is the template)
+  canvas/               Pure geometry + containment layout (geometry.ts, layout.ts)
+  server/               Retained server tier (kept for a future durable backend)
+    repository.ts         Repository interface
+    fileRepository.ts     Default file-backed store
+    graphSchema.ts        Zod schema for graph validation
+    auth.ts               Optional bearer-token guard (AWS_FLOW_API_TOKEN)
+    index.ts              getRepository() — backend selection via env
+  lib/
+    localStore.ts         Browser localStorage save/load (the active persistence path)
+    api.ts                Fetch client for the graph + discover APIs (discover is live)
+  app/                  Next.js App Router
+    (product)/            The Strata canvas app, served at /
+    (docs)/              Nextra docs, served at /docs
+    api/graphs/           Graph REST Route Handlers (GET/POST, GET/PUT/DELETE by id)
+    api/discover/         Live discovery Route Handler (Cloud Control SDK, server-only)
+  components/           UI: Palette, Canvas, Inspector, CommandPalette
+  hooks/               Canvas state, rendering, interaction, undo/redo
+  content/             Nextra MDX docs (User Guide + Architecture)
 ```
 
 See [`README.md`](./README.md) for the full breakdown and the in-app
 **Architecture & Engineering** docs at `/docs/architecture`.
+
+### A note on "MCP-native"
+
+Strata is described as **MCP-native**, but to be clear for contributors:
+**there is no MCP server in this repository today.** The "MCP-native" framing
+means the registry — typed relationships, `cfnType` join keys, config schemas —
+is built as a substrate an LLM/agent can reason over, and as a future ingestion
+path. Concretely:
+
+- `src/aws/mcp.ts` is a **pure, dependency-free transform** (`mapDiscoveredToGraph`)
+  that maps a flat `DiscoveredResource[]` onto the graph. It does not host or
+  speak the Model Context Protocol.
+- Live discovery today is a **Cloud Control SDK route** at
+  `src/app/api/discover/route.ts` (server-only), fed by `src/aws/discovery.ts`.
+
+So don't go looking for an MCP server process — it doesn't exist yet.
 
 ## Common workflows
 
@@ -129,8 +172,9 @@ npm run format && npm run lint && npm run typecheck && npm test && npm run build
 ## Reporting bugs & requesting features
 
 Use the [issue templates](https://github.com/makedirectory/aws-flow-builder/issues/new/choose).
-For **security vulnerabilities**, do not open a public issue — instead report
-privately via a [draft security advisory](https://github.com/makedirectory/aws-flow-builder/security/advisories/new).
+For **security vulnerabilities**, do not open a public issue — instead follow the
+[Security Policy](./SECURITY.md) and report privately via a
+[draft security advisory](https://github.com/makedirectory/aws-flow-builder/security/advisories/new).
 
 ---
 
