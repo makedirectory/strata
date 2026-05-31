@@ -1,0 +1,90 @@
+---
+title: Navigating the Canvas
+---
+
+# Navigating the Canvas
+
+The canvas is an infinite, zoomable plane. This page covers moving around it,
+selecting and arranging nodes, and the keyboard-driven shortcuts that make large
+diagrams manageable.
+
+## Pan & zoom
+
+- **Pan** — scroll with the mouse wheel or trackpad, hold **Space** and drag, or
+  drag with the middle mouse button.
+- **Zoom** — hold **⌘ / Ctrl** and scroll, or pinch on a trackpad. Zoom is
+  **cursor-anchored**: the point under your pointer stays put as you zoom.
+- **Zoom controls** (bottom-left of the canvas):
+  - **+** / **−** — zoom in / out.
+  - The **percentage** readout — click it to reset to 100%.
+  - **Fit** — frame the whole diagram.
+  - **Zoom to selection** — frame the selected node(s), or fit-all if nothing is
+    selected.
+
+A grid tracks the viewport as you move; nodes **snap to the grid** when dragged,
+and **alignment guides** appear to help you line resources up.
+
+## The minimap
+
+The minimap in the bottom-right shows the whole diagram with a box marking your
+current viewport. **Click** anywhere on it to jump there, or **drag** to scrub the
+viewport around continuously.
+
+## Selecting & arranging
+
+- **Select** — click a node (or an edge). The inspector shows its details.
+- **Multi-select** — drag a **marquee** box across empty canvas to select
+  everything inside it. Dragging any selected node moves the whole group.
+- **Delete** — select one or more nodes/edges and press **Delete** or
+  **Backspace**.
+- **Duplicate** — select a node and press **D**.
+- **Group** — select nodes and press **G** to wrap them in a new VPC.
+- **Tidy** — auto-arrange top-level nodes into a clean grid (footer control, or
+  via the command palette).
+
+## Containers & focus
+
+Resources can nest inside containers (a VPC, a subnet, an ECS cluster). Drag a node
+onto a container to move it inside, or drag it out onto empty canvas to promote it
+to the top level. Containers pack their children automatically.
+
+- **Focus a container** — double-click it to zoom in and dim everything outside.
+  A breadcrumb at the top-left shows where you are; click an ancestor or the **✕**
+  to step back out.
+- **Summarized leaves** — when a container holds many resources of the same type,
+  they collapse into a single **"N× ServiceName"** chip to cut clutter. Click the
+  chip to expand the individual nodes.
+
+## Density & level of detail
+
+The **Density** control (left panel) switches between **Comfortable** and
+**Compact** node sizing. Independently, the canvas applies **semantic
+level-of-detail**: as you zoom out, nodes shed their configuration details and
+then their labels, so a large diagram stays readable. The node you're hovering or
+have selected always renders at full detail, and its direct connections stay lit
+while the rest dims.
+
+## The command palette (⌘K)
+
+Press **⌘K** / **Ctrl K** (or **/** on empty canvas) to open the command palette —
+a single search box for almost everything:
+
+- **Run a command** — zoom, fit, tidy, toggle edge style, switch density, apply a
+  view preset, validate, export, and more.
+- **Add a service** — type a service name and pick **Add …**.
+- **Jump to a node** — type a node's name to center it. If it's hidden inside a
+  collapsed container or a summary chip, Strata expands the path to reveal it.
+
+Use the arrow keys to move, **Enter** to run, and **Esc** to close.
+
+## Keyboard shortcuts
+
+| Action                          | Shortcut                         |
+| ------------------------------- | -------------------------------- |
+| Command palette                 | `⌘K` / `Ctrl K` (or `/`)         |
+| Toggle Connect / Move mode      | `C`                              |
+| Duplicate selected node         | `D`                              |
+| Group selection into a VPC      | `G`                              |
+| Delete selected node(s)/edge(s) | `Delete` / `Backspace`           |
+| Pan (hold and drag)             | `Space`                          |
+| Undo / Redo                     | `⌘Z` / `⇧⌘Z` (`Ctrl Z`/`Ctrl Y`) |

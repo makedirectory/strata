@@ -2,41 +2,38 @@
 title: Roadmap
 ---
 
-# Gaps, Risks & Recommended Next Steps
+# Roadmap — Shipped & Still Open
 
-A candid assessment of what is incomplete or will break at scale.
+A candid assessment of what has landed recently and what remains incomplete or will
+break at scale.
 
-## 1. Nested rendering is phase-2
+## Recently shipped
 
-Containment is fully modeled (`parentId`, `isContainer`, `childrenOf`) but the
-canvas does not yet render children _inside_ their parent containers. Until it does,
-VPC → subnet → instance hierarchy is only logical, not visual.
+The canvas work (Phases 1–6) closed several of the largest gaps this doc used to
+list:
 
-**Next:** implement container layout (resources nested within their parent's bounds;
-collapse/expand).
+- **Nested rendering.** Containment (`parentId`, `isContainer`) now renders
+  visually — children are packed inside their parent's bounds, with collapse,
+  drag-to-reparent, and double-click container focus. The layout lives in a pure,
+  tested engine (`src/canvas/layout.ts`). See [Visual Mapping](/docs/architecture/visual-mapping).
+- **A renderer that scales.** `useCanvasRenderer` is now a **reconciling**
+  renderer (diff-and-patch keyed records, no `innerHTML` wipe) with **viewport
+  culling** and **semantic level-of-detail**, plus **auto-layout** ("Tidy" via
+  `gridPack`). Hand-built and imported graphs both stay responsive.
+- **IAM / network / heat as overlays.** Instead of drawing every IAM role or
+  security relationship as a peer node, these are **toggleable overlays**
+  (`src/aws/overlays.ts`) that trace the relationship graph and highlight the
+  resources involved.
+- **Cheap history.** Undo/redo (`src/hooks/useHistory.tsx`) now relies on
+  structural sharing — the store mutates immutably, so snapshots reuse unchanged
+  references instead of deep-cloning the whole graph each action.
+- **CI guardrails.** `validateRegistry()` runs in tests, and the test/lint/build
+  suite (including registry and rendered-UI snapshots) runs in GitHub Actions. See
+  [Testing](/docs/architecture/testing).
 
-## 2. The imperative full-redraw renderer will not scale
+## Still open
 
-`useCanvasRenderer.draw()` wipes the DOM (`world.innerHTML = ""`) and rebuilds every
-node each frame. For hand-built diagrams (tens of nodes) this is fine; for MCP-sized
-graphs (1000s of nodes) it will be unusable.
-
-**Next:** move to a reconciliation model (diff-and-patch or a retained renderer /
-canvas/WebGL), add **viewport culling** (only render visible nodes), and add
-**automatic layout** (dagre or ELK) so imported graphs are legible without manual
-placement.
-
-## 3. IAM / Security Groups / KMS should be overlays, not peer nodes
-
-Drawing every IAM role, security group, and KMS key as a first-class node produces
-"spaghetti" that buries the architecture.
-
-**Next:** render these as **toggleable overlays** (badges/highlights on the
-resources they apply to) rather than nodes and edges in the main graph. The
-relationship vocabulary already distinguishes them (`assumes`, `grants`, `allows`,
-`attached_to`) so the data supports it.
-
-## 4. Id strategy: UUID vs ARN coexistence
+### 1. Id strategy: UUID vs ARN coexistence
 
 Manually-created resources get server-assigned UUIDs (`randomUUID()`); imported
 resources have real ARNs. `ResourceInstance` carries both (`id` + optional `arn`),
@@ -47,25 +44,17 @@ identity across imports.
 build a merge/upsert path so re-importing an AWS account updates existing resources
 instead of duplicating them.
 
-## 5. Deep-clone-per-action history is memory-costly at scale
+### 2. Overlays are topology, not policy
 
-`useHistory.commit()` `structuredClone`s the state on every committed action
-(falling back to `JSON.parse(JSON.stringify(state))` only where `structuredClone` is
-unavailable) and retains up to 100 snapshots. Each snapshot is a full copy of all
-nodes/edges — fine for small graphs, expensive for large/imported ones.
+The IAM and network overlays trace the **modeled relationship graph** — the edges
+you drew or imported — not real security-group rules, NACLs, or IAM policy
+evaluation. They're a legibility aid, not a reachability or trust analysis.
 
-**Next:** switch to a command/patch-based (diff) history or structural sharing.
+**Next:** evaluate actual SG/NACL/route and IAM policy semantics (from imported
+config) to back the overlays with real reachability, clearly distinguished from the
+hand-drawn topology.
 
-## 6. Validators are not yet enforced in CI
-
-`validateRegistry()` and `validateGraph()` exist but only run at module load / on API
-writes (see [Testing](/docs/architecture/testing)).
-
-**Next:** expand the test harness and **run `validateRegistry()` and `validateGraph()`
-(over fixtures) in CI** so duplicate ids, dangling `commonConnections`, and structural
-breakage fail the build.
-
-## 7. Auth and multi-tenancy are absent on the server
+### 3. Auth and multi-tenancy are absent on the server
 
 The Route Handlers and `Repository` have no concept of a user, tenant, or
 authorization — any caller can list/read/write/delete any graph. This is acceptable
@@ -73,3 +62,11 @@ for local/demo use only.
 
 **Next:** add authentication, per-tenant scoping on every `Repository` method, and
 authorization checks in the Route Handlers before any multi-user deployment.
+
+### 4. Round-trip IaC export
+
+Import (Terraform / CloudFormation → diagram) works; the reverse — generating IaC
+from a diagram — is stubbed in the UI as "coming soon".
+
+**Next:** emit CloudFormation/Terraform from the graph using each service's
+`cfnType` and config schema, closing the design → code loop.
