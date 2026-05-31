@@ -8,6 +8,7 @@ import { CommandPalette } from "../../components/CommandPalette";
 import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
 import { RELATIONSHIP_CLASSES, RELATIONSHIP_CLASS_ORDER } from "../../aws/relationshipClasses";
 import type { GraphSummary } from "../../aws/model";
+import { exportIaC, type ExportFormat } from "../../aws/iacExport";
 
 const VIEW_PRESETS = [
   { id: "all", label: "All" },
@@ -377,6 +378,7 @@ function TopBar() {
     saveToServer,
     setPresentation,
     openStartHub,
+    openExportIaC,
   } = useFlow();
   return (
     <div className="topbar">
@@ -448,13 +450,11 @@ function TopBar() {
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={exportJSON}>Export JSON</MenuItem>
-          {/* TODO(flow-3): wire Export to IaC once the generator exists. */}
           <MenuItem
-            disabled
-            badge="Coming soon"
-            title="Generate Terraform / CloudFormation — coming in a later release"
+            onClick={openExportIaC}
+            title="Generate Terraform / CloudFormation from the diagram"
           >
-            Export to IaC
+            Export to IaC…
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={clear} danger title="Clear the canvas">
@@ -604,6 +604,7 @@ function StartHub() {
     importIaCDialog,
     importJSONDialog,
     loadPreset,
+    openExportIaC,
     state,
   } = useFlow();
   const dialogRef = React.useRef<HTMLDivElement>(null);
@@ -712,19 +713,23 @@ function StartHub() {
             </span>
           </div>
 
-          {/* Gated: export-to-IaC (Flow 3). Only meaningful with a graph. */}
+          {/* Export-to-IaC (Flow 3). Only meaningful with a graph. */}
           {hasGraph && (
-            <div className="hub-card hub-card--disabled" aria-disabled="true">
+            <button
+              className="hub-card"
+              onClick={() => {
+                closeStartHub();
+                openExportIaC();
+              }}
+            >
               <span className="hub-card-icon" aria-hidden="true">
                 📤
               </span>
-              <span className="hub-card-title">
-                Export to IaC <span className="hub-badge">Coming soon</span>
-              </span>
+              <span className="hub-card-title">Export to IaC</span>
               <span className="hub-card-desc">
-                Generate Terraform / CloudFormation from your diagram.
+                Generate Terraform / CloudFormation from your diagram (a scaffold to finish).
               </span>
-            </div>
+            </button>
           )}
         </div>
 
@@ -771,6 +776,109 @@ function ReplaceConfirmDialog() {
           <button onClick={() => resolveReplaceConfirm("discard")}>Discard &amp; continue</button>
           <button onClick={() => resolveReplaceConfirm("cancel")}>Cancel</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const EXPORT_FORMATS: { id: ExportFormat; label: string }[] = [
+  { id: "cloudformation-yaml", label: "CloudFormation (YAML)" },
+  { id: "cloudformation-json", label: "CloudFormation (JSON)" },
+  { id: "terraform", label: "Terraform (HCL)" },
+];
+
+/** Export-to-IaC dialog: pick a format, preview the scaffold, see the coverage
+ *  report (the honesty surface), then copy or download. */
+function ExportDialog() {
+  const { exportIaCOpen, closeExportIaC, snapshotGraph } = useFlow();
+  const [format, setFormat] = React.useState<ExportFormat>("cloudformation-yaml");
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!exportIaCOpen) return;
+    setCopied(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeExportIaC();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [exportIaCOpen, closeExportIaC, format]);
+
+  // Recompute only while open and when the format changes.
+  const result = React.useMemo(
+    () => (exportIaCOpen ? exportIaC(snapshotGraph(), format) : null),
+    [exportIaCOpen, format, snapshotGraph],
+  );
+
+  if (!exportIaCOpen || !result) return null;
+  const { content, filename, report } = result;
+
+  const download = () => {
+    const blob = new Blob([content], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  };
+  const copy = () => {
+    void navigator.clipboard?.writeText(content);
+    setCopied(true);
+  };
+
+  return (
+    <div className="hub-backdrop" onMouseDown={closeExportIaC}>
+      <div
+        className="export"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export to IaC"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Export to IaC</h2>
+          <button className="hub-close" onClick={closeExportIaC} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="export-controls">
+          <label className="export-field">
+            <span>Format</span>
+            <select value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
+              {EXPORT_FORMATS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="export-actions">
+            <button onClick={copy}>{copied ? "Copied ✓" : "Copy"}</button>
+            <button className="btn-start" onClick={download}>
+              Download {filename}
+            </button>
+          </div>
+        </div>
+
+        <div className="export-report">
+          <span>
+            {report.exported} resource{report.exported === 1 ? "" : "s"} exported
+          </span>
+          {report.skipped.length > 0 && (
+            <span className="export-warn" title={report.skipped.map((s) => s.serviceId).join(", ")}>
+              {report.skipped.length} skipped
+            </span>
+          )}
+          {report.todos.length > 0 && (
+            <span className="export-warn">{report.todos.length} field(s) need your input</span>
+          )}
+          <span className="export-note">
+            Scaffold, not deploy-ready — property names follow Strata&apos;s model; complete the
+            TODOs.
+          </span>
+        </div>
+
+        <pre className="export-preview">{content}</pre>
       </div>
     </div>
   );
@@ -827,6 +935,7 @@ function Workspace() {
       </div>
       <CommandPalette />
       <StartHub />
+      <ExportDialog />
       <ReplaceConfirmDialog />
       {presentation && (
         <button className="present-exit" onClick={() => setPresentation(false)}>
