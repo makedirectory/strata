@@ -1151,7 +1151,7 @@ function Workspace() {
         <TopBar />
         <aside className="panel">
           <h3>Palette</h3>
-          <Palette />
+          <Palette readOnly={presentation} />
           <div className="help">
             Drag items onto empty canvas or on top of a node. Hold{" "}
             <span className="kbd">Space</span> to pan. Press <span className="kbd">C</span> to

@@ -39,7 +39,7 @@ function validGraphBody() {
     resources: [
       {
         id: "r1",
-        serviceId: "ec2",
+        serviceId: "ec2-instance",
         name: "web",
         config: {},
         source: "manual",
@@ -289,6 +289,67 @@ describe("DELETE /api/graphs/[id]", () => {
   });
 });
 
+describe("malformed ids are handled gracefully (no 500)", () => {
+  // A non-UUID id makes the repository throw internally; the routes must surface
+  // a clean 404 rather than an unhandled 500 leaking internals.
+  const badId = "../../etc/passwd";
+
+  it("GET returns 404 for a malformed id", async () => {
+    const res = await idRoute.GET(jsonRequest("GET"), { params: Promise.resolve({ id: badId }) });
+    expect(res.status).toBe(404);
+  });
+
+  it("PUT returns 404 for a malformed id", async () => {
+    const res = await idRoute.PUT(jsonRequest("PUT", validGraphBody()), {
+      params: Promise.resolve({ id: badId }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE returns 404 for a malformed id", async () => {
+    const res = await idRoute.DELETE(jsonRequest("DELETE"), {
+      params: Promise.resolve({ id: badId }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("optional-field and element validation (422)", () => {
+  it("POST rejects a non-string description with 422", async () => {
+    const body = { ...validGraphBody(), description: 123 };
+    const res = await collection.POST(jsonRequest("POST", body));
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toMatch(/description must be a string/i);
+  });
+
+  it("POST rejects a non-object viewport with 422", async () => {
+    const body = { ...validGraphBody(), viewport: "nope" };
+    const res = await collection.POST(jsonRequest("POST", body));
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toMatch(/viewport must be an object/i);
+  });
+
+  it("POST rejects a primitive resource element with 422", async () => {
+    const body = { ...validGraphBody(), resources: [42], relationships: [] };
+    const res = await collection.POST(jsonRequest("POST", body));
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error).toBe("Invalid graph");
+    expect(json.details.join(" ")).toMatch(/not a valid resource object/i);
+  });
+
+  it("PUT rejects a primitive relationship element with 422", async () => {
+    const createRes = await collection.POST(jsonRequest("POST", validGraphBody()));
+    const created = await createRes.json();
+    const body = { ...validGraphBody(), relationships: ["x"] };
+    const res = await idRoute.PUT(jsonRequest("PUT", body), {
+      params: Promise.resolve({ id: created.id }),
+    });
+    expect(res.status).toBe(422);
+    expect((await res.json()).details.join(" ")).toMatch(/not a valid relationship object/i);
+  });
+});
+
 describe("optional bearer-token auth (AWS_FLOW_API_TOKEN)", () => {
   const TOKEN = "secret-token";
 
@@ -324,6 +385,16 @@ describe("optional bearer-token auth (AWS_FLOW_API_TOKEN)", () => {
     // Correct token → allowed.
     const ok = await collection.GET(authedRequest("GET", TOKEN));
     expect(ok.status).toBe(200);
+  });
+
+  it("accepts a case-insensitive Bearer scheme with the correct token", async () => {
+    process.env.AWS_FLOW_API_TOKEN = TOKEN;
+    const req = new Request("http://localhost/api/graphs", {
+      method: "GET",
+      headers: { authorization: `bearer ${TOKEN}` },
+    });
+    const res = await collection.GET(req);
+    expect(res.status).toBe(200);
   });
 
   it("is a no-op when the env var is unset (behaviour unchanged)", async () => {

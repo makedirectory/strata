@@ -104,6 +104,23 @@ describe("Palette", () => {
     expect(JSON.parse(payload)).toEqual({ serviceId: "lambda" });
   });
 
+  it("disables service items and dispatches no add event in read-only mode", () => {
+    const events: Event[] = [];
+    const listener = (e: Event) => events.push(e);
+    window.addEventListener("palette:add-service", listener);
+    try {
+      render(<Palette readOnly />);
+      const lambda = screen.getByText("Lambda").closest(".item") as HTMLButtonElement;
+      expect(lambda).toBeDisabled();
+      expect(lambda).not.toHaveAttribute("draggable", "true");
+      // A click on a disabled button fires nothing; assert no add event regardless.
+      fireEvent.click(lambda);
+      expect(events).toHaveLength(0);
+    } finally {
+      window.removeEventListener("palette:add-service", listener);
+    }
+  });
+
   it("groups services under their category section", () => {
     render(<Palette />);
     const storageHeader = screen.getByText("Storage");

@@ -14,6 +14,18 @@
  * the app ever grows a user model.
  */
 import { NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "crypto";
+
+/**
+ * Constant-time string compare. Hashes both inputs to a fixed-length digest so
+ * `timingSafeEqual` (which requires equal-length buffers) works regardless of
+ * length and the comparison leaks neither the token nor its length via timing.
+ */
+function safeEqual(a: string, b: string): boolean {
+  const ha = createHash("sha256").update(a).digest();
+  const hb = createHash("sha256").update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
 
 /**
  * Returns a 401 `NextResponse` when the request fails the optional bearer-token
@@ -26,8 +38,10 @@ export function requireAuth(req: Request): NextResponse | null {
   if (!token) return null;
 
   const header = req.headers.get("authorization") ?? "";
-  const match = /^Bearer (.+)$/.exec(header);
-  if (!match || match[1] !== token) {
+  // Scheme is matched case-insensitively (RFC 7235 auth-scheme is case-insensitive);
+  // the token itself is compared exactly, in constant time.
+  const match = /^Bearer (.+)$/i.exec(header);
+  if (!match || !safeEqual(match[1], token)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return null;

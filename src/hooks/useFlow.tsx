@@ -325,6 +325,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   const confirmReplaceIfDirty = useCallback((): Promise<boolean> => {
     if (!store.dirty || store.resources.length === 0) return Promise.resolve(true);
+    // If a confirm is already pending, resolve the superseded one as "canceled"
+    // before opening a new dialog — otherwise its awaiter hangs forever once
+    // this overwrites the resolver ref.
+    if (replaceResolverRef.current) {
+      replaceResolverRef.current(false);
+      replaceResolverRef.current = null;
+    }
     return new Promise<boolean>((resolve) => {
       replaceResolverRef.current = resolve;
       setReplaceConfirmOpen(true);

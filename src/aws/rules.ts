@@ -155,6 +155,25 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
     return [...found.values()];
   };
 
+  /**
+   * The Route Table associated with a subnet, resolved direction-agnostically:
+   * either direction of an `attached_to` edge, or a `parentId` link. Mirrors how
+   * `containerOf`/`subnetsOf` tolerate importer/MCP edge-direction differences
+   * so the IGW/NAT egress checks below don't false-positive on graphs that model
+   * the RT↔subnet attachment the other way round.
+   */
+  const isRouteTable = (n: ResourceInstance | undefined): n is ResourceInstance =>
+    !!n && n.serviceId === "route-table";
+  const routeTableFor = (sn: ResourceInstance): ResourceInstance | undefined =>
+    incoming(sn.id, "attached_to")
+      .map((e) => get(e.from))
+      .find(isRouteTable) ??
+    outgoing(sn.id, "attached_to")
+      .map((e) => get(e.to))
+      .find(isRouteTable) ??
+    (sn.parentId && isRouteTable(get(sn.parentId)) ? get(sn.parentId) : undefined) ??
+    childrenOf(graph, sn.id).find(isRouteTable);
+
   // Subnets must be contained by a VPC (parentId, contains or attached_to),
   // CIDR inside VPC.
   resources.filter(isSubnet).forEach((sn) => {
@@ -210,9 +229,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
 
   // Public subnet should have a Route Table that routes_to an IGW.
   resources.filter(isPublicSubnet).forEach((sn) => {
-    const rt = incoming(sn.id, "attached_to")
-      .map((e) => get(e.from))
-      .find((n) => n && n.serviceId === "route-table");
+    const rt = routeTableFor(sn);
     const hasIgw =
       !!rt &&
       rels.some(
@@ -243,9 +260,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
   resources
     .filter((r) => r.serviceId === "subnet-private")
     .forEach((sn) => {
-      const rt = incoming(sn.id, "attached_to")
-        .map((e) => get(e.from))
-        .find((n) => n && n.serviceId === "route-table");
+      const rt = routeTableFor(sn);
       const hasNat =
         !!rt &&
         rels.some(

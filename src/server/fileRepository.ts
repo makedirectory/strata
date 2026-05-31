@@ -24,6 +24,26 @@ async function ensureDir(): Promise<void> {
 }
 
 /**
+ * Persist a graph atomically: serialise to a temp file in the same directory,
+ * then `rename` over the target. `rename(2)` is atomic on POSIX, so readers
+ * never observe a half-written file and a crash mid-write cannot corrupt an
+ * existing graph (the previous version stays intact, the temp file is orphaned).
+ * Note: this prevents torn writes, not lost updates — concurrent writers are
+ * still last-write-wins by design for this file store.
+ */
+async function writeGraphFile(id: string, record: InfrastructureGraph): Promise<void> {
+  const target = fileFor(id);
+  const tmp = path.join(DATA_DIR, `.${id}.${randomUUID()}.tmp`);
+  await fs.writeFile(tmp, JSON.stringify(record, null, 2), "utf8");
+  try {
+    await fs.rename(tmp, target);
+  } catch (err) {
+    await fs.unlink(tmp).catch(() => {});
+    throw err;
+  }
+}
+
+/**
  * Resolve the on-disk path for an id. Ids are server-generated UUIDs; we
  * validate rather than sanitize so a malformed id fails loudly instead of
  * being silently mangled into a colliding filename (e.g. `a-b`/`a_b`). This
@@ -102,7 +122,7 @@ export class FileRepository implements Repository {
       createdAt: now,
       updatedAt: now,
     };
-    await fs.writeFile(fileFor(record.id), JSON.stringify(record, null, 2), "utf8");
+    await writeGraphFile(record.id, record);
     return record;
   }
 
@@ -117,7 +137,7 @@ export class FileRepository implements Repository {
       createdAt: existing.createdAt,
       updatedAt: new Date().toISOString(),
     };
-    await fs.writeFile(fileFor(id), JSON.stringify(record, null, 2), "utf8");
+    await writeGraphFile(id, record);
     return record;
   }
 
