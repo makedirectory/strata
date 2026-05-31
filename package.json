@@ -7,7 +7,8 @@
   },
   "packageManager": "npm@10.9.3",
   "overrides": {
-    "zod": "$zod"
+    "zod": "$zod",
+    "postcss": "$postcss"
   },
   "scripts": {
     "dev": "next dev",
@@ -45,7 +46,7 @@
     "eslint-config-next": "^15.5.18",
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.1.1",
-    "postcss": "^8",
+    "postcss": "^8.5.10",
     "prettier": "^3.8.3",
     "tailwindcss": "^3.4.1",
     "typescript": "^6.0.3",

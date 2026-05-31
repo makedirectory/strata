@@ -10,6 +10,29 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - dependencies
+    # Held back deliberately — these are coupled migrations, not drop-in bumps.
+    # Revisit each as a dedicated PR (see notes), then drop the matching ignore.
+    ignore:
+      # zod is pinned to 4.1.12 (the `$zod` override propagates it to nextra).
+      # 4.2+ breaks nextra-theme-docs' build (z.custom undefined handling) and
+      # the /docs prerender. Hold until Nextra supports newer zod.
+      - dependency-name: "zod"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-major
+      # Next 16 is a major migration and Nextra 4 targets Next 15 — bumping
+      # breaks the embedded /docs. Upgrade Next + Nextra together, deliberately.
+      - dependency-name: "next"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "eslint-config-next"
+        update-types:
+          - version-update:semver-major
+      # ESLint 9/10 require the flat-config migration and new eslint-config-next
+      # wiring (the lint script still uses `next lint`). Migrate as its own PR.
+      - dependency-name: "eslint"
+        update-types:
+          - version-update:semver-major
     groups:
       # Roll routine non-major bumps into a single PR per group.
       dev-dependencies:
