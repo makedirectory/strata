@@ -25,10 +25,16 @@ you want to know how Strata works internally, see the
 - **[Import infrastructure](/docs/guide/importing-iac)** — load a CloudFormation
   template (JSON or YAML) or Terraform `show -json` output and see it rendered
   automatically.
+- **[Connect to AWS](/docs/guide/connecting-aws)** — discover a live account via the
+  Cloud Control API (or paste an export) and map it onto the canvas.
 - **[Validate](/docs/guide/validation)** — run architecture checks and get
   best-practice rule suggestions for security groups, route tables, and more.
-- **[Save & load](/docs/guide/saving)** — persist diagrams to the server, reopen
-  them later, or export/import the diagram as portable JSON.
+- **[Save & load](/docs/guide/saving)** — persist diagrams to the app's server,
+  reopen them later, or export/import the diagram as portable JSON.
+- **[Keyboard & commands](/docs/guide/shortcuts)** — every shortcut and command in
+  one reference.
+- **[Troubleshooting](/docs/guide/troubleshooting)** — what the status messages mean
+  and how to fix the common ones.
 
 ## Launch the app
 
@@ -38,5 +44,7 @@ npm run dev
 ```
 
 The product opens at `http://localhost:3000/` and these docs at
-`http://localhost:3000/docs`. Diagrams persist to a local file store under
-`.data/graphs/` by default — no external infrastructure required.
+`http://localhost:3000/docs`. Saved diagrams persist in the **app's server datastore**
+(file-backed by default — no external infrastructure or account required). To move a
+diagram between server instances or share it, use **Export JSON** / **Import JSON**
+(see [Saving & Loading](/docs/guide/saving)).
