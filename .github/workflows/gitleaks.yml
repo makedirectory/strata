@@ -1,0 +1,44 @@
+name: Secret scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly full-history sweep, Mondays at 07:00 UTC, to catch anything that
+    # slipped in before this scan existed (or via a force-push).
+    - cron: "0 7 * * 1"
+
+# Cancel superseded runs on the same ref (e.g. rapid pushes to a PR branch).
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Full history so the scan covers every commit, not just the PR diff.
+          fetch-depth: 0
+
+      # Run the gitleaks binary directly rather than gitleaks/gitleaks-action,
+      # which now requires a GITHUB_TOKEN to scan PRs and a GITLEAKS_LICENSE for
+      # org-owned private repos. The CLI needs neither.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan for secrets
+        run: gitleaks detect --config .gitleaks.toml --no-banner --redact --verbose

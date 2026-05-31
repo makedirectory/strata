@@ -1,0 +1,20 @@
+# Gitleaks configuration.
+# Extends the upstream default ruleset, then layers on repo-specific allowlists.
+# Run locally with: gitleaks detect            (scans full git history)
+#                   gitleaks detect --no-git   (scans the working tree + untracked files)
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Repo-specific false positives"
+
+# Build output and dependencies are gitignored and never committed. The Next.js
+# build writes per-build encryption keys (previewModeEncryptionKey, encryptionKey)
+# into .next/, which the generic-api-key rule otherwise flags. Skip them so a
+# `--no-git` working-tree scan stays signal-only.
+paths = [
+  '''^\.next/''',
+  '''^node_modules/''',
+  '''^coverage/''',
+]

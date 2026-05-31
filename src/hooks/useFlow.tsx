@@ -14,7 +14,10 @@ import {
   type ValidationResult,
   type RuleSuggestion,
 } from "../aws/rules";
-import { listGraphs, getGraph, createGraph, updateGraph, deleteGraph } from "../lib/api";
+// Saved diagrams persist in the browser (localStorage), not on the server: the
+// hosted app runs on a read-only serverless filesystem. JSON export/import is
+// the way to move a diagram between browsers.
+import { listGraphs, getGraph, createGraph, updateGraph, deleteGraph } from "../lib/localStore";
 import type { GraphSummary } from "../aws/model";
 import { importIaC } from "../aws/iac";
 import {
@@ -219,7 +222,7 @@ interface FlowContextValue {
   importDiscoveredGraph: (graph: InfrastructureGraph, mode: "merge" | "replace") => void;
   runValidateUI: () => void;
   runRulesUI: () => void;
-  saveToServer: () => void;
+  saveGraph: () => void;
   /** List saved graphs for the Load menu. */
   listSavedGraphs: () => Promise<GraphSummary[]>;
   /** Load a saved graph by id. */
@@ -1208,19 +1211,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     input.click();
   }, [storeReplaceAll, storeSetSelection, confirmReplaceIfDirty]);
 
-  // ---- Server save / load -------------------------------------------------
-  const saveToServer = useCallback(async () => {
+  // ---- Save / load (browser-local) ----------------------------------------
+  const saveGraph = useCallback(async () => {
     try {
-      setStatus("Saving to server…");
+      setStatus("Saving…");
       const graph = buildGraph();
       const saved = store.graphId
         ? await updateGraph(store.graphId, graph)
         : await createGraph(graph);
       storeSetGraphId(saved.id);
       storeMarkSaved();
-      setStatus(`Saved "${saved.name}" (${saved.id}).`);
-    } catch {
-      setStatus("Save failed: API unavailable.");
+      setStatus(`Saved "${saved.name}" to this browser.`);
+    } catch (err) {
+      setStatus(
+        `Save failed: ${err instanceof Error ? err.message : "could not write to storage."}`,
+      );
     }
   }, [buildGraph, store.graphId, storeSetGraphId, storeMarkSaved]);
 
@@ -1229,7 +1234,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       return await listGraphs();
     } catch {
-      setStatus("Load failed: API unavailable.");
+      setStatus("Couldn't read saved diagrams from this browser.");
       return [];
     }
   }, []);
@@ -1239,7 +1244,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (id: string) => {
       if (!(await confirmReplaceIfDirty())) return;
       try {
-        setStatus("Loading from server…");
+        setStatus("Loading…");
         const g = await getGraph(id);
         storeReplaceAll({
           resources: g.resources ?? [],
@@ -1248,11 +1253,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           accounts: g.accounts ?? [],
           graphId: g.id,
         });
-        // Loaded state matches the server — not unsaved work.
+        // Loaded state matches what's saved — not unsaved work.
         storeMarkSaved();
         setStatus(`Loaded "${g.name}".`);
-      } catch {
-        setStatus("Load failed: API unavailable.");
+      } catch (err) {
+        setStatus(`Load failed: ${err instanceof Error ? err.message : "diagram unavailable."}`);
       }
     },
     [storeReplaceAll, confirmReplaceIfDirty, storeMarkSaved],
@@ -1264,9 +1269,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await deleteGraph(id);
         if (store.graphId === id) storeSetGraphId("");
-        setStatus("Deleted saved graph.");
+        setStatus("Deleted saved diagram.");
       } catch {
-        setStatus("Delete failed: API unavailable.");
+        setStatus("Delete failed.");
       }
     },
     [store.graphId, storeSetGraphId],
@@ -1396,13 +1401,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       replaceResolverRef.current = null;
       if (!resolve) return;
       if (choice === "save") {
-        await saveToServer();
+        await saveGraph();
         resolve(true);
       } else {
         resolve(choice === "discard");
       }
     },
-    [saveToServer],
+    [saveGraph],
   );
 
   // Auto-open the hub once per session on a blank canvas — an empty-state
@@ -1525,7 +1530,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       importDiscoveredGraph,
       runValidateUI: runValidate,
       runRulesUI: runSuggest,
-      saveToServer,
+      saveGraph,
       listSavedGraphs,
       loadGraph,
       deleteSavedGraph,
@@ -1609,7 +1614,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       openConnect,
       closeConnect,
       importDiscoveredGraph,
-      saveToServer,
+      saveGraph,
       listSavedGraphs,
       loadGraph,
       deleteSavedGraph,
