@@ -2,17 +2,22 @@
 title: MCP Integration
 ---
 
-# MCP Integration Readiness
+# Live Discovery & MCP Integration
 
-The system is structured to ingest **live AWS state** rather than only hand-drawn
-diagrams. The integration module is `src/aws/mcp.ts` — it defines the
-`DiscoveredResource` shape, `mapDiscoveredToGraph()`, and `unmappedTypes()`. A
-discovery transport (the AWS MCP server / Cloud Control API) feeds it; wiring that
-transport to a server Route Handler is the remaining step.
+The system ingests **live AWS state**, not only hand-drawn diagrams. Two layers
+cooperate:
 
-The module is intentionally a **pure, dependency-free transform**: it takes a flat
-list of `DiscoveredResource` objects and maps them onto the registry-backed graph
-the canvas already knows how to render.
+- `src/aws/mcp.ts` — the **transform**: `DiscoveredResource`,
+  `mapDiscoveredToGraph()`, and `unmappedTypes()`. A pure, dependency-free function
+  that maps a flat list of discovered resources onto the registry-backed graph the
+  canvas already renders.
+- `src/aws/discovery.ts` + `src/app/api/discover/route.ts` — the **producer** that
+  feeds the transform. This is the layer that was previously "readiness only"; it
+  is now wired up (the [Connecting to AWS](/docs/guide/connecting-aws) flow).
+
+The transform module is intentionally a **pure, dependency-free transform**: it
+takes a flat list of `DiscoveredResource` objects and maps them onto the
+registry-backed graph the canvas already knows how to render.
 
 ## `DiscoveredResource`
 
@@ -70,6 +75,27 @@ runs in three passes:
 The result must pass `validateGraph()` before persist. `unmappedTypes(resources)`
 reports the distinct CFN types with no registry entry — surfacing registry gaps to
 operators/developers.
+
+## The producer (`discovery.ts` + `/api/discover`)
+
+`src/aws/discovery.ts` is **pure and has no `@aws-sdk` import**, so it stays
+browser-safe and unit-testable with fixtures:
+
+- `listDiscoverableTypes()` — the registry-backed list of scannable CFN types
+  (canonical winners only).
+- `normalizeRecords()` — turns lenient or Cloud Control-shaped records (`TypeName`,
+  `Identifier`, `Properties`) into `DiscoveredResource[]`.
+- `parsePastedExport()` — accepts `aws cloudcontrol list-resources` output or a
+  JSON array (the paste path; runs entirely client-side).
+- `discoverWithClient(client, opts)` — scans each requested type against an injected
+  `CloudControlLike` interface; per-type failures become warnings and **every
+  attempted type is reported** (no silent caps).
+
+The AWS SDK lives **only** in `src/app/api/discover/route.ts`, a server-only Route
+Handler that lazily imports `@aws-sdk/client-cloudcontrol`, adapts the real
+`CloudControlClient` (paginated `ListResources`) to `CloudControlLike`, and runs
+with the server process's ambient credential chain. Errors are sanitised so SDK
+internals never leak.
 
 ## Credential boundary (non-negotiable)
 
