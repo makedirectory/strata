@@ -970,6 +970,20 @@ function ConnectDialog() {
       return next;
     });
 
+  // Select-all acts on the currently *visible* (filtered) types: filter, then
+  // "Select all" adds just the matches. Toggles to "Clear" once all are on.
+  const allVisibleSelected =
+    visibleTypes.length > 0 && visibleTypes.every((t) => selected.has(t.cfnType));
+  const toggleAllVisible = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const t of visibleTypes) {
+        if (allVisibleSelected) next.delete(t.cfnType);
+        else next.add(t.cfnType);
+      }
+      return next;
+    });
+
   const runLive = async () => {
     setError(null);
     setPhase("running");
@@ -1105,6 +1119,20 @@ function ConnectDialog() {
             </label>
             <div className="connect-types-head">
               <span>Resource types ({selected.size} selected)</span>
+              <button
+                type="button"
+                className="connect-selectall"
+                onClick={toggleAllVisible}
+                disabled={visibleTypes.length === 0}
+                title={
+                  filter
+                    ? `${allVisibleSelected ? "Clear" : "Select"} the ${visibleTypes.length} filtered type(s)`
+                    : undefined
+                }
+              >
+                {allVisibleSelected ? "Clear" : "Select all"}
+                {filter ? ` (${visibleTypes.length})` : ""}
+              </button>
               <input
                 className="connect-filter"
                 value={filter}
