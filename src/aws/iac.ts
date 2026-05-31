@@ -18,7 +18,13 @@
  * (only `js-yaml` for CloudFormation YAML).
  */
 import yaml from "js-yaml";
-import type { InfrastructureGraph, ResourceInstance, Relationship } from "./model";
+import type {
+  InfrastructureGraph,
+  ResourceInstance,
+  Relationship,
+  RawSource,
+  IacSource,
+} from "./model";
 import { emptyGraph, DEFAULT_NODE_SIZE } from "./model";
 import type { RelationshipKind } from "./types";
 import { getService, getServiceByCfnType } from "./registry";
@@ -34,14 +40,19 @@ export interface IacImportResult {
   warnings: string[];
 }
 
-/** A source resource normalised to a registry serviceId, before graph assembly. */
-interface ResolvedItem {
+/**
+ * A source resource normalised to a registry serviceId, before graph assembly.
+ * Exported so the GCP/Azure IaC adapters can feed the shared `buildGraph`.
+ */
+export interface ResolvedItem {
   id: string;
   serviceId: string;
   name: string;
   parentId?: string;
   properties?: Record<string, unknown>;
   relationships: { to: string; kind: RelationshipKind }[];
+  /** Verbatim provider-native source for faithful re-emit (see model `RawSource`). */
+  raw?: RawSource;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,8 +68,16 @@ const ORIGIN = 80;
  * Assemble a renderable graph from resolved items: filters config to the
  * service's known fields, lays nodes out on a grid, and emits typed
  * relationships (de-duplicated, self-loops and dangling targets dropped).
+ *
+ * Exported so the GCP (`gcp/iac.ts`) and Azure (`azure/iac.ts`) adapters reuse
+ * the *same* builder — the multi-cloud invariant is "one builder, one resolver".
+ * Pass `iacSource` to carry template-level sections for faithful re-emit.
  */
-function buildGraph(items: ResolvedItem[], name: string): InfrastructureGraph {
+export function buildGraph(
+  items: ResolvedItem[],
+  name: string,
+  iacSource?: IacSource,
+): InfrastructureGraph {
   const graph = emptyGraph(name);
   const ids = new Set(items.map((i) => i.id));
 
@@ -91,6 +110,8 @@ function buildGraph(items: ResolvedItem[], name: string): InfrastructureGraph {
     if (item.parentId && ids.has(item.parentId) && item.parentId !== item.id) {
       resource.parentId = item.parentId;
     }
+    // Carry the verbatim source for faithful IaC re-emit (lossless sidecar).
+    if (item.raw) resource.raw = item.raw;
     return resource;
   });
 
@@ -112,10 +133,12 @@ function buildGraph(items: ResolvedItem[], name: string): InfrastructureGraph {
     }
   }
   graph.relationships = relationships;
+  if (iacSource) graph.iacSource = iacSource;
   return graph;
 }
 
-function isRecord(v: unknown): v is Record<string, unknown> {
+/** Plain-object guard, shared with the GCP/Azure adapters. */
+export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
@@ -202,6 +225,13 @@ export function importCloudFormation(
     for (const d of dependsOn) addRel(d, "depends_on");
     for (const ref of refs) addRel(ref, "depends_on");
 
+    // Lossless sidecar: keep the exact Type + Properties (intrinsics intact) so
+    // export can re-emit this resource faithfully instead of a scaffold.
+    const rawSrc: RawSource = { format: "cloudformation", type: cfnType, properties: props };
+    if (dependsOn.length > 0) rawSrc.dependsOn = dependsOn;
+    if (typeof raw.Condition === "string") rawSrc.condition = raw.Condition;
+    if (isRecord(raw.Metadata)) rawSrc.metadata = raw.Metadata;
+
     items.push({
       id: logicalId,
       serviceId: svc.id,
@@ -209,6 +239,7 @@ export function importCloudFormation(
       parentId,
       properties: props,
       relationships: rels,
+      raw: rawSrc,
     });
   }
 
@@ -221,11 +252,48 @@ export function importCloudFormation(
     );
   }
   return {
-    graph: buildGraph(items, name),
+    graph: buildGraph(items, name, captureCfnSections(template)),
     format: "cloudformation",
     unmappedTypes: [...unmapped],
     warnings,
   };
+}
+
+/**
+ * Capture the template-level sections Strata doesn't model as graph nodes
+ * (Parameters/Mappings/Conditions/Outputs/Metadata/Transform) into an
+ * `IacSource` so export can re-emit a faithful template. Returns undefined when
+ * there is nothing beyond `Resources` worth carrying.
+ */
+function captureCfnSections(template: Record<string, unknown>): IacSource | undefined {
+  const src: IacSource = { format: "cloudformation" };
+  let any = false;
+  if (typeof template.AWSTemplateFormatVersion === "string") {
+    src.formatVersion = template.AWSTemplateFormatVersion;
+    any = true;
+  }
+  if (typeof template.Description === "string") {
+    src.description = template.Description;
+    any = true;
+  }
+  const sections = [
+    ["Parameters", "parameters"],
+    ["Mappings", "mappings"],
+    ["Conditions", "conditions"],
+    ["Outputs", "outputs"],
+    ["Metadata", "metadata"],
+  ] as const;
+  for (const [from, to] of sections) {
+    if (isRecord(template[from])) {
+      src[to] = template[from] as Record<string, unknown>;
+      any = true;
+    }
+  }
+  if (template.Transform !== undefined) {
+    src.transform = template.Transform;
+    any = true;
+  }
+  return any ? src : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +430,21 @@ function walkTfModule(module: TfModule | undefined, out: TfResource[]): void {
   for (const cm of module.child_modules ?? []) walkTfModule(cm, out);
 }
 
-export function importTerraform(tf: unknown, name = "Terraform Import"): IacImportResult {
+/** Provider-specific knobs for the shared Terraform importer. */
+export interface TerraformImportOptions {
+  /** HCL resource type → registry serviceId (defaults to the AWS table). */
+  typeMap?: Record<string, string>;
+  /** Property keys whose resolved value points at a containment parent. */
+  containmentKeys?: string[];
+}
+
+export function importTerraform(
+  tf: unknown,
+  name = "Terraform Import",
+  opts: TerraformImportOptions = {},
+): IacImportResult {
+  const typeMap = opts.typeMap ?? TF_TYPE_TO_SERVICE_ID;
+  const containmentKeys = opts.containmentKeys ?? ["subnet_id", "vpc_id"];
   const warnings: string[] = [];
   if (!isRecord(tf)) throw new Error("Not a Terraform JSON document.");
 
@@ -406,15 +488,16 @@ export function importTerraform(tf: unknown, name = "Terraform Import"): IacImpo
   const addresses = new Set(collected.map((r) => r.address));
 
   for (const r of collected) {
-    const serviceId = TF_TYPE_TO_SERVICE_ID[r.type];
+    const serviceId = typeMap[r.type];
     if (!serviceId) {
       unmapped.add(r.type);
       continue;
     }
     const values = r.values ?? {};
-    // Containment from a resolved vpc_id/subnet_id pointing at a known resource.
+    // Containment from a resolved reference (vpc_id/subnet_id for AWS,
+    // network/subnetwork for GCP, …) pointing at a known resource.
     let parentId: string | undefined;
-    for (const key of ["subnet_id", "vpc_id"]) {
+    for (const key of containmentKeys) {
       const v = values[key];
       if (typeof v === "string" && idToAddress.has(v)) {
         parentId = idToAddress.get(v);
