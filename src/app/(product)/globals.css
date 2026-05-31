@@ -1260,10 +1260,30 @@ svg.guides {
 .connect-types-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   font-size: 12px;
   color: var(--sub);
+}
+/* Label takes the slack so the select-all button + filter group on the right. */
+.connect-types-head > span:first-child {
+  margin-right: auto;
+}
+.connect-selectall {
+  background: #17213a;
+  color: var(--text);
+  border: 1px solid #304065;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.connect-selectall:hover:not(:disabled) {
+  border-color: #4a5f95;
+}
+.connect-selectall:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .connect-filter {
   background: #0c1426;
