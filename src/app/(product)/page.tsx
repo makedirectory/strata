@@ -911,8 +911,7 @@ const COMMON_DISCOVERY_TYPES = new Set([
  * build time from the public env var.
  */
 const STRATA_HOSTED =
-  process.env.NEXT_PUBLIC_STRATA_HOSTED === "1" ||
-  process.env.NEXT_PUBLIC_STRATA_HOSTED === "true";
+  process.env.NEXT_PUBLIC_STRATA_HOSTED === "1" || process.env.NEXT_PUBLIC_STRATA_HOSTED === "true";
 
 /** "Connect to AWS" discovery sub-flow: source → scope → discover → review →
  *  import. Live scans run server-side via /api/discover; on a hosted deployment

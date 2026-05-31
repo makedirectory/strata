@@ -105,8 +105,12 @@ describe("POST /api/discover — credential model", () => {
   });
 
   it("ignores a blank session token (sends undefined, not empty string)", async () => {
-    const res = await route.POST(post({ ...validScan, creds: { ...validCreds, sessionToken: "  " } }));
+    const res = await route.POST(
+      post({ ...validScan, creds: { ...validCreds, sessionToken: "  " } }),
+    );
     expect(res.status).toBe(200);
-    expect((lastClientConfig?.credentials as { sessionToken?: string }).sessionToken).toBeUndefined();
+    expect(
+      (lastClientConfig?.credentials as { sessionToken?: string }).sessionToken,
+    ).toBeUndefined();
   });
 });

@@ -53,12 +53,12 @@ npm test        # run the Vitest suite
 
 ### Configuration
 
-| Env var                    | Default        | Purpose                                                                                                          |
-| -------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `AWS_FLOW_REPOSITORY`      | `file`         | Persistence backend (`file`; `postgres`/`dynamodb` are designed-for).                                            |
-| `AWS_FLOW_DATA_DIR`        | `.data/graphs` | Directory for the file-backed store.                                                                             |
-| `AWS_FLOW_API_TOKEN`       | _(unset)_      | If set, the graph API requires `Authorization: Bearer <token>`.                                                  |
-| `NEXT_PUBLIC_STRATA_HOSTED`| _(unset)_      | Set to `1` on any **shared/hosted** deployment (see below).                                                      |
+| Env var                     | Default        | Purpose                                                               |
+| --------------------------- | -------------- | --------------------------------------------------------------------- |
+| `AWS_FLOW_REPOSITORY`       | `file`         | Persistence backend (`file`; `postgres`/`dynamodb` are designed-for). |
+| `AWS_FLOW_DATA_DIR`         | `.data/graphs` | Directory for the file-backed store.                                  |
+| `AWS_FLOW_API_TOKEN`        | _(unset)_      | If set, the graph API requires `Authorization: Bearer <token>`.       |
+| `NEXT_PUBLIC_STRATA_HOSTED` | _(unset)_      | Set to `1` on any **shared/hosted** deployment (see below).           |
 
 #### Live discovery & credentials
 
