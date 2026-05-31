@@ -39,8 +39,11 @@ npm run dev
 - Product: http://localhost:3000/
 - Docs: http://localhost:3000/docs
 
-Graphs persist to a local file store under `.data/graphs/` by default — **no
-external infrastructure required**.
+Saved diagrams persist in **your browser** (`localStorage`) — **no external
+infrastructure required**, and it works on a read-only serverless host. Use
+**Export / Import JSON** to move a diagram between browsers or share it. (The
+server-side `Repository` + `/api/graphs` route remain for a future durable
+backend, but the app no longer relies on them for saving.)
 
 ### Other scripts
 

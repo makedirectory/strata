@@ -217,7 +217,7 @@ export const CommandPalette: React.FC = () => {
         run: flow.importIaCDialog,
         editing: true,
       },
-      { id: "save", title: "Save to server", group: "Tools", run: flow.saveToServer },
+      { id: "save", title: "Save diagram", group: "Tools", run: flow.saveGraph },
       {
         id: "connect-aws",
         title: "Connect to AWS (discover live resources)",
