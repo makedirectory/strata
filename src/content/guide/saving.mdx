@@ -10,23 +10,30 @@ version-controllable file you can share or check into git).
 
 ## Save & load on the server
 
-- **Save** — click the Save button in the toolbar to store the current diagram on
-  the server. By default this writes to a local file store under `.data/graphs/` —
-  no external infrastructure or account required.
-- **Load** — click the Load button to reopen a previously saved diagram.
+- **Save** — click **Save** in the toolbar to store the current diagram on the
+  server. By default this writes to a local file store under `.data/graphs/` — no
+  external infrastructure or account required.
+- **Open** — click **Open ▾** for a dropdown of your saved diagrams, each showing
+  its name, resource count, and last-updated time. Click one to load it, or the
+  **✕** next to it to delete it. (Your recent diagrams also appear in the
+  **Start hub** under **+ New**.)
 
 Saved diagrams are stamped with their creation and update times automatically, so
 the most recently edited ones surface first.
+
+> **Unsaved-work guard.** Loading or importing a diagram replaces what's on the
+> canvas. If you have unsaved changes, Strata asks first — **Save & continue**,
+> **Discard & continue**, or **Cancel** — so you never lose work by accident.
 
 ## Export & import JSON
 
 For a portable copy you fully control:
 
-- **Export JSON** — downloads the current diagram as a single JSON file. This is the
-  complete diagram-as-code: every resource, its configuration, and every typed
-  relationship.
-- **Import JSON** — loads a diagram from a JSON file you previously exported,
-  replacing what's currently on the canvas.
+- **Export JSON** — from the **File** menu, downloads the current diagram as a
+  single JSON file. This is the complete diagram-as-code: every resource, its
+  configuration, and every typed relationship.
+- **Import JSON** — from the **File** menu (or the Start hub), loads a diagram from
+  a JSON file you previously exported, replacing what's currently on the canvas.
 
 Because the export is plain JSON, you can commit it to a repository, diff it across
 versions, or hand it to a teammate — it isn't locked into a proprietary datastore.
@@ -36,8 +43,8 @@ versions, or hand it to a teammate — it isn't locked into a proprietary datast
 
 ## Start over
 
-Click **Clear** to empty the canvas. If you clear by accident, **Undo**
-(`Cmd/Ctrl+Z`) brings it back.
+Choose **Clear canvas** from the **File** menu to empty the canvas. If you clear by
+accident, **Undo** (`⌘Z` / `Ctrl Z`) brings it back.
 
 ## Which should I use?
 
