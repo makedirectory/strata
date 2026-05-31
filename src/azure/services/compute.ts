@@ -1,0 +1,264 @@
+/**
+ * Azure Compute & Containers service catalog.
+ * Virtual Machines, Scale Sets, AKS, App Service, Functions and Container
+ * Instances. App Service and Functions intentionally share the ARM type
+ * `Microsoft.Web/sites` (Functions is a variant — distinct id, first-wins).
+ */
+import type { ServiceDefinition } from "../../aws/types";
+
+const compute: ServiceDefinition[] = [
+  {
+    id: "azure-vm",
+    name: "Virtual Machine",
+    fullName: "Azure Virtual Machine",
+    abbreviation: "VM",
+    provider: "azure",
+    category: "compute",
+    description: "An on-demand, scalable Linux or Windows virtual machine.",
+    icon: "🖥️",
+    scope: "region",
+    nativeType: "Microsoft.Compute/virtualMachines",
+    keywords: ["vm", "virtual machine", "compute", "iaas"],
+    configFields: [
+      {
+        key: "vmSize",
+        label: "VM Size",
+        type: "select",
+        default: "Standard_D2s_v5",
+        options: [
+          { value: "Standard_B2s", label: "Standard_B2s (2 vCPU, 4 GiB)" },
+          { value: "Standard_D2s_v5", label: "Standard_D2s_v5 (2 vCPU, 8 GiB)" },
+          { value: "Standard_D4s_v5", label: "Standard_D4s_v5 (4 vCPU, 16 GiB)" },
+          { value: "Standard_E4s_v5", label: "Standard_E4s_v5 (4 vCPU, 32 GiB)" },
+        ],
+      },
+      {
+        key: "osType",
+        label: "OS Type",
+        type: "select",
+        default: "Linux",
+        options: [
+          { value: "Linux", label: "Linux" },
+          { value: "Windows", label: "Windows" },
+        ],
+      },
+      { key: "adminUsername", label: "Admin Username", type: "string", placeholder: "azureuser" },
+      { key: "tags", label: "Tags", type: "tags" },
+    ],
+    commonConnections: [
+      { to: "azure-subnet", relationship: "attached_to", description: "VM NIC sits in a subnet" },
+      { to: "azure-nsg", relationship: "attached_to" },
+      { to: "azure-managed-disk", relationship: "attached_to" },
+      { to: "azure-public-ip", relationship: "attached_to" },
+    ],
+  },
+  {
+    id: "azure-vmss",
+    name: "VM Scale Set",
+    fullName: "Azure Virtual Machine Scale Set",
+    abbreviation: "VMSS",
+    provider: "azure",
+    category: "compute",
+    description: "A group of identical, load-balanced VMs that autoscale on demand.",
+    icon: "🧮",
+    scope: "region",
+    nativeType: "Microsoft.Compute/virtualMachineScaleSets",
+    keywords: ["vmss", "scale set", "autoscale", "compute"],
+    configFields: [
+      {
+        key: "vmSize",
+        label: "VM Size",
+        type: "string",
+        placeholder: "Standard_D2s_v5",
+        default: "Standard_D2s_v5",
+      },
+      { key: "capacity", label: "Instance Count", type: "number", default: 2 },
+      {
+        key: "upgradePolicy",
+        label: "Upgrade Policy",
+        type: "select",
+        default: "Automatic",
+        options: [
+          { value: "Automatic", label: "Automatic" },
+          { value: "Rolling", label: "Rolling" },
+          { value: "Manual", label: "Manual" },
+        ],
+      },
+    ],
+    commonConnections: [
+      { to: "azure-subnet", relationship: "attached_to" },
+      { to: "azure-load-balancer", relationship: "attached_to" },
+    ],
+  },
+  {
+    id: "azure-aks",
+    name: "AKS",
+    fullName: "Azure Kubernetes Service",
+    abbreviation: "AKS",
+    provider: "azure",
+    category: "containers",
+    description: "A managed Kubernetes cluster for deploying and scaling containers.",
+    icon: "☸️",
+    scope: "region",
+    nativeType: "Microsoft.ContainerService/managedClusters",
+    keywords: ["aks", "kubernetes", "k8s", "containers", "cluster"],
+    configFields: [
+      {
+        key: "kubernetesVersion",
+        label: "Kubernetes Version",
+        type: "string",
+        placeholder: "1.29",
+        default: "1.29",
+      },
+      { key: "nodeCount", label: "Node Count", type: "number", default: 3 },
+      {
+        key: "nodeVmSize",
+        label: "Node VM Size",
+        type: "string",
+        placeholder: "Standard_D2s_v5",
+        default: "Standard_D2s_v5",
+      },
+      {
+        key: "networkPlugin",
+        label: "Network Plugin",
+        type: "select",
+        default: "azure",
+        options: [
+          { value: "azure", label: "Azure CNI" },
+          { value: "kubenet", label: "Kubenet" },
+        ],
+      },
+    ],
+    commonConnections: [
+      { to: "azure-subnet", relationship: "attached_to" },
+      { to: "azure-managed-identity", relationship: "assumes" },
+      { to: "azure-key-vault", relationship: "reads_from" },
+    ],
+  },
+  {
+    id: "azure-app-service",
+    name: "App Service",
+    fullName: "Azure App Service (Web App)",
+    provider: "azure",
+    category: "compute",
+    description: "A fully managed platform for hosting web apps and APIs.",
+    icon: "🌐",
+    scope: "region",
+    nativeType: "Microsoft.Web/sites",
+    keywords: ["app service", "web app", "paas", "sites"],
+    configFields: [
+      {
+        key: "runtimeStack",
+        label: "Runtime Stack",
+        type: "select",
+        default: "NODE|20-lts",
+        options: [
+          { value: "NODE|20-lts", label: "Node 20 LTS" },
+          { value: "PYTHON|3.12", label: "Python 3.12" },
+          { value: "DOTNETCORE|8.0", label: ".NET 8" },
+          { value: "JAVA|17", label: "Java 17" },
+        ],
+      },
+      {
+        key: "sku",
+        label: "Plan SKU",
+        type: "select",
+        default: "P1v3",
+        options: [
+          { value: "B1", label: "Basic B1" },
+          { value: "S1", label: "Standard S1" },
+          { value: "P1v3", label: "Premium P1v3" },
+        ],
+      },
+      { key: "httpsOnly", label: "HTTPS Only", type: "boolean", default: true },
+    ],
+    commonConnections: [
+      { to: "azure-sql-database", relationship: "reads_from" },
+      { to: "azure-key-vault", relationship: "reads_from" },
+      { to: "azure-app-gateway", relationship: "attached_to" },
+    ],
+  },
+  {
+    id: "azure-functions",
+    name: "Functions",
+    fullName: "Azure Functions",
+    provider: "azure",
+    category: "compute",
+    description: "Event-driven serverless compute that runs code on demand.",
+    icon: "⚡",
+    scope: "region",
+    nativeType: "Microsoft.Web/sites",
+    keywords: ["functions", "serverless", "faas", "event-driven"],
+    configFields: [
+      {
+        key: "runtime",
+        label: "Runtime",
+        type: "select",
+        default: "node",
+        options: [
+          { value: "node", label: "Node.js" },
+          { value: "python", label: "Python" },
+          { value: "dotnet", label: ".NET" },
+          { value: "java", label: "Java" },
+        ],
+      },
+      {
+        key: "plan",
+        label: "Hosting Plan",
+        type: "select",
+        default: "Consumption",
+        options: [
+          { value: "Consumption", label: "Consumption" },
+          { value: "Premium", label: "Premium (Elastic)" },
+          { value: "Dedicated", label: "Dedicated (App Service)" },
+        ],
+      },
+      { key: "tags", label: "Tags", type: "tags" },
+    ],
+    commonConnections: [
+      { to: "azure-service-bus", relationship: "subscribes_to" },
+      { to: "azure-event-hub", relationship: "subscribes_to" },
+      { to: "azure-storage-account", relationship: "writes_to" },
+      { to: "azure-cosmos-db", relationship: "reads_from" },
+    ],
+  },
+  {
+    id: "azure-container-instances",
+    name: "Container Instances",
+    fullName: "Azure Container Instances",
+    abbreviation: "ACI",
+    provider: "azure",
+    category: "containers",
+    description: "Run containers on demand without managing servers or orchestrators.",
+    icon: "📦",
+    scope: "region",
+    nativeType: "Microsoft.ContainerInstance/containerGroups",
+    keywords: ["aci", "container instances", "containers", "serverless"],
+    configFields: [
+      {
+        key: "image",
+        label: "Container Image",
+        type: "string",
+        placeholder: "mcr.microsoft.com/azuredocs/aci-helloworld",
+      },
+      { key: "cpu", label: "vCPU", type: "number", default: 1 },
+      { key: "memoryInGb", label: "Memory (GiB)", type: "number", default: 1.5 },
+      {
+        key: "osType",
+        label: "OS Type",
+        type: "select",
+        default: "Linux",
+        options: [
+          { value: "Linux", label: "Linux" },
+          { value: "Windows", label: "Windows" },
+        ],
+      },
+    ],
+    commonConnections: [
+      { to: "azure-subnet", relationship: "attached_to" },
+      { to: "azure-storage-account", relationship: "writes_to" },
+    ],
+  },
+];
+
+export default compute;

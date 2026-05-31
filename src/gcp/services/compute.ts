@@ -1,0 +1,241 @@
+/**
+ * Google Cloud — Compute & Containers service catalog.
+ * Every entry sets `provider: "gcp"` and a Cloud Asset Inventory `nativeType`.
+ */
+import type { ServiceDefinition } from "../../aws/types";
+
+const compute: ServiceDefinition[] = [
+  {
+    id: "gcp-compute-engine",
+    name: "Compute Engine",
+    fullName: "Google Compute Engine VM Instance",
+    abbreviation: "GCE",
+    provider: "gcp",
+    category: "compute",
+    description: "A scalable virtual machine running on Google's infrastructure.",
+    icon: "🖥️",
+    scope: "region",
+    nativeType: "compute.googleapis.com/Instance",
+    keywords: ["vm", "instance", "compute engine", "gce", "virtual machine"],
+    configFields: [
+      {
+        key: "machineType",
+        label: "Machine Type",
+        type: "select",
+        default: "e2-medium",
+        options: [
+          { value: "e2-micro", label: "e2-micro (2 vCPU, 1 GB)" },
+          { value: "e2-medium", label: "e2-medium (2 vCPU, 4 GB)" },
+          { value: "n2-standard-4", label: "n2-standard-4 (4 vCPU, 16 GB)" },
+          { value: "c3-standard-8", label: "c3-standard-8 (8 vCPU, 32 GB)" },
+        ],
+      },
+      { key: "zone", label: "Zone", type: "string", placeholder: "us-central1-a" },
+      {
+        key: "image",
+        label: "Boot Image",
+        type: "string",
+        placeholder: "debian-cloud/debian-12",
+        default: "debian-cloud/debian-12",
+      },
+      { key: "preemptible", label: "Spot / Preemptible", type: "boolean", default: false },
+    ],
+    commonConnections: [
+      {
+        to: "gcp-vpc-network",
+        relationship: "attached_to",
+        description: "VM attaches to a VPC network",
+      },
+      { to: "gcp-persistent-disk", relationship: "attached_to" },
+      { to: "gcp-service-account", relationship: "assumes" },
+    ],
+  },
+  {
+    id: "gcp-instance-group-manager",
+    name: "Instance Group",
+    fullName: "Compute Engine Managed Instance Group",
+    abbreviation: "MIG",
+    provider: "gcp",
+    category: "compute",
+    description: "Maintains a fleet of identical VMs with autoscaling and auto-healing.",
+    icon: "📦",
+    scope: "region",
+    nativeType: "compute.googleapis.com/InstanceGroupManager",
+    keywords: ["mig", "instance group", "autoscaling", "managed"],
+    configFields: [
+      { key: "targetSize", label: "Target Size", type: "number", default: 2 },
+      {
+        key: "instanceTemplate",
+        label: "Instance Template",
+        type: "string",
+        placeholder: "web-template",
+      },
+      {
+        key: "distributionPolicy",
+        label: "Distribution",
+        type: "select",
+        default: "even",
+        options: [
+          { value: "even", label: "Even" },
+          { value: "balanced", label: "Balanced" },
+        ],
+      },
+    ],
+    commonConnections: [
+      {
+        to: "gcp-compute-engine",
+        relationship: "contains",
+        description: "Manages member VM instances",
+      },
+      { to: "gcp-backend-service", relationship: "attached_to" },
+    ],
+  },
+  {
+    id: "gcp-gke-cluster",
+    name: "GKE",
+    fullName: "Google Kubernetes Engine Cluster",
+    abbreviation: "GKE",
+    provider: "gcp",
+    category: "containers",
+    description: "Managed Kubernetes cluster for deploying and operating containers.",
+    icon: "☸️",
+    scope: "region",
+    isContainer: true,
+    nativeType: "container.googleapis.com/Cluster",
+    keywords: ["gke", "kubernetes", "k8s", "containers", "cluster"],
+    configFields: [
+      {
+        key: "mode",
+        label: "Mode",
+        type: "select",
+        default: "autopilot",
+        options: [
+          { value: "autopilot", label: "Autopilot" },
+          { value: "standard", label: "Standard" },
+        ],
+      },
+      { key: "location", label: "Location", type: "string", placeholder: "us-central1" },
+      { key: "nodeCount", label: "Initial Node Count", type: "number", default: 3 },
+      {
+        key: "releaseChannel",
+        label: "Release Channel",
+        type: "select",
+        default: "regular",
+        options: [
+          { value: "rapid", label: "Rapid" },
+          { value: "regular", label: "Regular" },
+          { value: "stable", label: "Stable" },
+        ],
+      },
+    ],
+    commonConnections: [
+      {
+        to: "gcp-vpc-network",
+        relationship: "attached_to",
+        description: "Cluster runs in a VPC network",
+      },
+      { to: "gcp-backend-service", relationship: "attached_to" },
+      { to: "gcp-service-account", relationship: "assumes" },
+    ],
+  },
+  {
+    id: "gcp-cloud-run",
+    name: "Cloud Run",
+    fullName: "Google Cloud Run Service",
+    provider: "gcp",
+    category: "compute",
+    description: "Fully managed serverless platform for running stateless containers.",
+    icon: "🏃",
+    scope: "region",
+    nativeType: "run.googleapis.com/Service",
+    keywords: ["cloud run", "serverless", "containers", "knative"],
+    configFields: [
+      {
+        key: "image",
+        label: "Container Image",
+        type: "string",
+        placeholder: "gcr.io/project/app:latest",
+      },
+      { key: "minInstances", label: "Min Instances", type: "number", default: 0 },
+      { key: "maxInstances", label: "Max Instances", type: "number", default: 100 },
+      { key: "concurrency", label: "Concurrency", type: "number", default: 80 },
+      {
+        key: "allowUnauthenticated",
+        label: "Allow Unauthenticated",
+        type: "boolean",
+        default: false,
+      },
+    ],
+    commonConnections: [
+      { to: "gcp-cloud-sql", relationship: "connects_to" },
+      { to: "gcp-pubsub-topic", relationship: "publishes_to" },
+      { to: "gcp-service-account", relationship: "assumes" },
+    ],
+  },
+  {
+    id: "gcp-cloud-functions",
+    name: "Cloud Functions",
+    fullName: "Google Cloud Functions",
+    provider: "gcp",
+    category: "compute",
+    description: "Event-driven serverless functions that scale automatically.",
+    icon: "⚡",
+    scope: "region",
+    nativeType: "cloudfunctions.googleapis.com/CloudFunction",
+    keywords: ["functions", "serverless", "faas", "event-driven"],
+    configFields: [
+      {
+        key: "runtime",
+        label: "Runtime",
+        type: "select",
+        default: "nodejs20",
+        options: [
+          { value: "nodejs20", label: "Node.js 20" },
+          { value: "python312", label: "Python 3.12" },
+          { value: "go122", label: "Go 1.22" },
+          { value: "java21", label: "Java 21" },
+        ],
+      },
+      { key: "entryPoint", label: "Entry Point", type: "string", placeholder: "handler" },
+      { key: "memory", label: "Memory (MB)", type: "number", default: 256 },
+      { key: "timeout", label: "Timeout (s)", type: "number", default: 60 },
+    ],
+    commonConnections: [
+      { to: "gcp-pubsub-topic", relationship: "subscribes_to" },
+      { to: "gcp-cloud-storage", relationship: "reads_from" },
+      { to: "gcp-firestore", relationship: "writes_to" },
+    ],
+  },
+  {
+    id: "gcp-app-engine",
+    name: "App Engine",
+    fullName: "Google App Engine Service",
+    provider: "gcp",
+    category: "compute",
+    description: "Fully managed platform for building and hosting scalable web apps.",
+    icon: "🚀",
+    scope: "region",
+    nativeType: "appengine.googleapis.com/Service",
+    keywords: ["app engine", "paas", "gae", "web app"],
+    configFields: [
+      {
+        key: "environment",
+        label: "Environment",
+        type: "select",
+        default: "standard",
+        options: [
+          { value: "standard", label: "Standard" },
+          { value: "flexible", label: "Flexible" },
+        ],
+      },
+      { key: "runtime", label: "Runtime", type: "string", placeholder: "python312" },
+      { key: "instanceClass", label: "Instance Class", type: "string", placeholder: "F1" },
+    ],
+    commonConnections: [
+      { to: "gcp-cloud-sql", relationship: "connects_to" },
+      { to: "gcp-cloud-storage", relationship: "reads_from" },
+    ],
+  },
+];
+
+export default compute;

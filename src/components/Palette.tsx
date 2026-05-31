@@ -1,8 +1,8 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { CATEGORIES, CATEGORY_ORDER } from "../aws/categories";
-import { servicesByCategory, searchServices, serviceColor } from "../aws/registry";
-import type { ServiceDefinition, ServiceCategoryId } from "../aws/types";
+import { servicesByCategory, searchServices, serviceColor, serviceProvider } from "../aws/registry";
+import type { ServiceDefinition, ServiceCategoryId, CloudProvider } from "../aws/types";
 
 /**
  * Custom event the Palette dispatches when a service item is activated via
@@ -13,8 +13,22 @@ import type { ServiceDefinition, ServiceCategoryId } from "../aws/types";
  */
 export const PALETTE_ADD_EVENT = "palette:add-service";
 
+/** Provider filter options. "all" shows every cloud (multi-cloud diagrams). */
+type ProviderFilter = "all" | CloudProvider;
+
+const PROVIDER_FILTERS: { value: ProviderFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "aws", label: "AWS" },
+  { value: "gcp", label: "GCP" },
+  { value: "azure", label: "Azure" },
+];
+
+/** Short provider badge shown on each item so mixed-cloud views stay legible. */
+const PROVIDER_BADGE: Record<CloudProvider, string> = { aws: "AWS", gcp: "GCP", azure: "AZ" };
+
 export const Palette: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
   const [query, setQuery] = useState("");
+  const [provider, setProvider] = useState<ProviderFilter>("all");
 
   /** Activation (click / keyboard): ask the canvas to add the service. */
   const addToCanvas = (serviceId: string) => {
@@ -22,16 +36,17 @@ export const Palette: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) 
     window.dispatchEvent(new CustomEvent(PALETTE_ADD_EVENT, { detail: { serviceId } }));
   };
 
-  /** Group rendered services by category, honoring the search filter. */
+  /** Group rendered services by category, honoring the search + provider filter. */
   const sections = useMemo(() => {
-    const matched = new Set(searchServices(query).map((s) => s.id));
+    const filter = provider === "all" ? undefined : provider;
+    const matched = new Set(searchServices(query, filter).map((s) => s.id));
     const result: { category: ServiceCategoryId; services: ServiceDefinition[] }[] = [];
     for (const id of CATEGORY_ORDER) {
-      const services = servicesByCategory(id).filter((s) => matched.has(s.id));
+      const services = servicesByCategory(id, filter).filter((s) => matched.has(s.id));
       if (services.length > 0) result.push({ category: id, services });
     }
     return result;
-  }, [query]);
+  }, [query, provider]);
 
   return (
     <div className="palette-root">
@@ -43,6 +58,19 @@ export const Palette: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) 
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
+      <div className="palette-providers" role="group" aria-label="Filter by cloud provider">
+        {PROVIDER_FILTERS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            className={`palette-provider${provider === p.value ? " is-active" : ""}`}
+            aria-pressed={provider === p.value}
+            onClick={() => setProvider(p.value)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
       {sections.map(({ category, services }) => {
         const cat = CATEGORIES[category];
         return (
@@ -81,6 +109,9 @@ export const Palette: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) 
                     {s.icon}
                   </span>
                   <span className="palette-item-name">{s.name}</span>
+                  <span className="palette-item-provider">
+                    {PROVIDER_BADGE[serviceProvider(s)]}
+                  </span>
                 </button>
               ))}
             </div>

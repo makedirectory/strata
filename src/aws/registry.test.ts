@@ -100,8 +100,17 @@ describe("getServiceByCfnType", () => {
 });
 
 describe("allServices", () => {
-  it("contains roughly 101 services", () => {
-    expect(allServices().length).toBe(101);
+  it("contains roughly 101 AWS services", () => {
+    expect(allServices("aws").length).toBe(101);
+  });
+
+  it("includes GCP and Azure catalogs in the multi-cloud registry", () => {
+    expect(allServices("gcp").length).toBeGreaterThanOrEqual(30);
+    expect(allServices("azure").length).toBeGreaterThanOrEqual(30);
+    // The unfiltered registry is the sum of every provider's catalog.
+    expect(allServices().length).toBe(
+      allServices("aws").length + allServices("gcp").length + allServices("azure").length,
+    );
   });
 
   it("returns a stable count and identical reference across calls", () => {
