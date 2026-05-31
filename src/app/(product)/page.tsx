@@ -1324,6 +1324,13 @@ function ConnectDialog() {
             {unmapped.length > 0 && (
               <div className="connect-note">Not yet modelled (skipped): {unmapped.join(", ")}</div>
             )}
+            {provider !== "aws" && (
+              <div className="connect-note">
+                Resources import as typed nodes; most property fields aren&apos;t mapped yet (the
+                provider&apos;s field names differ from Strata&apos;s config), so the inspector may
+                be sparse. Relationships aren&apos;t inferred — wire them up on the canvas.
+              </div>
+            )}
             {warnings.map((w, i) => (
               <div className="connect-note connect-warn" key={i}>
                 {w}

@@ -49,6 +49,41 @@ describe("GCP Terraform import", () => {
     const vpc = graph.resources.find((r) => r.serviceId === "gcp-vpc-network");
     expect(subnet?.parentId).toBe(vpc?.id);
   });
+
+  it("resolves containment when the reference is a self_link (real GCP state)", () => {
+    const selfLinkState = {
+      values: {
+        root_module: {
+          resources: [
+            {
+              address: "google_compute_network.vpc",
+              type: "google_compute_network",
+              name: "vpc",
+              values: {
+                id: "projects/p/global/networks/main",
+                name: "main",
+                self_link: "https://www.googleapis.com/compute/v1/projects/p/global/networks/main",
+              },
+            },
+            {
+              address: "google_compute_subnetwork.sub",
+              type: "google_compute_subnetwork",
+              name: "sub",
+              values: {
+                id: "sub-1",
+                // Subnet points at the network by its self_link, not bare id.
+                network: "https://www.googleapis.com/compute/v1/projects/p/global/networks/main",
+              },
+            },
+          ],
+        },
+      },
+    };
+    const { graph } = importGcpTerraform(selfLinkState);
+    const subnet = graph.resources.find((r) => r.serviceId === "gcp-subnet");
+    const vpc = graph.resources.find((r) => r.serviceId === "gcp-vpc-network");
+    expect(subnet?.parentId).toBe(vpc?.id);
+  });
 });
 
 describe("GCP Terraform export", () => {
