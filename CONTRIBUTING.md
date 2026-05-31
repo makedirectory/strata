@@ -45,8 +45,10 @@ npm run dev
 - Product: http://localhost:3000/
 - Docs: http://localhost:3000/docs
 
-Graphs persist to a local file store under `.data/graphs/` by default — no external
-infrastructure required.
+Saved diagrams persist in the **browser** (`localStorage`, via `src/lib/localStore.ts`) —
+no external infrastructure required, and it works on a read-only serverless host. The
+server-side `Repository` + `/api/graphs` route remain in the tree for a future durable
+backend but are no longer on the save/load path.
 
 ## Project layout
 
@@ -67,13 +69,15 @@ src/
     discovery.ts          Cloud Control descriptions → DiscoveredResource[] (no SDK)
     services/             Per-category service catalogs (networking.ts is the template)
   canvas/               Pure geometry + containment layout (geometry.ts, layout.ts)
-  server/               Persistence (the Route Handlers are the server tier)
+  server/               Retained server tier (kept for a future durable backend)
     repository.ts         Repository interface
     fileRepository.ts     Default file-backed store
     graphSchema.ts        Zod schema for graph validation
     auth.ts               Optional bearer-token guard (AWS_FLOW_API_TOKEN)
     index.ts              getRepository() — backend selection via env
-  lib/                  Browser fetch client for the graph + discover APIs (api.ts)
+  lib/
+    localStore.ts         Browser localStorage save/load (the active persistence path)
+    api.ts                Fetch client for the graph + discover APIs (discover is live)
   app/                  Next.js App Router
     (product)/            The Strata canvas app, served at /
     (docs)/              Nextra docs, served at /docs

@@ -63,12 +63,12 @@ npm test        # run the Vitest suite
 
 ### Configuration
 
-| Env var                     | Default        | Purpose                                                               |
-| --------------------------- | -------------- | --------------------------------------------------------------------- |
-| `AWS_FLOW_REPOSITORY`       | `file`         | Persistence backend (`file`; `postgres`/`dynamodb` are designed-for). |
-| `AWS_FLOW_DATA_DIR`         | `.data/graphs` | Directory for the file-backed store.                                  |
-| `AWS_FLOW_API_TOKEN`        | _(unset)_      | If set, the graph API requires `Authorization: Bearer <token>`.       |
-| `NEXT_PUBLIC_STRATA_HOSTED` | _(unset)_      | Set to `1` on any **shared/hosted** deployment (see below).           |
+| Env var                     | Default        | Purpose                                                                |
+| --------------------------- | -------------- | ---------------------------------------------------------------------- |
+| `AWS_FLOW_REPOSITORY`       | `file`         | Backend for the retained server tier (not used by browser-local save). |
+| `AWS_FLOW_DATA_DIR`         | `.data/graphs` | Directory for the file-backed store (retained server tier only).       |
+| `AWS_FLOW_API_TOKEN`        | _(unset)_      | If set, the graph API requires `Authorization: Bearer <token>`.        |
+| `NEXT_PUBLIC_STRATA_HOSTED` | _(unset)_      | Set to `1` on any **shared/hosted** deployment (see below).            |
 
 #### Live discovery & credentials
 
@@ -105,14 +105,15 @@ src/
     discovery.ts        Cloud Control descriptions → DiscoveredResource[] (no AWS SDK here)
     services/*.ts       Per-category service catalogs (networking.ts is the template)
   canvas/               Pure geometry + containment layout (geometry.ts, layout.ts)
-  server/               Persistence (the Route Handlers are the server tier)
+  server/               Retained server tier (kept for a future durable backend)
     repository.ts       Repository interface
     fileRepository.ts   Default file-backed store
     graphSchema.ts      Zod schema for graph validation
     auth.ts             Optional bearer-token guard (AWS_FLOW_API_TOKEN)
     index.ts            getRepository() — backend selection via env
   lib/
-    api.ts              Browser fetch client for the graph + discover APIs
+    localStore.ts       Browser localStorage save/load (the active persistence path)
+    api.ts              Fetch client for the graph + discover APIs (discover is live)
   app/
     (product)/          The Strata canvas app, served at /
     (docs)/             Nextra docs, served at /docs

@@ -6,8 +6,9 @@ title: Architecture — Overview
 
 Engineering documentation for contributors and maintainers of **Strata** — a
 registry-driven canvas for modeling AWS infrastructure as a typed graph of
-resources and relationships, persisted through a swappable repository, and built
-to ingest live AWS state via MCP / Cloud Control.
+resources and relationships, persisted in the browser (with a swappable server
+repository retained for a future durable backend), and built to ingest live AWS
+state via Cloud Control.
 
 Strata exists to make AWS infrastructure **legible**: to turn a sprawling
 account (or many accounts) into a navigable, typed diagram that a human can read,
@@ -29,9 +30,11 @@ reason about, and edit.
    AWS service is a one-entry data change with **no UI code change** (see
    [Service Registry](/docs/architecture/service-registry)).
 
-The stack is intentionally boring and self-contained: a single Next.js app where
-the API Route Handlers _are_ the server, a domain model decoupled from rendering,
-and a file-backed store that requires zero infrastructure to run.
+The stack is intentionally boring and self-contained: a single Next.js app, a domain
+model decoupled from rendering, and browser-local persistence (`localStorage`) that
+requires zero infrastructure to run. A server tier (the `/api/graphs` Route Handlers
+plus a `Repository`) is retained for a future durable backend but is no longer on the
+save/load path — see [Persistence](/docs/architecture/persistence).
 
 ## Positioning — what this is, and is not
 
@@ -66,7 +69,8 @@ MCP-native** tool:
 | Domain model              | `src/aws/model.ts`, `src/aws/regions.ts`                                                                            | Persisted environment representation                       |
 | Canvas engine             | `src/canvas/*` (`geometry.ts`, `layout.ts`), `src/aws/relationshipClasses.ts`, `src/aws/overlays.ts`                | Pure geometry, containment layout, edge encoding, overlays |
 | Visual / UI               | `src/components/*`, `src/hooks/*`                                                                                   | Palette, canvas, inspector                                 |
-| Server / persistence      | `src/server/*`, `src/app/api/graphs/*`                                                                              | Repository + Route Handlers                                |
+| Persistence (live)        | `src/lib/localStore.ts`                                                                                             | Browser `localStorage` save/load (the active path)         |
+| Server tier (retained)    | `src/server/*`, `src/app/api/graphs/*`                                                                              | Repository + Route Handlers, kept for a future backend     |
 | Import / export           | `src/aws/mcp.ts`, `src/aws/discovery.ts`, `src/app/api/discover/route.ts`, `src/aws/iac.ts`, `src/aws/iacExport.ts` | Cloud Control discovery transform + IaC import/export      |
 | Rules engine              | `src/aws/rules.ts`                                                                                                  | Architecture validation + security-rule suggestions        |
 

@@ -52,21 +52,18 @@ AWS rather than the credentials.
 
 ## "Save failed: …"
 
-Saving sends the diagram to the app's server (`POST`/`PUT /api/graphs`). On success
-the status line reads _"Saved "&lt;name&gt;" (&lt;id&gt;)."_; if the server can't be
-reached it reads _"Save failed: API unavailable."_ (and **Open ▾** shows _"Load
-failed: API unavailable."_). To recover:
+Saving writes to your **browser's local storage**, not a server. On success the
+status line reads _"Saved "&lt;name&gt;" to this browser."_; if it fails the line
+reads _"Save failed: …"_ with the reason appended. The most common cause is storage
+being full: _"Save failed: Browser storage is full — delete a saved diagram or export
+to JSON."_ To recover:
 
-- Confirm the app's server is running and reachable — saving needs the `/api/graphs`
-  route, so a `next dev` / `next start` process must be up.
-- If the server requires a token (`AWS_FLOW_API_TOKEN` is set), an unauthorized
-  request fails the same way — see [401 Unauthorized](#api-requests-return-401-unauthorized) below.
-- As a safety net, **Export JSON** (from the **Data ▾** menu) keeps a copy as a file
-  regardless of server state.
+- Open **Open ▾** and delete diagrams you no longer need (the **✕** beside each).
+- Or **Export JSON** (from the **Data ▾** menu) to keep a copy as a file, then clear
+  space.
 
-Saved diagrams live in the server's datastore (file-backed by default), so they're
-shared by everyone on that instance. To move a diagram to a **different** server or
-machine, use **Export JSON** / **Import JSON**.
+Because saved diagrams live in one browser, they won't appear in a different browser
+or on another machine — move them with **Export JSON** / **Import JSON**.
 
 ## API requests return 401 Unauthorized
 
