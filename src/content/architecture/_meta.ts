@@ -3,10 +3,12 @@ const meta = {
   "service-registry": "Service Registry & Schema",
   "data-model": "Domain Data Model",
   "visual-mapping": "Visual Mapping",
+  "rules-engine": "Rules & Validation Engine",
   persistence: "Persistence & the Server",
   "mcp-integration": "Live Discovery & MCP",
   "iac-import": "IaC Import & Export",
   testing: "Testing",
+  "docs-site": "Docs Site (Authoring)",
   roadmap: "Roadmap",
 };
 

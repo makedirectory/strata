@@ -20,10 +20,13 @@ need to tell it.
 
 ## How to import
 
-1. Click **Import IaC** in the toolbar.
-2. Paste your template or state JSON (or select the file, depending on the dialog).
+1. Open the importer — **Data ▾ → Import IaC (Terraform / CloudFormation)…**, the
+   **Import IaC** card in the Start hub, or **Import IaC (Terraform /
+   CloudFormation)** in the ⌘K command palette.
+2. Select the template or state file. Strata auto-detects the format.
 3. Strata parses it, matches each resource to a known AWS service, lays the nodes
-   out on a grid, and draws the typed relationships.
+   out on a grid, and draws the typed relationships. The status line reports
+   _"Imported N resource(s) from &lt;format&gt;."_ (plus any unmapped types).
 
 Containment is reconstructed from the source:
 
@@ -88,16 +91,19 @@ catalog (see the engineering [IaC Import](/docs/architecture/iac-import) docs).
 ## Exporting to IaC
 
 The reverse direction: turn the diagram on your canvas into **CloudFormation** or
-**Terraform**. Open it from **File → Export to IaC…**, the **Start hub**, or the
-`⌘K` command palette.
+**Terraform**. Open the **Export to IaC** dialog from **Data ▾ → Export to IaC…**,
+the **Export to IaC** card in the Start hub (shown once the canvas has resources),
+or **Export to IaC (Terraform / CloudFormation)** in the ⌘K command palette.
 
 In the dialog you can:
 
-- Choose a **format** — CloudFormation (YAML), CloudFormation (JSON), or
-  Terraform (HCL).
-- **Preview** the generated output inline.
-- **Copy** it to the clipboard or **Download** it (`strata-template.yaml`,
-  `strata-template.json`, or `strata.tf`).
+- Choose a **Format** from the dropdown — **CloudFormation (YAML)**,
+  **CloudFormation (JSON)**, or **Terraform (HCL)**.
+- See a live **preview** of the generated output below the controls.
+- **Copy** it to the clipboard (the button briefly reads **Copied ✓**), or
+  **Download** it. The download button is labelled with the filename — which is
+  `strata-template.yaml`, `strata-template.json`, or `strata.tf` depending on the
+  format you picked.
 
 ### It's a scaffold, not a finished template
 
@@ -112,9 +118,11 @@ you finish by hand**, not a deploy-ready, loss-free template:
   not the provider's full schema — you'll likely need to map or add some.
 - **Required fields you didn't set become `TODO` markers** in the output.
 
-The dialog shows a **coverage report** — how many resources were exported, how many
-were skipped (no target type for that service), and how many fields were left as
-`TODO`s — so there are no silent gaps.
+Between the controls and the preview, the dialog shows a **coverage report** — a
+line reading **"N resource(s) exported"**, plus **"N skipped"** (services with no
+target type, listed on hover) and **"N field(s) need your input"** when either
+applies — followed by the reminder that the output is a _scaffold, not deploy-ready_.
+So there are no silent gaps.
 
 This pairs with import: you can **bring in** an existing template, edit visually,
 and **export** a scaffold back out — just expect to reconcile the details against

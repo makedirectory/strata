@@ -4,10 +4,37 @@ title: Persistence & the Server
 
 # Persistence & the Server Side
 
-## The Route Handlers _are_ the server
+## How diagrams are persisted (today)
 
-There is no separate backend service. The Next.js App Router Route Handlers under
-`src/app/api/graphs/` are the entire server tier:
+Saved diagrams live in the **browser**, not on a server. `useFlow`
+(`src/hooks/useFlow.tsx`) imports its save/load helpers from
+**`src/lib/localStore.ts`**, which reads and writes a single `localStorage` entry
+under the key `strata:graphs:v1` (an id→graph map). The hosted app runs on a
+read-only serverless filesystem (Vercel), so there is no server-side datastore to
+write to — each browser keeps its own diagrams, and JSON export/import is how you
+move one between browsers.
+
+`localStore.ts` deliberately mirrors the function surface of the old server client
+(`listGraphs` / `getGraph` / `createGraph` / `updateGraph` / `deleteGraph`, all
+`async`) so the hook layer only had to swap one import. It assigns
+`crypto.randomUUID()` ids, stamps `createdAt` / `updatedAt` and `SCHEMA_VERSION` on
+write, sorts `list()` newest-first, tolerates absent/corrupt storage as empty, and
+surfaces a quota overflow as the friendly error _"Browser storage is full — delete a
+saved diagram or export to JSON."_
+
+> **The server tier below is retained, not wired up.** The `Repository` interface,
+> its file/SQL backends, and the `/api/graphs` Route Handlers all still exist and
+> still work — they are kept for a future durable, multi-user backend
+> (Postgres/DynamoDB). The live UI simply no longer calls them for graph
+> persistence. The one server route the UI _does_ still use is **`/api/discover`**
+> (live AWS discovery). The rest of this page documents that retained server tier,
+> which is where a durable backend will plug in.
+
+## The graph Route Handlers (retained for a future backend)
+
+The Next.js App Router Route Handlers under `src/app/api/graphs/` are a complete,
+working server tier — currently dormant for graph persistence (the UI saves to
+`localStorage` instead), but ready to host a durable backend:
 
 - `src/app/api/graphs/route.ts`
   - `GET /api/graphs` → `repo.list()` → `{ graphs: GraphSummary[] }`.
@@ -26,6 +53,34 @@ There is no separate backend service. The Next.js App Router Route Handlers unde
 
 Both files set `export const dynamic = "force-dynamic"` so reads/writes always hit
 the store. They never talk to a concrete store — only to a `Repository`.
+
+## Auth guard
+
+Every handler in all three API routes (`graphs`, `graphs/[id]`, and `discover`)
+opens with the same two lines:
+
+```ts
+const denied = requireAuth(req);
+if (denied) return denied;
+```
+
+`requireAuth()` (`src/server/auth.ts`) is an **opt-in, shared-secret bearer-token
+guard**:
+
+- If `AWS_FLOW_API_TOKEN` is **set**, every request must send
+  `Authorization: Bearer <token>` matching it; otherwise the guard returns `401`.
+  The scheme is matched case-insensitively (RFC 7235) and the token itself is
+  compared in **constant time** — both inputs are SHA-256 hashed so
+  `timingSafeEqual` gets equal-length buffers and the comparison leaks neither the
+  token nor its length via timing.
+- If `AWS_FLOW_API_TOKEN` is **unset or empty** (the default, including tests), the
+  guard is a **no-op** — behaviour is unchanged and access is open.
+
+This is deliberately minimal. There is **no per-user or per-tenant model**: the
+token is a single shared secret that closes the door on unauthenticated access
+(an IDOR mitigation for a deployed single-tenant instance), not an authorization
+system. Real auth (sessions / JWT / OIDC) would slot in here once the app grows a
+user model (see [Roadmap → item 3](/docs/architecture/roadmap)).
 
 ## The `Repository` interface (`src/server/repository.ts`)
 
@@ -104,7 +159,43 @@ timestamps, `SCHEMA_VERSION` on every write, and `null`/`false` on missing recor
 
 ## Environment variables
 
-| Env var               | Default        | Purpose                                                               |
-| --------------------- | -------------- | --------------------------------------------------------------------- |
-| `AWS_FLOW_REPOSITORY` | `file`         | Persistence backend (`file`; `postgres`/`dynamodb` are designed-for). |
-| `AWS_FLOW_DATA_DIR`   | `.data/graphs` | Directory for the file-backed store.                                  |
+| Env var                     | Default        | Purpose                                                                                                                                          |
+| --------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AWS_FLOW_REPOSITORY`       | `file`         | Backend for the **retained** server tier (`file`; `postgres`/`dynamodb` are designed-for). Not consulted by the current browser-local UI.        |
+| `AWS_FLOW_DATA_DIR`         | `.data/graphs` | Directory for the file-backed store (retained server tier only).                                                                                 |
+| `AWS_FLOW_API_TOKEN`        | _(unset)_      | When set, all API routes require `Authorization: Bearer <token>` (`401` otherwise). Unset = open.                                                |
+| `NEXT_PUBLIC_STRATA_HOSTED` | _(unset)_      | `1`/`true` marks a shared/hosted deploy: disables ambient-credential discovery (see [Live Discovery & MCP](/docs/architecture/mcp-integration)). |
+
+## The client data layer (`src/lib/api.ts`)
+
+`src/lib/api.ts` is the thin typed fetch client for the server routes. Every helper
+maps one-to-one to a route, parses the JSON, and on a non-`ok` response throws an
+`Error` carrying the server-provided `{ error }` message (falling back to the HTTP
+status text):
+
+| Client helper                                         | Route                    | Used by the live UI?               |
+| ----------------------------------------------------- | ------------------------ | ---------------------------------- |
+| `listGraphs()`                                        | `GET /api/graphs`        | No — superseded by `localStore.ts` |
+| `getGraph(id)`                                        | `GET /api/graphs/:id`    | No — superseded by `localStore.ts` |
+| `createGraph(g)`                                      | `POST /api/graphs`       | No — superseded by `localStore.ts` |
+| `updateGraph(id, g)`                                  | `PUT /api/graphs/:id`    | No — superseded by `localStore.ts` |
+| `deleteGraph(id)`                                     | `DELETE /api/graphs/:id` | No — superseded by `localStore.ts` |
+| `runDiscovery({ region, types, accountId?, creds? })` | `POST /api/discover`     | **Yes** — imported by `page.tsx`   |
+
+The graph helpers here share the exact signatures of their `localStore.ts`
+counterparts, so re-pointing the hook layer back at the server (once a durable
+backend exists) is a one-line import swap. Today only **`runDiscovery`** is imported
+from this module; graph save/load goes through `localStore.ts`.
+
+Two details worth knowing:
+
+- **Defensive shape checks on the way in.** `parseJson()` takes an optional type
+  guard; `getGraph`/`createGraph`/`updateGraph` pass `isInfrastructureGraph` (a
+  shallow check for `id`/`name`/`schemaVersion` + the three array collections) and
+  `listGraphs`/`runDiscovery` check the expected top-level shape, so a malformed
+  response fails fast at the boundary rather than as an undefined-property error
+  deeper in the UI.
+- **`runDiscovery` carries optional `creds`.** The `ScanCreds`
+  (`accessKeyId`/`secretAccessKey`/`sessionToken?`) are sent over HTTPS for a
+  single request and used only in-memory server-side — never stored (see the
+  [credential boundary](/docs/architecture/mcp-integration#credential-boundary-non-negotiable)).

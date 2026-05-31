@@ -1,0 +1,103 @@
+---
+title: Troubleshooting
+---
+
+# Troubleshooting
+
+Most of Strata's feedback — successes, warnings, and failures — appears in the
+**status line** in the top bar, just right of the **Docs ↗** link. When something
+doesn't behave as expected, look there first; the messages below quote it exactly.
+
+## The status line is your feedback surface
+
+The status line starts as a hint
+(_"Scroll to pan · ⌘/pinch to zoom · drag empty canvas to select · Space+drag to
+pan · C to connect."_) and is replaced by the result of your most recent action —
+_"Saving…"_, _"Saved …"_, _"Imported N resource(s) …"_, an error, and so on. It
+shows one message at a time, so re-read it after each action.
+
+## The "Discover" button is greyed out
+
+On the **Connect to AWS → Live scan** tab, **Discover** is disabled in three cases.
+Check them in order:
+
+1. **No resource types selected.** The header reads **Resource types (0
+   selected)**. Tick at least one type, or click **Select all**.
+2. **A scan is already running.** The button reads **Scanning…**. Wait for it to
+   finish.
+3. **Hosted install with no credentials.** On an install where the operator set
+   `NEXT_PUBLIC_STRATA_HOSTED=1`, you must enter both an **Access key ID** and a
+   **Secret access key**; until you do, **Discover** stays disabled. Either fill
+   them in or use the **Paste export** tab instead. See
+   [Connecting to AWS](/docs/guide/connecting-aws#when-are-credentials-required).
+
+## A live scan fails with a credentials error
+
+If AWS rejects the scan, the dialog shows a red banner reading _"AWS rejected those
+credentials (wrong, expired, or lacking permission). Check the keys and retry."_
+Common causes:
+
+- **Expired temporary credentials** — STS session tokens are short-lived. Re-run
+  `aws sts get-session-token` and paste the fresh values.
+- **Missing permissions** — the identity needs `cloudcontrol:ListResources` and
+  `cloudcontrol:GetResource` plus read access to the services you're scanning.
+  Attach **`ReadOnlyAccess`** or the equivalent. See
+  [IAM permissions](/docs/guide/connecting-aws#iam-permissions).
+- **Wrong key/secret pair** — re-copy both; the secret is masked, so a stray
+  character is easy to miss.
+
+A different banner — _"Discovery failed. Check the region and that the server can
+reach AWS."_ — points at the **Region** value or the server's network access to
+AWS rather than the credentials.
+
+## "Save failed: …"
+
+Saving writes to your **browser's local storage**, not a server. On success the
+status line reads _"Saved "&lt;name&gt;" to this browser."_; if it fails the line
+reads _"Save failed: …"_ with the reason appended. The most common cause is storage
+being full: _"Save failed: Browser storage is full — delete a saved diagram or export
+to JSON."_ To recover:
+
+- Open **Open ▾** and delete diagrams you no longer need (the **✕** beside each).
+- Or **Export JSON** (from the **Data ▾** menu) to keep a copy as a file, then clear
+  space.
+
+Because saved diagrams live in one browser, they won't appear in a different browser
+or on another machine — move them with **Export JSON** / **Import JSON**.
+
+## API requests return 401 Unauthorized
+
+If the deployment sets the `AWS_FLOW_API_TOKEN` environment variable, the graph and
+discovery API routes require an `Authorization: Bearer <token>` header that matches
+it; any request without the right token gets a **401**. This guard is off by default
+(the variable unset). If you're calling the routes directly (e.g. with `curl` or a
+script) and getting 401s, send the header:
+
+```bash
+curl -H "Authorization: Bearer $AWS_FLOW_API_TOKEN" http://localhost:3000/api/graphs
+```
+
+The in-app UI on a local install doesn't attach this header, so enabling the token
+is intended for deployments that front the API with a known secret.
+
+## Import says "not a valid architecture file"
+
+When you **Import JSON** a file that isn't a Strata diagram (or is corrupt), the
+status line reads _"Import failed: not a valid architecture file."_ Make sure you're
+importing a file produced by **Export JSON** — not a CloudFormation or Terraform
+file. For those, use **Import IaC** instead (see
+[Importing & Exporting IaC](/docs/guide/importing-iac)). A separate message,
+_"Import failed: could not read file."_, means the file couldn't be read at all.
+
+IaC imports report problems as _"IaC import failed: …"_ with the parser's reason
+appended; unrecognized resource types don't fail the import — they're listed as
+_"Unmapped types: …"_ after a successful one.
+
+## "Suggest rules" returns nothing
+
+In the inspector's **Rule Suggestions** panel (or via **Analyze ▾ → Suggest
+rules**), if your diagram has no resources that imply security-group or routing
+rules, the panel shows _"No suggestions yet—add ALB/Service, Subnets, NACLs…"_.
+This isn't an error — add the resources the suggestions key off (load balancers and
+their targets, subnets, route tables, NACLs) and run it again. Likewise,
+**Validation** shows _"No issues found."_ when every check passes.

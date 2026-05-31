@@ -4,52 +4,66 @@ title: Saving & Loading
 
 # Saving, Loading & Export
 
-Strata gives you two complementary ways to keep your work: **save to the server**
+Strata gives you two complementary ways to keep your work: **save to this browser**
 (so you can reopen a diagram in the app later) and **export to JSON** (a portable,
-version-controllable file you can share or check into git).
+version-controllable file you can share, check into git, or move between browsers).
 
-## Save & load on the server
+## Save & load in this browser
 
-- **Save** — click **Save** in the toolbar to store the current diagram on the
-  server. By default this writes to a local file store under `.data/graphs/` — no
-  external infrastructure or account required.
+- **Save** — click the **💾** icon button in the top bar to store the current
+  diagram. Saved diagrams are kept in **this browser's local storage** — there's no
+  server datastore and no account required, but a diagram saved in one browser won't
+  appear in another browser or on another machine. While saving, the status line
+  reads _"Saving…"_, then _"Saved "&lt;name&gt;" to this browser."_ on success. If
+  the write fails it reads _"Save failed: …"_ with the reason — see
+  [Troubleshooting](/docs/guide/troubleshooting).
 - **Open** — click **Open ▾** for a dropdown of your saved diagrams, each showing
-  its name, resource count, and last-updated time. Click one to load it, or the
-  **✕** next to it to delete it. (Your recent diagrams also appear in the
-  **Start hub** under **+ New**.)
+  its name, resource count, and last-updated date. Click one to load it, or the
+  **✕** beside it to delete it. (Your saved diagrams also appear in the Start hub
+  under **+ New**, in the **Open a saved diagram** list.)
 
-Saved diagrams are stamped with their creation and update times automatically, so
-the most recently edited ones surface first.
+Saved diagrams are stamped with creation and update times automatically, so the most
+recently edited ones surface first.
+
+> **Diagram names.** A diagram isn't named at save time — there's no name prompt.
+> A new, never-named diagram is saved with the name **"AWS Architecture"**; an
+> imported diagram keeps the name from its source file. Tell saves apart by their
+> resource count and last-updated date in the **Open ▾** list.
 
 > **Unsaved-work guard.** Loading or importing a diagram replaces what's on the
-> canvas. If you have unsaved changes, Strata asks first — **Save & continue**,
-> **Discard & continue**, or **Cancel** — so you never lose work by accident.
+> canvas. If you have unsaved changes, Strata asks first with the **"Replace the
+> current diagram?"** dialog — **Save & continue**, **Discard & continue**, or
+> **Cancel** — so you never lose work by accident.
 
 ## Export & import JSON
 
 For a portable copy you fully control:
 
-- **Export JSON** — from the **File** menu, downloads the current diagram as a
+- **Export JSON** — from the **Data ▾** menu, downloads the current diagram as a
   single JSON file. This is the complete diagram-as-code: every resource, its
   configuration, and every typed relationship.
-- **Import JSON** — from the **File** menu (or the Start hub), loads a diagram from
-  a JSON file you previously exported, replacing what's currently on the canvas.
+- **Import JSON** — from the **Data ▾** menu (or the Start hub's **Import Strata
+  JSON** card), loads a diagram from a JSON file you previously exported, replacing
+  what's currently on the canvas.
 
 Because the export is plain JSON, you can commit it to a repository, diff it across
-versions, or hand it to a teammate — it isn't locked into a proprietary datastore.
+versions, move it between browsers, or hand it to a teammate — it isn't locked into
+a proprietary datastore. JSON export/import is also the way to move a diagram from
+one browser's local storage to another.
 
 > The JSON export is the same diagram-as-code Strata persists internally, so an
 > exported file round-trips cleanly back through Import JSON.
 
 ## Start over
 
-Choose **Clear canvas** from the **File** menu to empty the canvas. If you clear by
+Choose **Clear canvas** from the **Data ▾** menu to empty the canvas. If you clear by
 accident, **Undo** (`⌘Z` / `Ctrl Z`) brings it back.
 
 ## Which should I use?
 
-| Goal                                         | Use                  |
-| -------------------------------------------- | -------------------- |
-| Quickly reopen a diagram in this app later   | Save / Load          |
-| Share, back up, or version-control a diagram | Export / Import JSON |
-| Hand a diagram to another tool or teammate   | Export JSON          |
+| Goal                                           | Use                  |
+| ---------------------------------------------- | -------------------- |
+| Quickly reopen a diagram in this browser later | Save / Open          |
+| Share, back up, or version-control a diagram   | Export / Import JSON |
+| Move a diagram to another browser or machine   | Export / Import JSON |
+| Hand a diagram to another tool or teammate     | Export JSON          |

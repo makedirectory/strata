@@ -7,6 +7,8 @@ const meta = {
   "connecting-aws": "Connecting to AWS",
   validation: "Validation & Rules",
   saving: "Saving & Loading",
+  shortcuts: "Keyboard & Commands",
+  troubleshooting: "Troubleshooting",
 };
 
 export default meta;
