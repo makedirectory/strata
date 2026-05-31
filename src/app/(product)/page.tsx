@@ -464,8 +464,11 @@ function TopBar() {
             Connect to cloud…
           </MenuItem>
           <MenuItem onClick={importJSONDialog}>Import JSON…</MenuItem>
-          <MenuItem onClick={importIaCDialog} title="Import Terraform or CloudFormation">
-            Import IaC (Terraform / CloudFormation)…
+          <MenuItem
+            onClick={importIaCDialog}
+            title="Import Terraform (AWS/GCP/Azure), CloudFormation, or an Azure ARM template"
+          >
+            Import IaC (Terraform / CloudFormation / ARM)…
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={exportJSON}>Export JSON</MenuItem>
@@ -687,8 +690,8 @@ function StartHub() {
             </span>
             <span className="hub-card-title">Import IaC</span>
             <span className="hub-card-desc">
-              Terraform or CloudFormation. Maps known resource types into an editable diagram;
-              unmapped types are listed after import.
+              Terraform (AWS/GCP/Azure), CloudFormation, or an Azure ARM template. Maps known
+              resource types into an editable diagram; unmapped types are listed after import.
             </span>
           </button>
 

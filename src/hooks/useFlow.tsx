@@ -19,7 +19,7 @@ import {
 // the way to move a diagram between browsers.
 import { listGraphs, getGraph, createGraph, updateGraph, deleteGraph } from "../lib/localStore";
 import type { GraphSummary } from "../aws/model";
-import { importIaC } from "../aws/iac";
+import { importAnyIaC } from "../lib/importIac";
 import {
   zoomAbout,
   zoomByFactor,
@@ -1179,7 +1179,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reader.onload = async () => {
         try {
           const text = String(reader.result);
-          const result = importIaC(text, { name: file.name });
+          const result = importAnyIaC(text, { name: file.name });
           const { graph, format, unmappedTypes, warnings } = result;
           if (!(await confirmReplaceIfDirty())) {
             setStatus("Import canceled.");
