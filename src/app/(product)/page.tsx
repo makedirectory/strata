@@ -8,6 +8,10 @@ import { CommandPalette } from "../../components/CommandPalette";
 import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
 import { RELATIONSHIP_CLASSES, RELATIONSHIP_CLASS_ORDER } from "../../aws/relationshipClasses";
 import type { GraphSummary } from "../../aws/model";
+import { exportIaC, type ExportFormat } from "../../aws/iacExport";
+import { listDiscoverableTypes, parsePastedExport, type DiscoveryType } from "../../aws/discovery";
+import { mapDiscoveredToGraph, unmappedTypes, type DiscoveredResource } from "../../aws/mcp";
+import { runDiscovery } from "../../lib/api";
 
 const VIEW_PRESETS = [
   { id: "all", label: "All" },
@@ -377,6 +381,7 @@ function TopBar() {
     saveToServer,
     setPresentation,
     openStartHub,
+    openExportIaC,
   } = useFlow();
   return (
     <div className="topbar">
@@ -448,13 +453,11 @@ function TopBar() {
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={exportJSON}>Export JSON</MenuItem>
-          {/* TODO(flow-3): wire Export to IaC once the generator exists. */}
           <MenuItem
-            disabled
-            badge="Coming soon"
-            title="Generate Terraform / CloudFormation — coming in a later release"
+            onClick={openExportIaC}
+            title="Generate Terraform / CloudFormation from the diagram"
           >
-            Export to IaC
+            Export to IaC…
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={clear} danger title="Clear the canvas">
@@ -604,6 +607,8 @@ function StartHub() {
     importIaCDialog,
     importJSONDialog,
     loadPreset,
+    openExportIaC,
+    openConnect,
     state,
   } = useFlow();
   const dialogRef = React.useRef<HTMLDivElement>(null);
@@ -699,32 +704,40 @@ function StartHub() {
             <span className="hub-card-desc">Begin with a ready-made architecture (Basic AWS).</span>
           </button>
 
-          {/* Gated: not built yet (Flow 4). Shown so the path is discoverable. */}
-          <div className="hub-card hub-card--disabled" aria-disabled="true">
+          <button
+            className="hub-card"
+            onClick={() => {
+              closeStartHub();
+              openConnect();
+            }}
+          >
             <span className="hub-card-icon" aria-hidden="true">
               ☁️
             </span>
-            <span className="hub-card-title">
-              Connect to AWS <span className="hub-badge">Coming soon</span>
-            </span>
+            <span className="hub-card-title">Connect to AWS</span>
             <span className="hub-card-desc">
-              Discover live resources from your account and map them automatically.
+              Discover live resources via Cloud Control (or paste an export) and map them onto the
+              canvas.
             </span>
-          </div>
+          </button>
 
-          {/* Gated: export-to-IaC (Flow 3). Only meaningful with a graph. */}
+          {/* Export-to-IaC (Flow 3). Only meaningful with a graph. */}
           {hasGraph && (
-            <div className="hub-card hub-card--disabled" aria-disabled="true">
+            <button
+              className="hub-card"
+              onClick={() => {
+                closeStartHub();
+                openExportIaC();
+              }}
+            >
               <span className="hub-card-icon" aria-hidden="true">
                 📤
               </span>
-              <span className="hub-card-title">
-                Export to IaC <span className="hub-badge">Coming soon</span>
-              </span>
+              <span className="hub-card-title">Export to IaC</span>
               <span className="hub-card-desc">
-                Generate Terraform / CloudFormation from your diagram.
+                Generate Terraform / CloudFormation from your diagram (a scaffold to finish).
               </span>
-            </div>
+            </button>
           )}
         </div>
 
@@ -771,6 +784,352 @@ function ReplaceConfirmDialog() {
           <button onClick={() => resolveReplaceConfirm("discard")}>Discard &amp; continue</button>
           <button onClick={() => resolveReplaceConfirm("cancel")}>Cancel</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const EXPORT_FORMATS: { id: ExportFormat; label: string }[] = [
+  { id: "cloudformation-yaml", label: "CloudFormation (YAML)" },
+  { id: "cloudformation-json", label: "CloudFormation (JSON)" },
+  { id: "terraform", label: "Terraform (HCL)" },
+];
+
+/** Export-to-IaC dialog: pick a format, preview the scaffold, see the coverage
+ *  report (the honesty surface), then copy or download. */
+function ExportDialog() {
+  const { exportIaCOpen, closeExportIaC, snapshotGraph } = useFlow();
+  const [format, setFormat] = React.useState<ExportFormat>("cloudformation-yaml");
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!exportIaCOpen) return;
+    setCopied(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeExportIaC();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [exportIaCOpen, closeExportIaC, format]);
+
+  // Recompute only while open and when the format changes.
+  const result = React.useMemo(
+    () => (exportIaCOpen ? exportIaC(snapshotGraph(), format) : null),
+    [exportIaCOpen, format, snapshotGraph],
+  );
+
+  if (!exportIaCOpen || !result) return null;
+  const { content, filename, report } = result;
+
+  const download = () => {
+    const blob = new Blob([content], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  };
+  const copy = () => {
+    void navigator.clipboard?.writeText(content);
+    setCopied(true);
+  };
+
+  return (
+    <div className="hub-backdrop" onMouseDown={closeExportIaC}>
+      <div
+        className="export"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export to IaC"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Export to IaC</h2>
+          <button className="hub-close" onClick={closeExportIaC} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="export-controls">
+          <label className="export-field">
+            <span>Format</span>
+            <select value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
+              {EXPORT_FORMATS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="export-actions">
+            <button onClick={copy}>{copied ? "Copied ✓" : "Copy"}</button>
+            <button className="btn-start" onClick={download}>
+              Download {filename}
+            </button>
+          </div>
+        </div>
+
+        <div className="export-report">
+          <span>
+            {report.exported} resource{report.exported === 1 ? "" : "s"} exported
+          </span>
+          {report.skipped.length > 0 && (
+            <span className="export-warn" title={report.skipped.map((s) => s.serviceId).join(", ")}>
+              {report.skipped.length} skipped
+            </span>
+          )}
+          {report.todos.length > 0 && (
+            <span className="export-warn">{report.todos.length} field(s) need your input</span>
+          )}
+          <span className="export-note">
+            Scaffold, not deploy-ready — property names follow Strata&apos;s model; complete the
+            TODOs.
+          </span>
+        </div>
+
+        <pre className="export-preview">{content}</pre>
+      </div>
+    </div>
+  );
+}
+
+/** CloudFormation types pre-selected for a live scan (if present in the registry). */
+const COMMON_DISCOVERY_TYPES = new Set([
+  "AWS::EC2::VPC",
+  "AWS::EC2::Subnet",
+  "AWS::EC2::Instance",
+  "AWS::EC2::SecurityGroup",
+  "AWS::S3::Bucket",
+  "AWS::Lambda::Function",
+  "AWS::RDS::DBInstance",
+  "AWS::DynamoDB::Table",
+]);
+
+/** "Connect to AWS" discovery sub-flow: source → scope → discover → review →
+ *  import. Live scans run server-side via /api/discover (ambient credentials,
+ *  never in the browser); the paste path normalises an existing export. */
+function ConnectDialog() {
+  const { connectOpen, closeConnect, importDiscoveredGraph } = useFlow();
+  const allTypes = React.useMemo<DiscoveryType[]>(() => listDiscoverableTypes(), []);
+
+  const [source, setSource] = React.useState<"live" | "paste">("live");
+  const [region, setRegion] = React.useState("us-east-1");
+  const [selected, setSelected] = React.useState<Set<string>>(
+    () =>
+      new Set(allTypes.filter((t) => COMMON_DISCOVERY_TYPES.has(t.cfnType)).map((t) => t.cfnType)),
+  );
+  const [filter, setFilter] = React.useState("");
+  const [pasteText, setPasteText] = React.useState("");
+  const [phase, setPhase] = React.useState<"setup" | "running" | "review">("setup");
+  const [error, setError] = React.useState<string | null>(null);
+  const [found, setFound] = React.useState<DiscoveredResource[]>([]);
+  const [scanned, setScanned] = React.useState<{ type: string; count: number }[]>([]);
+  const [warnings, setWarnings] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (!connectOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeConnect();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [connectOpen, closeConnect]);
+
+  if (!connectOpen) return null;
+
+  const visibleTypes = filter
+    ? allTypes.filter(
+        (t) =>
+          t.label.toLowerCase().includes(filter.toLowerCase()) ||
+          t.cfnType.toLowerCase().includes(filter.toLowerCase()),
+      )
+    : allTypes;
+
+  const toggleType = (cfnType: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(cfnType)) next.delete(cfnType);
+      else next.add(cfnType);
+      return next;
+    });
+
+  const runLive = async () => {
+    setError(null);
+    setPhase("running");
+    try {
+      const result = await runDiscovery({ region, types: [...selected] });
+      setFound(result.resources);
+      setScanned(result.scanned);
+      setWarnings(result.warnings);
+      setPhase("review");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Discovery failed.");
+      setPhase("setup");
+    }
+  };
+
+  const runPaste = () => {
+    setError(null);
+    try {
+      const resources = parsePastedExport(pasteText);
+      setFound(resources);
+      setScanned([]);
+      setWarnings([]);
+      setPhase("review");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not parse the pasted export.");
+    }
+  };
+
+  const doImport = (mode: "merge" | "replace") => {
+    const graph = mapDiscoveredToGraph(found, { name: `Discovered (${region})` });
+    importDiscoveredGraph(graph, mode);
+  };
+
+  const unmapped = phase === "review" ? unmappedTypes(found) : [];
+  const mappableCount =
+    found.length - found.filter((r) => unmapped.includes(r.resourceType)).length;
+
+  return (
+    <div className="hub-backdrop" onMouseDown={closeConnect}>
+      <div
+        className="connect"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connect to AWS"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Connect to AWS</h2>
+          <button className="hub-close" onClick={closeConnect} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="connect-seg" role="tablist" aria-label="Discovery source">
+          <button
+            role="tab"
+            aria-selected={source === "live"}
+            className={source === "live" ? "active" : ""}
+            onClick={() => setSource("live")}
+          >
+            Live scan
+          </button>
+          <button
+            role="tab"
+            aria-selected={source === "paste"}
+            className={source === "paste" ? "active" : ""}
+            onClick={() => setSource("paste")}
+          >
+            Paste export
+          </button>
+        </div>
+
+        {error && <div className="connect-error">{error}</div>}
+
+        {source === "live" ? (
+          <div className="connect-body">
+            <label className="export-field">
+              <span>Region</span>
+              <input
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                placeholder="us-east-1"
+              />
+            </label>
+            <div className="connect-types-head">
+              <span>Resource types ({selected.size} selected)</span>
+              <input
+                className="connect-filter"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter…"
+              />
+            </div>
+            <div className="connect-types">
+              {visibleTypes.map((t) => (
+                <label key={t.cfnType} className="connect-type">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(t.cfnType)}
+                    onChange={() => toggleType(t.cfnType)}
+                  />
+                  <span>{t.label}</span>
+                  <span className="connect-type-cfn">{t.cfnType}</span>
+                </label>
+              ))}
+            </div>
+            <div className="connect-note">
+              Runs on this server using its AWS credentials (SSO / profile / env). Credentials never
+              reach the browser or the diagram. Relationships aren&apos;t inferred from Cloud
+              Control — discovered resources land as nodes you can wire up.
+            </div>
+            <div className="connect-actions">
+              <button
+                className="btn-start"
+                disabled={phase === "running" || selected.size === 0}
+                onClick={runLive}
+              >
+                {phase === "running" ? "Scanning…" : "Discover"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="connect-body">
+            <div className="connect-note">
+              Paste the output of <code>aws cloudcontrol list-resources --type-name …</code> (or a
+              JSON array of resources). Nothing is sent anywhere — parsing happens locally.
+            </div>
+            <textarea
+              className="connect-paste"
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder='{ "TypeName": "AWS::S3::Bucket", "ResourceDescriptions": [ … ] }'
+            />
+            <div className="connect-actions">
+              <button className="btn-start" disabled={!pasteText.trim()} onClick={runPaste}>
+                Parse
+              </button>
+            </div>
+          </div>
+        )}
+
+        {phase === "review" && (
+          <div className="connect-review">
+            <div className="connect-review-summary">
+              <strong>{mappableCount}</strong> resource{mappableCount === 1 ? "" : "s"} ready to
+              import
+              {unmapped.length > 0 && (
+                <span className="export-warn"> · {unmapped.length} unmapped type(s)</span>
+              )}
+              {scanned.length > 0 && (
+                <span className="connect-scanned">
+                  {" "}
+                  · scanned {scanned.length} type(s) in {region}
+                </span>
+              )}
+            </div>
+            {unmapped.length > 0 && (
+              <div className="connect-note">Not yet modelled (skipped): {unmapped.join(", ")}</div>
+            )}
+            {warnings.map((w, i) => (
+              <div className="connect-note connect-warn" key={i}>
+                {w}
+              </div>
+            ))}
+            <div className="connect-actions">
+              <button onClick={() => doImport("merge")} disabled={mappableCount === 0}>
+                Merge into canvas
+              </button>
+              <button
+                className="btn-start"
+                onClick={() => doImport("replace")}
+                disabled={mappableCount === 0}
+              >
+                Replace canvas
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -827,6 +1186,8 @@ function Workspace() {
       </div>
       <CommandPalette />
       <StartHub />
+      <ExportDialog />
+      <ConnectDialog />
       <ReplaceConfirmDialog />
       {presentation && (
         <button className="present-exit" onClick={() => setPresentation(false)}>

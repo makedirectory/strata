@@ -1,8 +1,8 @@
 ---
-title: IaC Import
+title: IaC Import & Export
 ---
 
-# Infrastructure-as-Code Import
+# Infrastructure-as-Code Import & Export
 
 Beyond live MCP discovery (see [MCP Integration](/docs/architecture/mcp-integration)),
 Strata imports **declared** infrastructure from existing Infrastructure-as-Code into
@@ -182,3 +182,43 @@ If no suitable `serviceId` exists yet, add the service to the registry first (on
 catalog entry — see the Service Registry docs), then reference its `id` here.
 Multiple Terraform types may map to the same `serviceId` (e.g. `aws_lb`, `aws_alb`,
 and `aws_elb` all map to `"elastic-load-balancer"`).
+
+## Export (`iacExport.ts`)
+
+The reverse transform lives in `src/aws/iacExport.ts`, mirroring the importer:
+
+- `exportCloudFormation(graph)` → `{ json, yaml, report }`
+- `exportTerraform(graph)` → `{ hcl, report }`
+- `exportIaC(graph, format)` → `{ content, filename, report }`
+
+Join keys run in reverse: CloudFormation uses each service's `cfnType` directly;
+Terraform uses `SERVICE_ID_TO_TF_TYPE`, the inverse of `TF_TYPE_TO_SERVICE_ID`
+(first-listed wins as the canonical type for many-to-one services). Output is
+**deterministic** — resources are id-sorted, so the same graph always serialises
+identically (important for tests).
+
+### Honest scaffolding, not faithful round-trip
+
+Export is intentionally **lossy**, the mirror image of import: the graph only holds
+registry-known config, so the generator emits a _scaffold a human finishes_. An
+`ExportReport` quantifies the gaps:
+
+```ts
+interface ExportReport {
+  exported: number;
+  skipped: { id: string; serviceId: string; reason: string }[];
+  todos: { address: string; field: string }[];
+  warnings: string[];
+}
+```
+
+- Resources whose `serviceId` has no target type are **skipped** and reported.
+- Required `configFields` that aren't set are emitted as `TODO` placeholders and
+  tallied in `todos`.
+- Containment + typed edges coarsen to `DependsOn` / `depends_on` (a documented
+  delta — structure is preserved, edge _kind_ is not).
+
+A **round-trip stability** test asserts that
+`importIaC(exportCloudFormation(g))` preserves resource types and edge structure
+for services whose `cfnType` resolves uniquely (values may differ — lossy is
+expected).

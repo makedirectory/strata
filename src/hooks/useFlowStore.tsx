@@ -447,6 +447,30 @@ export function useFlowStore() {
     [mutate],
   );
 
+  /**
+   * Merge resources/relationships into the current model in one history step,
+   * skipping ids that already exist. Preserves viewport + graphId (used by
+   * live discovery / import "merge" mode, where existing work must survive).
+   */
+  const mergeGraph = useCallback(
+    (next: { resources: ResourceInstance[]; relationships: Relationship[] }) => {
+      mutate((cur) => {
+        const haveR = new Set(cur.resources.map((r) => r.id));
+        const haveE = new Set(cur.relationships.map((e) => e.id));
+        return {
+          resources: [...cur.resources, ...next.resources.filter((r) => !haveR.has(r.id))],
+          relationships: [
+            ...cur.relationships,
+            ...next.relationships.filter((e) => !haveE.has(e.id)),
+          ],
+        };
+      });
+      setSelection(null);
+      setSelectedIds([]);
+    },
+    [mutate],
+  );
+
   /** Commit the current live state to history (e.g. at the END of a drag). */
   const commitCurrentState = useCallback(() => {
     record({ ...liveRef.current });
@@ -538,6 +562,7 @@ export function useFlowStore() {
     groupIntoVPC,
     clear,
     replaceAll,
+    mergeGraph,
 
     // History
     undo: undoAction,

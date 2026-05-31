@@ -1,8 +1,8 @@
 ---
-title: Importing IaC
+title: Importing & Exporting IaC
 ---
 
-# Importing Infrastructure-as-Code
+# Importing & Exporting Infrastructure-as-Code
 
 Already have infrastructure described in CloudFormation or Terraform? Instead of
 redrawing it by hand, import it and Strata renders it as a typed diagram — with
@@ -84,3 +84,38 @@ catalog (see the engineering [IaC Import](/docs/architecture/iac-import) docs).
 - You can edit, connect, and rearrange them just like any other node.
 - [Validate the design](/docs/guide/validation) or [save it](/docs/guide/saving) for
   later.
+
+## Exporting to IaC
+
+The reverse direction: turn the diagram on your canvas into **CloudFormation** or
+**Terraform**. Open it from **File → Export to IaC…**, the **Start hub**, or the
+`⌘K` command palette.
+
+In the dialog you can:
+
+- Choose a **format** — CloudFormation (YAML), CloudFormation (JSON), or
+  Terraform (HCL).
+- **Preview** the generated output inline.
+- **Copy** it to the clipboard or **Download** it (`strata-template.yaml`,
+  `strata-template.json`, or `strata.tf`).
+
+### It's a scaffold, not a finished template
+
+Be deliberate about what export does and doesn't give you. Strata models a curated
+subset of each service's configuration, so the output is a **correct starting point
+you finish by hand**, not a deploy-ready, loss-free template:
+
+- **Resource types and dependencies are real.** Each node becomes a resource of the
+  right CloudFormation type / Terraform type, and containment + relationships become
+  `DependsOn` / `depends_on`.
+- **Property names follow Strata's model.** They reflect the fields Strata tracks,
+  not the provider's full schema — you'll likely need to map or add some.
+- **Required fields you didn't set become `TODO` markers** in the output.
+
+The dialog shows a **coverage report** — how many resources were exported, how many
+were skipped (no target type for that service), and how many fields were left as
+`TODO`s — so there are no silent gaps.
+
+This pairs with import: you can **bring in** an existing template, edit visually,
+and **export** a scaffold back out — just expect to reconcile the details against
+your real configuration.

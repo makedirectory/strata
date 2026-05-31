@@ -1,13 +1,14 @@
 {
   "name": "strata",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "engines": {
     "node": ">=22"
   },
   "packageManager": "npm@10.9.3",
   "overrides": {
-    "zod": "$zod"
+    "zod": "$zod",
+    "postcss": "^8.5.10"
   },
   "scripts": {
     "dev": "next dev",
@@ -23,6 +24,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@aws-sdk/client-cloudcontrol": "^3.1057.0",
     "js-yaml": "^4.1.1",
     "next": "^15.5.18",
     "nextra": "^4.6.1",
@@ -35,19 +37,19 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^20",
+    "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^4.7.0",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^4.1.7",
     "eslint": "^8",
     "eslint-config-next": "^15.5.18",
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.1.1",
     "prettier": "^3.8.3",
-    "typescript": "^5",
-    "vite": "^5.4.21",
-    "vitest": "^2.1.9",
-    "zod": "^4.1.12"
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7",
+    "zod": "4.1.12"
   }
 }
