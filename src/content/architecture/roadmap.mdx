@@ -30,6 +30,14 @@ list:
 - **CI guardrails.** `validateRegistry()` runs in tests, and the test/lint/build
   suite (including registry and rendered-UI snapshots) runs in GitHub Actions. See
   [Testing](/docs/architecture/testing).
+- **IaC export.** The design → code loop is closed: `src/aws/iacExport.ts` emits
+  CloudFormation (JSON/YAML) and Terraform (HCL) from the graph, with an
+  `ExportReport` that's honest about lossiness (skipped resources, `TODO` fields).
+  See [IaC Import & Export](/docs/architecture/iac-import).
+- **Live discovery.** The producer for the discovery transform now exists:
+  `src/aws/discovery.ts` (pure) plus a server-only `/api/discover` Route Handler
+  over `@aws-sdk/client-cloudcontrol`, with a paste-import fallback. See
+  [Live Discovery & MCP](/docs/architecture/mcp-integration).
 
 ## Still open
 
@@ -63,10 +71,11 @@ for local/demo use only.
 **Next:** add authentication, per-tenant scoping on every `Repository` method, and
 authorization checks in the Route Handlers before any multi-user deployment.
 
-### 4. Round-trip IaC export
+### 4. Discovery is read-only and flat
 
-Import (Terraform / CloudFormation → diagram) works; the reverse — generating IaC
-from a diagram — is stubbed in the UI as "coming soon".
+Live discovery lists resources but doesn't infer relationships from Cloud Control,
+and there's no merge/upsert keyed on ARN yet (see #1) — re-scanning an account adds
+nodes rather than reconciling them.
 
-**Next:** emit CloudFormation/Terraform from the graph using each service's
-`cfnType` and config schema, closing the design → code loop.
+**Next:** derive containment/edges from discovered properties (as the IaC importer
+does), and route re-scans through an ARN-keyed upsert.
