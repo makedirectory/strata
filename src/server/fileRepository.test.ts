@@ -45,7 +45,7 @@ function makeGraph(overrides: Partial<InfrastructureGraph> = {}): Infrastructure
     name: "Test Graph",
     accounts: [{ id: "acc-1", accountId: "123456789012", name: "prod" }],
     resources: [
-      { id: "r-1", serviceId: "ec2", name: "web", config: {}, source: "manual" },
+      { id: "r-1", serviceId: "ec2-instance", name: "web", config: {}, source: "manual" },
       { id: "r-2", serviceId: "rds", name: "db", config: {}, source: "manual" },
     ],
     relationships: [],
@@ -184,5 +184,45 @@ describe("FileRepository.remove", () => {
 
   it("returns false when removing a missing id", async () => {
     expect(await repo.remove(randomUUID())).toBe(false);
+  });
+});
+
+describe("FileRepository path-traversal / id validation", () => {
+  // Ids are server-generated UUIDs; anything else must fail loudly rather than
+  // resolve to a file outside DATA_DIR. The id guard is the only thing standing
+  // between a request path segment and the filesystem, so it is tested directly.
+  const badIds = [
+    "../../etc/passwd",
+    "..%2F..%2Fetc%2Fpasswd",
+    "a/b",
+    "..",
+    "",
+    "not-a-uuid",
+    "../" + "x".repeat(8) + "-0000-0000-0000-000000000000",
+  ];
+
+  it("returns null/false for malformed ids instead of touching other paths", async () => {
+    for (const id of badIds) {
+      expect(await repo.get(id)).toBeNull();
+      expect(await repo.update(id, makeGraph())).toBeNull();
+      expect(await repo.remove(id)).toBe(false);
+    }
+  });
+
+  it("never writes a file outside the data dir for a traversal id", async () => {
+    await repo.update("../escaped", makeGraph()).catch(() => null);
+    // Only the data dir exists; the traversal target must not have been created.
+    const escaped = path.join(dataDir, "..", "escaped.json");
+    await expect(fs.readFile(escaped, "utf8")).rejects.toBeTruthy();
+  });
+});
+
+describe("FileRepository atomic writes", () => {
+  it("leaves no temp files behind after create/update", async () => {
+    const created = await repo.create(makeGraph());
+    await repo.update(created.id, { ...created, name: "v2" });
+    const files = await fs.readdir(dataDir);
+    expect(files).toEqual([`${created.id}.json`]);
+    expect(files.some((f) => f.endsWith(".tmp"))).toBe(false);
   });
 });

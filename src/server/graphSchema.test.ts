@@ -3,6 +3,7 @@ import {
   isInfrastructureGraph,
   hasGraphCollections,
   checkCollectionLimits,
+  checkOptionalFields,
   pickWritableFields,
   MAX_COLLECTION_LENGTH,
 } from "./graphSchema";
@@ -147,6 +148,45 @@ describe("isInfrastructureGraph", () => {
     expect(isInfrastructureGraph("graph")).toBe(false);
     expect(isInfrastructureGraph([])).toBe(false);
     expect(isInfrastructureGraph([baseGraph()])).toBe(false);
+  });
+
+  it("rejects collections whose elements are primitives, not objects", () => {
+    // A stored/uploaded file with `resources: [42]` must not load as a graph.
+    expect(isInfrastructureGraph({ ...baseGraph(), resources: [42] })).toBe(false);
+    expect(isInfrastructureGraph({ ...baseGraph(), relationships: ["x"] })).toBe(false);
+    expect(isInfrastructureGraph({ ...baseGraph(), accounts: [true] })).toBe(false);
+    expect(isInfrastructureGraph({ ...baseGraph(), resources: [null] })).toBe(false);
+    expect(isInfrastructureGraph({ ...baseGraph(), resources: [["nested"]] })).toBe(false);
+  });
+});
+
+describe("checkOptionalFields", () => {
+  it("returns null when description and viewport are absent", () => {
+    expect(checkOptionalFields({ name: "g" })).toBeNull();
+  });
+
+  it("returns null for valid description and viewport", () => {
+    expect(
+      checkOptionalFields({ description: "hi", viewport: { x: 1, y: 2, scale: 1 } }),
+    ).toBeNull();
+  });
+
+  it("treats explicit undefined optionals as absent", () => {
+    expect(checkOptionalFields({ description: undefined, viewport: undefined })).toBeNull();
+  });
+
+  it("rejects a non-string description", () => {
+    expect(checkOptionalFields({ description: 123 })).toMatch(/description must be a string/i);
+  });
+
+  it("rejects a non-object viewport", () => {
+    expect(checkOptionalFields({ viewport: "x" })).toMatch(/viewport must be an object/i);
+  });
+
+  it("rejects a viewport with non-numeric fields", () => {
+    expect(checkOptionalFields({ viewport: { x: 1, y: 2, scale: "1" } })).toMatch(
+      /viewport must be an object/i,
+    );
   });
 });
 

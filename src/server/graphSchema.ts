@@ -37,7 +37,13 @@ export function isInfrastructureGraph(value: unknown): value is InfrastructureGr
     typeof value.schemaVersion === "number" &&
     Array.isArray(value.accounts) &&
     Array.isArray(value.resources) &&
-    Array.isArray(value.relationships)
+    Array.isArray(value.relationships) &&
+    // Elements must be objects, not primitives — a stored file with
+    // `resources: [42]` would otherwise load and corrupt the store. Deeper
+    // per-element field checks live in `validateGraph`.
+    value.accounts.every(isRecord) &&
+    value.resources.every(isRecord) &&
+    value.relationships.every(isRecord)
   );
 }
 

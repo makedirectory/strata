@@ -9,6 +9,7 @@
  * produces.
  */
 import type { RelationshipKind } from "./types";
+import { getService } from "./registry";
 
 /** An AWS account in scope for a diagram/environment. */
 export interface Account {
@@ -204,24 +205,71 @@ export function relationshipsOf(
   return g.relationships.filter((e) => e.from === resourceId || e.to === resourceId);
 }
 
-/** Basic structural integrity check (dangling refs, duplicate ids). */
+/** True for a value that has the minimum `ResourceInstance` shape we rely on. */
+function isResourceLike(value: unknown): value is ResourceInstance {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as ResourceInstance).id === "string" &&
+    typeof (value as ResourceInstance).serviceId === "string"
+  );
+}
+
+/** True for a value that has the minimum `Relationship` shape we rely on. */
+function isRelationshipLike(value: unknown): value is Relationship {
+  const e = value as Relationship;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof e.id === "string" &&
+    typeof e.from === "string" &&
+    typeof e.to === "string"
+  );
+}
+
+/**
+ * Basic structural integrity check (dangling refs, duplicate ids, unknown
+ * services, self-edges). Also rejects array elements that aren't well-formed
+ * objects — untrusted bodies/files can smuggle primitives (e.g.
+ * `resources: [42]`) past the array-only shape check in `isInfrastructureGraph`,
+ * and persisting those silently corrupts the store and crashes downstream
+ * readers of `r.serviceId` / `r.config`.
+ */
 export function validateGraph(g: InfrastructureGraph): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();
-  for (const r of g.resources) {
+  g.resources.forEach((r, i) => {
+    if (!isResourceLike(r)) {
+      errors.push(`Resource entry #${i} is not a valid resource object`);
+      return;
+    }
     if (ids.has(r.id)) errors.push(`Duplicate resource id ${r.id}`);
     ids.add(r.id);
+    // The model↔registry boundary: a stale/typo'd serviceId passes every shape
+    // check but has no icon/config schema, so flag it here rather than letting
+    // it fail later in the renderer.
+    if (!getService(r.serviceId)) {
+      errors.push(`Resource ${r.id} references unknown service ${r.serviceId}`);
+    }
     // Only validate parentId when one is set; a resource with no parent is a
     // valid top-level node, so the `r.parentId &&` short-circuit skips it.
-    if (r.parentId && !g.resources.some((x) => x.id === r.parentId)) {
+    if (r.parentId && !g.resources.some((x) => isResourceLike(x) && x.id === r.parentId)) {
       errors.push(`Resource ${r.id} references missing parent ${r.parentId}`);
     }
-  }
-  for (const e of g.relationships) {
+  });
+  const relIds = new Set<string>();
+  g.relationships.forEach((e, i) => {
+    if (!isRelationshipLike(e)) {
+      errors.push(`Relationship entry #${i} is not a valid relationship object`);
+      return;
+    }
+    if (relIds.has(e.id)) errors.push(`Duplicate relationship id ${e.id}`);
+    relIds.add(e.id);
+    if (e.from === e.to) errors.push(`Relationship ${e.id} connects ${e.from} to itself`);
     if (!ids.has(e.from)) errors.push(`Relationship ${e.id} references missing from ${e.from}`);
     if (!ids.has(e.to)) errors.push(`Relationship ${e.id} references missing to ${e.to}`);
     if (!isRelationshipKind(e.kind))
       errors.push(`Relationship ${e.id} has invalid kind ${String(e.kind)}`);
-  }
+  });
   return errors;
 }

@@ -96,6 +96,7 @@ export const Canvas: React.FC = () => {
   // centre of the canvas viewport.
   useEffect(() => {
     const handler = (e: Event) => {
+      if (presentation) return; // read-only: ignore palette add requests
       const detail = (e as CustomEvent<{ serviceId?: unknown }>).detail;
       if (!detail || typeof detail.serviceId !== "string") return;
       const el = worldRef.current?.parentElement;
@@ -107,7 +108,7 @@ export const Canvas: React.FC = () => {
     };
     window.addEventListener(PALETTE_ADD_EVENT, handler);
     return () => window.removeEventListener(PALETTE_ADD_EVENT, handler);
-  }, [addResourceFromPalette, worldRef]);
+  }, [addResourceFromPalette, worldRef, presentation]);
 
   // Redraw when state changes
   useEffect(() => {

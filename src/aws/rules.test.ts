@@ -99,6 +99,31 @@ describe("validateArchitecture", () => {
     expect(out).toEqual([]);
   });
 
+  it("accepts the topology when the subnet→route-table attachment is the reverse edge direction", () => {
+    // Importers/MCP may emit `subnet --attached_to--> rt` (outgoing) rather than
+    // `rt --attached_to--> subnet`. The route-table resolution is direction-
+    // agnostic, so this must not false-positive the IGW/route-table check.
+    const vpc = res("vpc", { id: "vpc", config: { cidr: "10.0.0.0/16" } });
+    const subnet = res("subnet-public", { id: "sn", config: { cidr: "10.0.1.0/24" } });
+    const igw = res("internet-gateway", { id: "igw" });
+    const rt = res("route-table", { id: "rt" });
+
+    const g = graph(
+      [vpc, subnet, igw, rt],
+      [
+        rel("vpc", "sn", "contains"),
+        rel("igw", "vpc", "attached_to"),
+        rel("sn", "rt", "attached_to"), // reverse direction
+        rel("rt", "igw", "routes_to"),
+      ],
+    );
+
+    const out = validateArchitecture(g);
+    expect(
+      messages(out).some((m) => m.includes("should have a Route Table that routes to an Internet")),
+    ).toBe(false);
+  });
+
   it("validates a subnet's CIDR is contained within its VPC", () => {
     const vpc = res("vpc", { id: "vpc", config: { cidr: "10.0.0.0/16" } });
     const subnet = res("subnet-private", { id: "sn", config: { cidr: "192.168.1.0/24" } });

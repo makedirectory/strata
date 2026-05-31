@@ -17,6 +17,7 @@ export const Inspector: React.FC = () => {
     runRulesUI,
     validationResults,
     ruleSuggestions,
+    presentation,
   } = useFlow();
 
   const validationAndRules = (
@@ -40,7 +41,11 @@ export const Inspector: React.FC = () => {
   if (selection.type === "node") {
     return (
       <div className="inspector">
-        <NodeForm resource={selection.resource} onUpdate={updateResourceField} />
+        <NodeForm
+          resource={selection.resource}
+          onUpdate={updateResourceField}
+          readOnly={presentation}
+        />
         {validationAndRules}
       </div>
     );
@@ -48,7 +53,7 @@ export const Inspector: React.FC = () => {
 
   return (
     <div className="inspector">
-      <EdgeForm selection={selection} onUpdate={updateRelationshipKind} />
+      <EdgeForm selection={selection} onUpdate={updateRelationshipKind} readOnly={presentation} />
       {validationAndRules}
     </div>
   );
@@ -57,7 +62,8 @@ export const Inspector: React.FC = () => {
 const EdgeForm: React.FC<{
   selection: Extract<NonNullable<ReturnType<typeof useFlow>["selection"]>, { type: "edge" }>;
   onUpdate: (kind: RelationshipKind) => void;
-}> = ({ selection, onUpdate }) => {
+  readOnly?: boolean;
+}> = ({ selection, onUpdate, readOnly = false }) => {
   const relId = useId();
   return (
     <div className="section">
@@ -71,6 +77,7 @@ const EdgeForm: React.FC<{
           <select
             id={relId}
             value={selection.relationship.kind}
+            disabled={readOnly}
             onChange={(e) => onUpdate(e.target.value as RelationshipKind)}
           >
             {RELATIONSHIP_ORDER.map((k) => (
@@ -88,7 +95,8 @@ const EdgeForm: React.FC<{
 const NodeForm: React.FC<{
   resource: ResourceInstance;
   onUpdate: (patch: { name?: string; region?: string; config?: Record<string, unknown> }) => void;
-}> = ({ resource, onUpdate }) => {
+  readOnly?: boolean;
+}> = ({ resource, onUpdate, readOnly = false }) => {
   const svc = getService(resource.serviceId);
   const baseId = useId();
   const nameId = `${baseId}-name`;
@@ -106,6 +114,7 @@ const NodeForm: React.FC<{
             // Reset local edit state whenever a different resource is selected.
             resetKey={resource.id}
             value={resource.name}
+            disabled={readOnly}
             commit={(v) => onUpdate({ name: v })}
           />
         </div>
@@ -115,6 +124,7 @@ const NodeForm: React.FC<{
           <select
             id={regionId}
             value={resource.region ?? ""}
+            disabled={readOnly}
             onChange={(e) => onUpdate({ region: e.target.value })}
           >
             <option value="">(none)</option>
@@ -134,7 +144,13 @@ const NodeForm: React.FC<{
                 {field.label}
               </label>
               <div>
-                <ConfigInput id={fieldId} resource={resource} field={field} onUpdate={onUpdate} />
+                <ConfigInput
+                  id={fieldId}
+                  resource={resource}
+                  field={field}
+                  onUpdate={onUpdate}
+                  readOnly={readOnly}
+                />
               </div>
             </React.Fragment>
           );
@@ -156,8 +172,9 @@ const ControlledInput: React.FC<{
   resetKey: string;
   value: string;
   placeholder?: string;
+  disabled?: boolean;
   commit: (value: string) => void;
-}> = ({ id, resetKey, value, placeholder, commit }) => {
+}> = ({ id, resetKey, value, placeholder, disabled = false, commit }) => {
   const [draft, setDraft] = React.useState(value);
   const lastKeyRef = React.useRef(resetKey);
 
@@ -172,6 +189,7 @@ const ControlledInput: React.FC<{
       id={id}
       placeholder={placeholder}
       value={draft}
+      disabled={disabled}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => commit(draft)}
       onKeyDown={(e) => {
@@ -186,7 +204,8 @@ const ConfigInput: React.FC<{
   resource: ResourceInstance;
   field: ConfigField;
   onUpdate: (patch: { config?: Record<string, unknown> }) => void;
-}> = ({ id, resource, field, onUpdate }) => {
+  readOnly?: boolean;
+}> = ({ id, resource, field, onUpdate, readOnly = false }) => {
   const value = resource.config[field.key];
   const setVal = (v: unknown) => onUpdate({ config: { [field.key]: v } });
   const resetKey = `${resource.id}-${field.key}`;
@@ -197,6 +216,7 @@ const ConfigInput: React.FC<{
         <select
           id={id}
           value={value ? "true" : "false"}
+          disabled={readOnly}
           onChange={(e) => setVal(e.target.value === "true")}
         >
           <option value="false">No</option>
@@ -208,6 +228,7 @@ const ConfigInput: React.FC<{
         <select
           id={id}
           value={value === undefined ? "" : String(value)}
+          disabled={readOnly}
           onChange={(e) => setVal(e.target.value)}
         >
           {!field.required && <option value="">(none)</option>}
@@ -231,6 +252,7 @@ const ConfigInput: React.FC<{
           resetKey={resetKey}
           value={text}
           placeholder={field.placeholder ?? "a, b, c"}
+          disabled={readOnly}
           commit={(v) =>
             setVal(
               v
@@ -249,6 +271,7 @@ const ConfigInput: React.FC<{
           resetKey={resetKey}
           value={value === undefined ? "" : String(value)}
           placeholder={field.placeholder}
+          disabled={readOnly}
           commit={(v) => setVal(v)}
         />
       );
@@ -259,6 +282,7 @@ const ConfigInput: React.FC<{
           resetKey={resetKey}
           value={value === undefined ? "" : String(value)}
           placeholder={field.placeholder}
+          disabled={readOnly}
           commit={(v) => setVal(v === "" ? undefined : Number(v))}
         />
       );
@@ -272,6 +296,7 @@ const ConfigInput: React.FC<{
           resetKey={resetKey}
           value={value === undefined ? "" : String(value)}
           placeholder={field.placeholder}
+          disabled={readOnly}
           commit={(v) => setVal(v)}
         />
       );
@@ -284,8 +309,9 @@ const ControlledTextarea: React.FC<{
   resetKey: string;
   value: string;
   placeholder?: string;
+  disabled?: boolean;
   commit: (value: string) => void;
-}> = ({ id, resetKey, value, placeholder, commit }) => {
+}> = ({ id, resetKey, value, placeholder, disabled = false, commit }) => {
   const [draft, setDraft] = React.useState(value);
   const lastKeyRef = React.useRef(resetKey);
 
@@ -300,6 +326,7 @@ const ControlledTextarea: React.FC<{
       rows={3}
       placeholder={placeholder}
       value={draft}
+      disabled={disabled}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => commit(draft)}
     />

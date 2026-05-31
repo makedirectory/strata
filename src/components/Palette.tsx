@@ -13,12 +13,12 @@ import type { ServiceDefinition, ServiceCategoryId } from "../aws/types";
  */
 export const PALETTE_ADD_EVENT = "palette:add-service";
 
-export const Palette: React.FC = () => {
+export const Palette: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
   const [query, setQuery] = useState("");
 
   /** Activation (click / keyboard): ask the canvas to add the service. */
   const addToCanvas = (serviceId: string) => {
-    if (typeof window === "undefined") return;
+    if (readOnly || typeof window === "undefined") return;
     window.dispatchEvent(new CustomEvent(PALETTE_ADD_EVENT, { detail: { serviceId } }));
   };
 
@@ -57,11 +57,16 @@ export const Palette: React.FC = () => {
                   key={s.id}
                   type="button"
                   className="item"
-                  draggable
+                  draggable={!readOnly}
+                  disabled={readOnly}
                   title={s.fullName}
                   aria-label={`Add ${s.fullName}`}
                   style={{ borderColor: serviceColor(s.id) }}
                   onDragStart={(e) => {
+                    if (readOnly) {
+                      e.preventDefault();
+                      return;
+                    }
                     e.dataTransfer.setData("application/json", JSON.stringify({ serviceId: s.id }));
                   }}
                   onClick={() => addToCanvas(s.id)}

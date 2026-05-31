@@ -301,6 +301,14 @@ export const CommandPalette: React.FC = () => {
     setActive((a) => Math.min(a, Math.max(0, commands.length - 1)));
   }, [commands.length]);
 
+  // Keep the highlighted command visible when arrow-keys move the selection
+  // past the visible window of the scrollable list.
+  useEffect(() => {
+    const id = commands[active]?.id;
+    if (!id) return;
+    document.getElementById(`cmdk-${id}`)?.scrollIntoView({ block: "nearest" });
+  }, [active, commands]);
+
   const runCommand = useCallback(
     (cmd: Command | undefined) => {
       if (!cmd) return;
