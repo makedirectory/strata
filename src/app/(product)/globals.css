@@ -423,6 +423,35 @@ text.dimmed {
   padding: 1px 8px;
   flex: 0 0 auto;
 }
+/* Cloud-provider badge on each node, colour-coded per provider. */
+.node-provider {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  padding: 1px 5px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  color: var(--text);
+}
+.node-provider-aws {
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  border-color: color-mix(in srgb, #f59e0b 45%, transparent);
+}
+.node-provider-gcp {
+  background: color-mix(in srgb, #60a5fa 18%, transparent);
+  border-color: color-mix(in srgb, #60a5fa 45%, transparent);
+}
+.node-provider-azure {
+  background: color-mix(in srgb, #38bdf8 18%, transparent);
+  border-color: color-mix(in srgb, #38bdf8 45%, transparent);
+}
+/* Hide the badge at far zoom where node chrome collapses. */
+.node.lod-far .node-provider {
+  display: none;
+}
 .node-collapse {
   display: inline-flex;
   align-items: center;
