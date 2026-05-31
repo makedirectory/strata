@@ -3,11 +3,19 @@ import { useCallback, useEffect, useRef } from "react";
 import type { ResourceInstance, Relationship } from "../aws/model";
 import type { RelationshipKind } from "../aws/types";
 import type { Selection, Pan, CanvasDensity, LodTier } from "../types";
-import { getService, serviceColor, serviceIcon } from "../aws/registry";
+import { getService, serviceColor, serviceIcon, serviceProvider } from "../aws/registry";
+import type { CloudProvider } from "../aws/types";
 import { RELATIONSHIPS } from "../aws/categories";
 import { relationshipClassDef } from "../aws/relationshipClasses";
 import type { OverlayLit } from "../aws/overlays";
 import { regionName } from "../aws/regions";
+
+/** Short badge + full label shown on each node so mixed-cloud diagrams read clearly. */
+const PROVIDER_BADGE: Record<CloudProvider, { short: string; label: string }> = {
+  aws: { short: "AWS", label: "Amazon Web Services" },
+  gcp: { short: "GCP", label: "Google Cloud" },
+  azure: { short: "AZ", label: "Microsoft Azure" },
+};
 import {
   boundsOf,
   unionRect,
@@ -329,6 +337,13 @@ export function useCanvasRenderer(
             left.appendChild(icon);
             left.appendChild(titles);
 
+            // Provider badge (AWS / GCP / AZ) — static per node; set once here.
+            const provider = svc ? serviceProvider(svc) : "aws";
+            const provBadge = document.createElement("span");
+            provBadge.className = `node-provider node-provider-${provider}`;
+            provBadge.textContent = PROVIDER_BADGE[provider].short;
+            provBadge.title = PROVIDER_BADGE[provider].label;
+
             const right = document.createElement("div");
             right.className = "ports";
 
@@ -342,6 +357,7 @@ export function useCanvasRenderer(
             right.appendChild(pIn);
 
             header.appendChild(left);
+            header.appendChild(provBadge);
             header.appendChild(right);
             div.appendChild(header);
 
