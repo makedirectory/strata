@@ -219,6 +219,12 @@ export const CommandPalette: React.FC = () => {
       },
       { id: "save", title: "Save to server", group: "Tools", run: flow.saveToServer },
       {
+        id: "connect-aws",
+        title: "Connect to AWS (discover live resources)",
+        group: "Tools",
+        run: flow.openConnect,
+      },
+      {
         id: "preset-basic",
         title: "Load preset: Basic AWS",
         group: "Tools",

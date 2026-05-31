@@ -209,6 +209,14 @@ interface FlowContextValue {
   closeExportIaC: () => void;
   /** Build the current model as an InfrastructureGraph (for the export dialog). */
   snapshotGraph: () => InfrastructureGraph;
+
+  // ---- Live discovery / Connect to AWS (Flow 4) ----
+  /** Whether the "Connect to AWS" discovery dialog is open. */
+  connectOpen: boolean;
+  openConnect: () => void;
+  closeConnect: () => void;
+  /** Apply a discovered graph: "merge" keeps current work, "replace" is guarded. */
+  importDiscoveredGraph: (graph: InfrastructureGraph, mode: "merge" | "replace") => void;
   runValidateUI: () => void;
   runRulesUI: () => void;
   saveToServer: () => void;
@@ -269,6 +277,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFocusedContainerId,
     clear: storeClear,
     markSaved: storeMarkSaved,
+    mergeGraph: storeMergeGraph,
   } = store;
 
   // Destructure the stable (useCallback) members so handler deps below stay
@@ -305,6 +314,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const openExportIaC = useCallback(() => setExportIaCOpen(true), []);
   const closeExportIaC = useCallback(() => setExportIaCOpen(false), []);
 
+  const [connectOpen, setConnectOpen] = React.useState(false);
+  const openConnect = useCallback(() => setConnectOpen(true), []);
+  const closeConnect = useCallback(() => setConnectOpen(false), []);
+
   /**
    * Gate any graph-replacing action behind an unsaved-work check. Resolves
    * `true` immediately when there is nothing to lose; otherwise opens the
@@ -317,6 +330,27 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setReplaceConfirmOpen(true);
     });
   }, [store.dirty, store.resources.length]);
+
+  /** Apply a graph built from discovered resources. "merge" preserves current
+   *  work; "replace" goes through the unsaved-work guard. */
+  const importDiscoveredGraph = useCallback(
+    async (graph: InfrastructureGraph, mode: "merge" | "replace") => {
+      if (mode === "replace") {
+        if (!(await confirmReplaceIfDirty())) return;
+        storeReplaceAll({
+          resources: graph.resources,
+          relationships: graph.relationships,
+          accounts: graph.accounts ?? [],
+          graphId: "",
+        });
+      } else {
+        storeMergeGraph({ resources: graph.resources, relationships: graph.relationships });
+      }
+      setConnectOpen(false);
+      setStatus(`Imported ${graph.resources.length} discovered resource(s) (${mode}).`);
+    },
+    [confirmReplaceIfDirty, storeReplaceAll, storeMergeGraph],
+  );
 
   // `viewport` is intentionally NOT here — it lives in the Canvas-only context
   // so panels don't re-render on pan/zoom.
@@ -1478,6 +1512,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       openExportIaC,
       closeExportIaC,
       snapshotGraph: buildGraph,
+      connectOpen,
+      openConnect,
+      closeConnect,
+      importDiscoveredGraph,
       runValidateUI: runValidate,
       runRulesUI: runSuggest,
       saveToServer,
@@ -1560,6 +1598,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       openExportIaC,
       closeExportIaC,
       buildGraph,
+      connectOpen,
+      openConnect,
+      closeConnect,
+      importDiscoveredGraph,
       saveToServer,
       listSavedGraphs,
       loadGraph,
