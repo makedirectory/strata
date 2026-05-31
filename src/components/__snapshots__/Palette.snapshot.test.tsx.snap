@@ -13,6 +13,40 @@ exports[`Palette DOM snapshots > renders the empty state when nothing matches 1`
       value="zzzz-no-such-service"
     />
     <div
+      aria-label="Filter by cloud provider"
+      class="palette-providers"
+      role="group"
+    >
+      <button
+        aria-pressed="true"
+        class="palette-provider is-active"
+        type="button"
+      >
+        All
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        AWS
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        GCP
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        Azure
+      </button>
+    </div>
+    <div
       class="help"
     >
       No services match “zzzz-no-such-service”.
@@ -33,6 +67,40 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
       type="text"
       value="serverless"
     />
+    <div
+      aria-label="Filter by cloud provider"
+      class="palette-providers"
+      role="group"
+    >
+      <button
+        aria-pressed="true"
+        class="palette-provider is-active"
+        type="button"
+      >
+        All
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        AWS
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        GCP
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        Azure
+      </button>
+    </div>
     <div
       class="palette-section"
     >
@@ -69,6 +137,86 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
             class="palette-item-name"
           >
             Lambda
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Run Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Google Cloud Run Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🏃
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud Run
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Functions"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Google Cloud Functions"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            ⚡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud Functions
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Functions"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Azure Functions"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            ⚡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Functions
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -110,6 +258,36 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
           >
             Fargate
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Container Instances"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Azure Container Instances"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            📦
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Container Instances
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
         </button>
       </div>
     </div>
@@ -150,6 +328,11 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
           >
             Aurora
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon DynamoDB"
@@ -169,6 +352,36 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
             class="palette-item-name"
           >
             DynamoDB
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Firestore Database"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Google Cloud Firestore Database"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🔥
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Firestore
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
           </span>
         </button>
       </div>
@@ -210,6 +423,11 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
           >
             EventBridge
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Step Functions"
@@ -229,6 +447,61 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
             class="palette-item-name"
           >
             Step Functions
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Workflows"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Google Cloud Workflows"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🔀
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Workflows
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Event Grid Topic"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Azure Event Grid Topic"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🔔
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Event Grid
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -270,6 +543,11 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
           >
             Athena
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Glue"
@@ -289,6 +567,11 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
             class="palette-item-name"
           >
             Glue
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
       </div>
@@ -330,6 +613,11 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
           >
             Lambda@Edge
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
       </div>
     </div>
@@ -349,6 +637,40 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
       type="text"
       value=""
     />
+    <div
+      aria-label="Filter by cloud provider"
+      class="palette-providers"
+      role="group"
+    >
+      <button
+        aria-pressed="true"
+        class="palette-provider is-active"
+        type="button"
+      >
+        All
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        AWS
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        GCP
+      </button>
+      <button
+        aria-pressed="false"
+        class="palette-provider"
+        type="button"
+      >
+        Azure
+      </button>
+    </div>
     <div
       class="palette-section"
     >
@@ -386,6 +708,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             VPC
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon VPC Subnet (Public)"
@@ -405,6 +732,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Public Subnet
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -426,6 +758,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Private Subnet
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon VPC Route Table"
@@ -445,6 +782,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Route Table
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -466,6 +808,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Network ACL
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon VPC Internet Gateway"
@@ -485,6 +832,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Internet Gateway
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -506,6 +858,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             NAT Gateway
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon VPC Security Group"
@@ -525,6 +882,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Security Group
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -546,6 +908,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             ALB / ELB
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Elastic Load Balancing Target Group"
@@ -565,6 +932,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Target Group
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -586,6 +958,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Route 53
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon VPC Peering Connection"
@@ -605,6 +982,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             VPC Peering
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -626,6 +1008,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Transit Gateway
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon VPC Endpoint (PrivateLink)"
@@ -645,6 +1032,386 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             VPC Endpoint
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Virtual Private Cloud Network"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Google Cloud Virtual Private Cloud Network"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🏛️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            VPC Network
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud VPC Subnetwork"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Google Cloud VPC Subnetwork"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🟩
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Subnet
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud VPC Firewall Rule"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Google Cloud VPC Firewall Rule"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧱
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Firewall Rule
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Load Balancing Backend Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Google Cloud Load Balancing Backend Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            ⚖️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Load Balancing
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud DNS Managed Zone"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Google Cloud DNS Managed Zone"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧬
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud DNS
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Router"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Google Cloud Router"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧭
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud Router
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud NAT Gateway"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Google Cloud NAT Gateway"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            ↗️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud NAT
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Virtual Network"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Virtual Network"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🏛️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Virtual Network
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Virtual Network Subnet"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Virtual Network Subnet"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🟦
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Subnet
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Network Security Group"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Network Security Group"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧱
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            NSG
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Load Balancer"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Load Balancer"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            ⚖️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Load Balancer
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Application Gateway"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Application Gateway"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🚪
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            App Gateway
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Public IP Address"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Public IP Address"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🌍
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Public IP
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Route Table (User Defined Routes)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Route Table (User Defined Routes)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧭
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Route Table
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure DNS Zone"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure DNS Zone"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧬
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            DNS Zone
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -686,6 +1453,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             EC2
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Lambda"
@@ -705,6 +1477,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Lambda
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -726,6 +1503,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Auto Scaling
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Batch"
@@ -745,6 +1527,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Batch
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -766,6 +1553,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Lightsail
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Elastic Beanstalk"
@@ -785,6 +1577,236 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Beanstalk
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Compute Engine VM Instance"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Google Compute Engine VM Instance"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🖥️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Compute Engine
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Compute Engine Managed Instance Group"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Compute Engine Managed Instance Group"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            📦
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Instance Group
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Run Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Google Cloud Run Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🏃
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud Run
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Functions"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Google Cloud Functions"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            ⚡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud Functions
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google App Engine Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Google App Engine Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🚀
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            App Engine
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Virtual Machine"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Azure Virtual Machine"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🖥️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Virtual Machine
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Virtual Machine Scale Set"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Azure Virtual Machine Scale Set"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🧮
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            VM Scale Set
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure App Service (Web App)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Azure App Service (Web App)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🌐
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            App Service
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Functions"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Azure Functions"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            ⚡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Functions
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -826,6 +1848,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             ECS Cluster
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Elastic Container Service"
@@ -845,6 +1872,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             ECS Service
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -866,6 +1898,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             EKS Cluster
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Elastic Container Registry"
@@ -885,6 +1922,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             ECR
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -906,6 +1948,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Fargate
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS App Runner"
@@ -925,6 +1972,86 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             App Runner
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Kubernetes Engine Cluster"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Google Kubernetes Engine Cluster"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            ☸️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            GKE
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Kubernetes Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Azure Kubernetes Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            ☸️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            AKS
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Container Instances"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Azure Container Instances"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            📦
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Container Instances
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -966,6 +2093,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             S3
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Elastic Block Store"
@@ -985,6 +2117,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             EBS
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1006,6 +2143,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             EFS
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon FSx"
@@ -1025,6 +2167,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             FSx
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1046,6 +2193,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Storage Gateway
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Backup"
@@ -1066,6 +2218,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Backup
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon S3 Glacier"
@@ -1085,6 +2242,161 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             S3 Glacier
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Storage Bucket"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Google Cloud Storage Bucket"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            🪣
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud Storage
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Compute Engine Persistent Disk"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Compute Engine Persistent Disk"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            💽
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Persistent Disk
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Filestore Instance"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Google Cloud Filestore Instance"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            🗄️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Filestore
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Storage Account"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Azure Storage Account"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            🗄️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Storage Account
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Blob Storage Container"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Azure Blob Storage Container"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            🪣
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Blob Container
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Managed Disk"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Azure Managed Disk"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            💽
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Managed Disk
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -1126,6 +2438,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             RDS
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Aurora"
@@ -1145,6 +2462,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Aurora
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1166,6 +2488,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             DynamoDB
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon ElastiCache"
@@ -1185,6 +2512,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             ElastiCache
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1206,6 +2538,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             DocumentDB
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Neptune"
@@ -1226,6 +2563,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Neptune
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon MemoryDB for Redis"
@@ -1245,6 +2587,261 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             MemoryDB
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud SQL Instance"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Google Cloud SQL Instance"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🛢️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud SQL
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Spanner Instance"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Google Cloud Spanner Instance"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🌎
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Spanner
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Bigtable Instance"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Google Cloud Bigtable Instance"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            📊
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Bigtable
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Firestore Database"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Google Cloud Firestore Database"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🔥
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Firestore
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Memorystore for Redis"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Google Cloud Memorystore for Redis"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            ⚡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Memorystore
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure SQL Server (logical server)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Azure SQL Server (logical server)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🗃️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            SQL Server
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure SQL Database"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Azure SQL Database"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🛢️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            SQL Database
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Cosmos DB Account"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Azure Cosmos DB Account"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🌌
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cosmos DB
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Database for PostgreSQL (Flexible Server)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Azure Database for PostgreSQL (Flexible Server)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🐘
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            PostgreSQL
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Cache for Redis"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Azure Cache for Redis"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🧊
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cache for Redis
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -1286,6 +2883,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             SQS
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Simple Notification Service"
@@ -1305,6 +2907,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             SNS
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1326,6 +2933,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             EventBridge
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Kinesis Data Streams"
@@ -1345,6 +2957,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Kinesis Streams
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1366,6 +2983,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Step Functions
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon API Gateway"
@@ -1385,6 +3007,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             API Gateway
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1406,6 +3033,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Amazon MQ
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS AppSync"
@@ -1425,6 +3057,261 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             AppSync
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Pub/Sub Topic"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Google Cloud Pub/Sub Topic"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            📣
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Pub/Sub Topic
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Pub/Sub Subscription"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Google Cloud Pub/Sub Subscription"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            📥
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Pub/Sub Subscription
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Tasks Queue"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Google Cloud Tasks Queue"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🗂️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud Tasks
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Workflows"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Google Cloud Workflows"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🔀
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Workflows
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Eventarc Trigger"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Google Cloud Eventarc Trigger"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🪝
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Eventarc
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Service Bus Namespace"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Azure Service Bus Namespace"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🚌
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Service Bus
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Event Hubs Namespace"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Azure Event Hubs Namespace"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            📡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Event Hub
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Event Grid Topic"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Azure Event Grid Topic"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🔔
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Event Grid
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Logic Apps Workflow"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Azure Logic Apps Workflow"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🧩
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Logic App
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Storage Queue"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Azure Storage Queue"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            📥
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Storage Queue
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -1466,6 +3353,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Secrets Manager
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Key Management Service"
@@ -1485,6 +3377,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             KMS
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1506,6 +3403,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             WAF
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Shield"
@@ -1525,6 +3427,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Shield
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1546,6 +3453,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             GuardDuty
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Certificate Manager"
@@ -1565,6 +3477,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Certificate Manager
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1586,6 +3503,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Cognito
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Security Hub"
@@ -1606,6 +3528,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Security Hub
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Inspector"
@@ -1625,6 +3552,111 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Inspector
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Secret Manager Secret"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="Google Cloud Secret Manager Secret"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🔐
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Secret Manager
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud KMS Key Ring"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="Google Cloud KMS Key Ring"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🗝️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            KMS KeyRing
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud KMS Crypto Key"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="Google Cloud KMS Crypto Key"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🔑
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            KMS CryptoKey
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Key Vault"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="Azure Key Vault"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🔐
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Key Vault
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -1666,6 +3698,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             IAM Role
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Identity and Access Management User"
@@ -1685,6 +3722,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             IAM User
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1706,6 +3748,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             IAM Policy
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Identity and Access Management Group"
@@ -1726,6 +3773,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             IAM Group
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS IAM Identity Center"
@@ -1745,6 +3797,61 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Identity Center
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud IAM Service Account"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 191, 36);"
+          title="Google Cloud IAM Service Account"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 191, 36);"
+          >
+            🤖
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Service Account
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure User-Assigned Managed Identity"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 191, 36);"
+          title="Azure User-Assigned Managed Identity"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 191, 36);"
+          >
+            🪪
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Managed Identity
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -1786,6 +3893,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             CloudWatch
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon CloudWatch Logs"
@@ -1805,6 +3917,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             CloudWatch Logs
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1826,6 +3943,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             CloudWatch Alarm
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS X-Ray"
@@ -1846,6 +3968,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             X-Ray
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS CloudTrail"
@@ -1865,6 +3992,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             CloudTrail
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
       </div>
@@ -1906,6 +4038,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Athena
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Glue"
@@ -1925,6 +4062,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Glue
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1946,6 +4088,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Redshift
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon EMR"
@@ -1965,6 +4112,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             EMR
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -1986,6 +4138,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Firehose
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon QuickSight"
@@ -2005,6 +4162,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             QuickSight
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2026,6 +4188,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             OpenSearch
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Lake Formation"
@@ -2046,6 +4213,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Lake Formation
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Managed Streaming for Apache Kafka"
@@ -2065,6 +4237,211 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             MSK
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google BigQuery Dataset"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Google BigQuery Dataset"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🗃️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            BigQuery Dataset
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google BigQuery Table"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Google BigQuery Table"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            📋
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            BigQuery Table
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Dataflow Job"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Google Cloud Dataflow Job"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🌊
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Dataflow
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud Dataproc Cluster"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Google Cloud Dataproc Cluster"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🐘
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Dataproc
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Synapse Analytics Workspace"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Azure Synapse Analytics Workspace"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🛰️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Synapse
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Data Factory"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Azure Data Factory"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🏭
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Data Factory
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Databricks Workspace"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Azure Databricks Workspace"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🧱
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Databricks
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Stream Analytics Job"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Azure Stream Analytics Job"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🌊
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Stream Analytics
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -2106,6 +4483,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             SageMaker
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Bedrock"
@@ -2125,6 +4507,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Bedrock
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2146,6 +4533,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Rekognition
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Comprehend"
@@ -2165,6 +4557,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Comprehend
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2186,6 +4583,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Textract
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Transcribe"
@@ -2205,6 +4607,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Transcribe
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2226,6 +4633,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Polly
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Translate"
@@ -2245,6 +4657,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Translate
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2266,6 +4683,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Lex
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon Kendra"
@@ -2285,6 +4707,86 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Kendra
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Vertex AI Endpoint"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Google Vertex AI Endpoint"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🧠
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Vertex AI Endpoint
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Machine Learning Workspace"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Azure Machine Learning Workspace"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🧠
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            ML Workspace
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Cognitive Services Account (Azure OpenAI)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Azure Cognitive Services Account (Azure OpenAI)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🤖
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Azure OpenAI
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -2326,6 +4828,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             CodePipeline
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS CodeBuild"
@@ -2345,6 +4852,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             CodeBuild
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2366,6 +4878,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             CodeDeploy
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS CodeCommit"
@@ -2385,6 +4902,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             CodeCommit
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2406,6 +4928,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             CloudFormation
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Amplify"
@@ -2425,6 +4952,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Amplify
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
       </div>
@@ -2466,6 +4998,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Organizations
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Config"
@@ -2485,6 +5022,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Config
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2506,6 +5048,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Systems Manager
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Cost Explorer"
@@ -2525,6 +5072,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Cost Explorer
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
           </span>
         </button>
         <button
@@ -2546,6 +5098,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Control Tower
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Trusted Advisor"
@@ -2565,6 +5122,36 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Trusted Advisor
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Resource Group"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(148, 163, 184);"
+          title="Azure Resource Group"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(148, 163, 184);"
+          >
+            📁
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Resource Group
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
           </span>
         </button>
       </div>
@@ -2606,6 +5193,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             CloudFront
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add AWS Global Accelerator"
@@ -2626,6 +5218,11 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           >
             Global Accelerator
           </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
         </button>
         <button
           aria-label="Add Amazon CloudFront Lambda@Edge"
@@ -2645,6 +5242,36 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Lambda@Edge
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Google Cloud CDN (URL Map)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(45, 212, 191);"
+          title="Google Cloud CDN (URL Map)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(45, 212, 191);"
+          >
+            🌐
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud CDN
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            GCP
           </span>
         </button>
       </div>

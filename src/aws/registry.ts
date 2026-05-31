@@ -1,13 +1,17 @@
 /**
- * AWS Service Registry
- * --------------------
- * Aggregates every category catalog into a single queryable registry.
+ * Cloud Service Registry (multi-cloud)
+ * ------------------------------------
+ * Aggregates every provider's category catalogs into a single queryable
+ * registry. This is the single source of truth for service metadata across
+ * AWS, GCP and Azure. The UI, validation engine and IaC/discovery layers all
+ * read from here — nothing about a service is hardcoded elsewhere. Adding a
+ * service = adding one entry to a catalog file.
  *
- * This is the single source of truth for service metadata. The UI, validation
- * engine and MCP importer all read from here — nothing about a service is
- * hardcoded elsewhere. Adding a service = adding one entry to a catalog file.
+ * The cross-provider join key is `nativeType` (CloudFormation type for AWS,
+ * Cloud Asset Inventory type for GCP, ARM type for Azure). For AWS entries it
+ * falls back to `cfnType`, so the existing AWS catalogs need no edit.
  */
-import type { ServiceDefinition, ServiceCategoryId } from "./types";
+import type { ServiceDefinition, ServiceCategoryId, CloudProvider } from "./types";
 import { CATEGORIES } from "./categories";
 
 import networking from "./services/networking";
@@ -25,8 +29,11 @@ import deployment from "./services/deployment";
 import management from "./services/management";
 import edge from "./services/edge";
 
-/** All catalogs, concatenated. Order roughly follows the palette order. */
-const ALL_CATALOGS: ServiceDefinition[][] = [
+import GCP_SERVICES from "../gcp/services";
+import AZURE_SERVICES from "../azure/services";
+
+/** All AWS catalogs, concatenated. Order roughly follows the palette order. */
+const AWS_CATALOGS: ServiceDefinition[][] = [
   networking,
   compute,
   containers,
@@ -43,33 +50,57 @@ const ALL_CATALOGS: ServiceDefinition[][] = [
   edge,
 ];
 
-const SERVICES: ServiceDefinition[] = ALL_CATALOGS.flat();
+/** Every provider's services, flattened. AWS first (preserves existing order). */
+const SERVICES: ServiceDefinition[] = [...AWS_CATALOGS.flat(), ...GCP_SERVICES, ...AZURE_SERVICES];
+
+/** The effective provider of a service (defaults to AWS for back-compat). */
+export function serviceProvider(s: ServiceDefinition): CloudProvider {
+  return s.provider ?? "aws";
+}
+
+/** The cross-provider join key: explicit `nativeType`, else the AWS `cfnType`. */
+export function serviceNativeType(s: ServiceDefinition): string | undefined {
+  return s.nativeType ?? s.cfnType;
+}
 
 /** id → ServiceDefinition index for O(1) lookup. */
 const SERVICE_INDEX = new Map<string, ServiceDefinition>(SERVICES.map((s) => [s.id, s]));
 
 /**
- * CloudFormation type → ServiceDefinition (used by the MCP/import mapper).
+ * (provider, nativeType) → ServiceDefinition, the resolver used by IaC import/
+ * export and live discovery.
  *
- * `cfnType` is NOT a unique key: the app intentionally models variants of a
- * single CloudFormation type as distinct services (e.g. public vs private
+ * `nativeType` is NOT a unique key: the app intentionally models variants of a
+ * single native type as distinct services (e.g. public vs private
  * `AWS::EC2::Subnet`, or `AWS::Lambda::Function` as both `lambda` and
- * `lambda-edge`). First-wins strategy: when several services share a `cfnType`
- * only the first is indexed and returned by `getServiceByCfnType` (the
- * canonical variant). The remainder are recorded in `CFN_TYPE_COLLISIONS` and
- * surfaced as *warnings* by `validateRegistry()` so they are visible without
- * being treated as integrity errors. MCP import maps to the canonical variant;
- * a downstream refinement step can reclassify by inspecting properties.
+ * `lambda-edge`). First-wins strategy: only the first service for a
+ * (provider, type) pair is indexed and returned by `getServiceByNativeType`
+ * (the canonical variant). The remainder are recorded in
+ * `NATIVE_TYPE_COLLISIONS` and surfaced as *warnings* by `validateRegistry()`.
  */
-const CFN_INDEX = new Map<string, ServiceDefinition>();
-const CFN_TYPE_COLLISIONS: { cfnType: string; winnerId: string; loserId: string }[] = [];
+const NATIVE_INDEX = new Map<string, ServiceDefinition>();
+const NATIVE_TYPE_COLLISIONS: {
+  provider: CloudProvider;
+  nativeType: string;
+  winnerId: string;
+  loserId: string;
+}[] = [];
+
+/** Index key for the (provider, type) pair. */
+function nativeKey(provider: CloudProvider, nativeType: string): string {
+  return `${provider}|${nativeType}`;
+}
+
 for (const s of SERVICES) {
-  if (!s.cfnType) continue;
-  const existing = CFN_INDEX.get(s.cfnType);
+  const nativeType = serviceNativeType(s);
+  if (!nativeType) continue;
+  const provider = serviceProvider(s);
+  const key = nativeKey(provider, nativeType);
+  const existing = NATIVE_INDEX.get(key);
   if (existing) {
-    CFN_TYPE_COLLISIONS.push({ cfnType: s.cfnType, winnerId: existing.id, loserId: s.id });
+    NATIVE_TYPE_COLLISIONS.push({ provider, nativeType, winnerId: existing.id, loserId: s.id });
   } else {
-    CFN_INDEX.set(s.cfnType, s);
+    NATIVE_INDEX.set(key, s);
   }
 }
 
@@ -99,10 +130,10 @@ export function validateRegistry(): RegistryIssue[] {
       }
     }
   }
-  for (const { cfnType, winnerId, loserId } of CFN_TYPE_COLLISIONS) {
+  for (const { provider, nativeType, winnerId, loserId } of NATIVE_TYPE_COLLISIONS) {
     issues.push({
       level: "warn",
-      message: `Shared cfnType "${cfnType}": "${loserId}" is a variant of "${winnerId}" (first-wins; getServiceByCfnType resolves to "${winnerId}")`,
+      message: `Shared ${provider} type "${nativeType}": "${loserId}" is a variant of "${winnerId}" (first-wins; getServiceByNativeType resolves to "${winnerId}")`,
     });
   }
   return issues;
@@ -121,21 +152,39 @@ export function requireService(id: string): ServiceDefinition {
   return s;
 }
 
-export function getServiceByCfnType(cfnType: string): ServiceDefinition | undefined {
-  return CFN_INDEX.get(cfnType);
+/** Resolve a service from its provider-native resource type (the join key). */
+export function getServiceByNativeType(
+  provider: CloudProvider,
+  nativeType: string,
+): ServiceDefinition | undefined {
+  return NATIVE_INDEX.get(nativeKey(provider, nativeType));
 }
 
 /**
- * All registered services as a readonly view. Returning a `readonly` array
- * prevents callers from mutating the internal `SERVICES` array (push/pop/etc.)
- * and breaking registry integrity.
+ * AWS-scoped convenience wrapper, preserved for the existing CloudFormation/MCP
+ * call sites (`iac.ts`, `mcp.ts`, `iacExport.ts`). Equivalent to
+ * `getServiceByNativeType("aws", cfnType)`.
  */
-export function allServices(): readonly ServiceDefinition[] {
-  return SERVICES;
+export function getServiceByCfnType(cfnType: string): ServiceDefinition | undefined {
+  return getServiceByNativeType("aws", cfnType);
 }
 
-export function servicesByCategory(category: ServiceCategoryId): ServiceDefinition[] {
-  return SERVICES.filter((s) => s.category === category);
+/**
+ * All registered services as a readonly view, optionally filtered by provider.
+ * Returning a `readonly` array prevents callers from mutating the internal
+ * `SERVICES` array (push/pop/etc.) and breaking registry integrity.
+ */
+export function allServices(provider?: CloudProvider): readonly ServiceDefinition[] {
+  return provider ? SERVICES.filter((s) => serviceProvider(s) === provider) : SERVICES;
+}
+
+export function servicesByCategory(
+  category: ServiceCategoryId,
+  provider?: CloudProvider,
+): ServiceDefinition[] {
+  return SERVICES.filter(
+    (s) => s.category === category && (!provider || serviceProvider(s) === provider),
+  );
 }
 
 /** Resolved display colour: per-service override, else the category colour. */
@@ -161,12 +210,13 @@ export function defaultConfig(id: string): Record<string, unknown> {
 }
 
 /** Free-text search across name, fullName, description and keywords. */
-export function searchServices(query: string): ServiceDefinition[] {
+export function searchServices(query: string, provider?: CloudProvider): ServiceDefinition[] {
   const q = query.trim().toLowerCase();
+  const pool = provider ? SERVICES.filter((s) => serviceProvider(s) === provider) : SERVICES;
   // Return a fresh copy (not the internal SERVICES array) so callers can't
   // mutate the registry's backing store; mirrors allServices()'s readonly view.
-  if (!q) return [...SERVICES];
-  return SERVICES.filter((s) => {
+  if (!q) return [...pool];
+  return pool.filter((s) => {
     const hay = [s.name, s.fullName, s.description, s.id, ...(s.keywords ?? [])]
       .join(" ")
       .toLowerCase();

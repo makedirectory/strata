@@ -6,23 +6,33 @@ title: IaC Import & Export
 
 Beyond live MCP discovery (see [MCP Integration](/docs/architecture/mcp-integration)),
 Strata imports **declared** infrastructure from existing Infrastructure-as-Code into
-the same `InfrastructureGraph` that the canvas renders. The module is
-`src/aws/iac.ts` — pure and dependency-light (only `js-yaml`, for CloudFormation
-YAML). Two source formats are supported:
+the same `InfrastructureGraph` that the canvas renders, across **AWS, GCP and
+Azure**. The shared engine is `src/aws/iac.ts` — pure and dependency-light (only
+`js-yaml`, for CloudFormation YAML) — and the provider adapters (`src/gcp/iac.ts`,
+`src/azure/iac.ts`) reuse its exported `buildGraph` / `importTerraform`. Supported
+formats:
 
-- **CloudFormation** templates (JSON _or_ YAML).
-- **Terraform** `terraform show -json` output (state under `values.root_module`,
-  plan under `planned_values.root_module`) and `terraform plan -json`
-  (`resource_changes[]`).
+- **CloudFormation** templates (JSON _or_ YAML) — AWS.
+- **Azure ARM templates** (JSON, the typed `resources[]` array).
+- **Terraform** `terraform show -json` / `plan -json` for the **`aws`, `google`,
+  and `azurerm`** providers (a single state file may mix them).
+
+The unified entry point **`importAnyIaC(content, opts?)`** (`src/lib/importIac.ts`)
+auto-detects format/provider and routes to the right importer; it lives in `lib/`
+to avoid a cycle (the provider adapters import the shared engine). The "Import IaC"
+dialog calls it.
 
 ## Entry points
 
-| Function                                | Purpose                                                                                  |
-| --------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `importIaC(content, opts?)`             | Main string entry point. Parses JSON/YAML, then routes by `opts.format` or auto-detects. |
-| `importCloudFormation(template, name?)` | Per-format importer for an already-parsed CloudFormation object.                         |
-| `importTerraform(tf, name?)`            | Per-format importer for an already-parsed Terraform JSON object.                         |
-| `detectFormat(doc)`                     | Heuristic classifier returning `"cloudformation"` or `"terraform"`.                      |
+| Function                                      | Purpose                                                                                                                                                   |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `importAnyIaC(content, opts?)`                | **Multi-cloud entry point** (`src/lib/importIac.ts`). Detects ARM / CFN / Terraform and routes; uses a merged `aws_*`+`google_*`+`azurerm_*` TF type map. |
+| `importIaC(content, opts?)`                   | AWS string entry point. Parses JSON/YAML, then routes by `opts.format` or auto-detects.                                                                   |
+| `importCloudFormation(template, name?)`       | Per-format importer for an already-parsed CloudFormation object.                                                                                          |
+| `importTerraform(tf, name?, opts?)`           | Shared Terraform importer; `opts.typeMap` / `opts.containmentKeys` parameterise it per provider.                                                          |
+| `importArm(template, name?)`                  | Azure ARM template importer (`src/azure/iac.ts`).                                                                                                         |
+| `importGcpTerraform` / `importAzureTerraform` | Provider wrappers over `importTerraform` with the GCP / Azure type maps.                                                                                  |
+| `detectFormat(doc)`                           | Heuristic classifier returning `"cloudformation"` or `"terraform"` (ARM is detected separately by `isArmTemplate`).                                       |
 
 `importIaC` first parses the document (JSON or YAML), then — unless `opts.format`
 forces a format — calls `detectFormat(doc)`, which classifies the parsed object as:
@@ -37,7 +47,7 @@ All importers return an **`IacImportResult`**:
 ```ts
 interface IacImportResult {
   graph: InfrastructureGraph;
-  format: IacFormat; // "cloudformation" | "terraform"
+  format: IacFormat; // "cloudformation" | "terraform" | "arm"
   unmappedTypes: string[]; // source types with no registry mapping
   warnings: string[]; // skipped resources, ambiguities, …
 }
@@ -48,13 +58,15 @@ interface IacImportResult {
 The two formats differ only in how a source resource is matched to a registry
 `ServiceDefinition`:
 
-- **CloudFormation:** a resource's `Type` (e.g. `"AWS::EC2::Instance"`) **is** the
-  registry `cfnType`, so `getServiceByCfnType()` resolves it directly — the same
-  join key used by MCP discovery.
-- **Terraform:** HCL carries no CloudFormation type, so the module ships its own
-  join table, **`TF_TYPE_TO_SERVICE_ID`** (`Record<tfType, serviceId>`, e.g.
-  `aws_instance → "ec2-instance"`). It is exported and meant to be extended freely
-  as the catalog grows.
+- **CloudFormation / ARM:** a resource's type (`"AWS::EC2::Instance"` /
+  `"Microsoft.Compute/virtualMachines"`) **is** the registry `nativeType`, so
+  `getServiceByNativeType(provider, type)` resolves it directly — the same join key
+  used by live discovery. (`getServiceByCfnType` remains as the AWS wrapper.)
+- **Terraform:** HCL carries no native type, so each provider ships a join table —
+  **`TF_TYPE_TO_SERVICE_ID`** (AWS), **`GCP_TF_TYPE_TO_SERVICE_ID`**,
+  **`AZURE_TF_TYPE_TO_SERVICE_ID`** (`Record<tfType, serviceId>`). `importAnyIaC`
+  merges all three (the `aws_*`/`google_*`/`azurerm_*` prefixes are disjoint, so no
+  collisions). Each is exported and extended as the catalog grows.
 
 ## YAML short-tag handling
 
@@ -83,9 +95,31 @@ Containment and relationships are **derived** per format:
   property (`SubnetId`, `VpcId`, `ClusterArn`, …) whose `Ref`/`Fn::GetAtt`
   (`cfnRefTarget` / `collectCfnRefs`) points at another in-template resource;
   remaining `Ref`/`GetAtt` references plus `DependsOn` become `depends_on` edges.
-- **Terraform:** a resource's `id` attribute is indexed, so a resolved `subnet_id` /
-  `vpc_id` value yields a `parentId`; `depends_on` addresses become `depends_on`
-  edges.
+- **ARM:** child resource types (e.g. `Microsoft.Sql/servers/databases`) nest under
+  their parent, and `dependsOn` / `resourceId(…)` references become `depends_on`
+  edges. Ids are made unique (cross-type duplicate names are suffixed) so the graph
+  is always valid.
+- **Terraform:** containment references are indexed by `id`, `name`, **and
+  `self_link`** (matched exactly or by last path segment), so AWS `vpc_id`/`subnet_id`
+  _and_ GCP `network`/`subnetwork` self-links both resolve to a `parentId`;
+  `depends_on` addresses become `depends_on` edges.
+
+## Lossless sidecar — faithful re-emit (CloudFormation / ARM)
+
+The graph keeps only registry-known config (clean inspector, typed model), which
+would make export lossy. To allow **faithful round-trip**, import also captures the
+verbatim source in a sidecar the renderer ignores:
+
+- `ResourceInstance.raw` — the exact source `type` + `properties` (intrinsic
+  functions intact), `dependsOn`, `condition`, `apiVersion`. Tagged with `format`
+  (`"cloudformation" | "arm" | "terraform"`).
+- `InfrastructureGraph.iacSource` — template-level sections with no per-node home
+  (CloudFormation `Parameters`/`Mappings`/`Conditions`/`Outputs`/`Metadata`; the ARM
+  equivalents). Persisted via `graphSchema.ts`'s `WRITABLE_FIELDS`.
+
+Export re-emits these verbatim when present (see below), so an imported template
+round-trips faithfully; manually-built nodes still scaffold. Both fields hold
+**template data only — never credentials**.
 
 ## Example: CloudFormation (YAML)
 
@@ -188,14 +222,20 @@ and `aws_elb` all map to `"elastic-load-balancer"`).
 The reverse transform lives in `src/aws/iacExport.ts`, mirroring the importer:
 
 - `exportCloudFormation(graph)` → `{ json, yaml, report }`
-- `exportTerraform(graph)` → `{ hcl, report }`
+- `exportTerraform(graph, serviceIdToTfType?)` → `{ hcl, report }`
 - `exportIaC(graph, format)` → `{ content, filename, report }`
 
-Join keys run in reverse: CloudFormation uses each service's `cfnType` directly;
-Terraform uses `SERVICE_ID_TO_TF_TYPE`, the inverse of `TF_TYPE_TO_SERVICE_ID`
-(first-listed wins as the canonical type for many-to-one services). Output is
-**deterministic** — resources are id-sorted, so the same graph always serialises
-identically (important for tests).
+`exportTerraform` is parameterised by a serviceId→type map, so the provider
+adapters wrap it: `exportGcpTerraform` (`src/gcp/iac.ts`) and `exportAzureTerraform`
+(`src/azure/iac.ts`), alongside Azure's `exportArm(graph)` → `{ json, report }`.
+Join keys run in reverse: CloudFormation/ARM use each service's `nativeType`
+directly; Terraform uses the inverse type maps (first-listed wins as canonical for
+many-to-one services). Output is **deterministic** — resources are id-sorted, so the
+same graph always serialises identically (important for tests).
+
+> **UI scope.** The Export dialog currently wires the **AWS** formats
+> (CloudFormation JSON/YAML, Terraform). The GCP/Azure exporters above exist and are
+> tested, but surfacing them in the dialog is a pending follow-up.
 
 ### Honest scaffolding, not faithful round-trip
 
@@ -206,6 +246,7 @@ registry-known config, so the generator emits a _scaffold a human finishes_. An
 ```ts
 interface ExportReport {
   exported: number;
+  faithful: number; // of `exported`, how many were re-emitted verbatim from `raw`
   skipped: { id: string; serviceId: string; reason: string }[];
   todos: { address: string; field: string }[];
   warnings: string[];
@@ -213,12 +254,15 @@ interface ExportReport {
 ```
 
 - Resources whose `serviceId` has no target type are **skipped** and reported.
-- Required `configFields` that aren't set are emitted as `TODO` placeholders and
-  tallied in `todos`.
-- Containment + typed edges coarsen to `DependsOn` / `depends_on` (a documented
-  delta — structure is preserved, edge _kind_ is not).
+- Resources imported with a `raw` sidecar (above) are **re-emitted verbatim** —
+  real property names, intrinsic functions, conditions, and the captured template
+  sections all survive. These count toward `report.faithful`.
+- Manually-built (or `raw`-less) resources **scaffold**: property names follow
+  Strata's model (with the optional `cfnPropertyNames` map applied), required
+  `configFields` that aren't set become `TODO` placeholders tallied in `todos`, and
+  typed edges coarsen to `DependsOn` / `depends_on`.
 
-A **round-trip stability** test asserts that
-`importIaC(exportCloudFormation(g))` preserves resource types and edge structure
-for services whose `cfnType` resolves uniquely (values may differ — lossy is
-expected).
+A **faithful round-trip** test asserts that `importCloudFormation` →
+`exportCloudFormation` → parse preserves resource types, intrinsic functions, and
+the `Parameters`/`Conditions`/`Outputs` sections, and that re-importing yields a
+structurally identical graph.

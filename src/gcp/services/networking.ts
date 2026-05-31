@@ -1,0 +1,297 @@
+/**
+ * Google Cloud — Networking & Content Delivery service catalog.
+ * GCP VPC networks are GLOBAL; subnets are regional.
+ */
+import type { ServiceDefinition } from "../../aws/types";
+
+const networking: ServiceDefinition[] = [
+  {
+    id: "gcp-vpc-network",
+    name: "VPC Network",
+    fullName: "Google Cloud Virtual Private Cloud Network",
+    abbreviation: "VPC",
+    provider: "gcp",
+    category: "networking",
+    description: "A global, software-defined virtual network for your GCP resources.",
+    icon: "🏛️",
+    scope: "global",
+    isContainer: true,
+    nativeType: "compute.googleapis.com/Network",
+    keywords: ["vpc", "network", "global", "vpc network"],
+    configFields: [
+      {
+        key: "subnetMode",
+        label: "Subnet Mode",
+        type: "select",
+        default: "custom",
+        options: [
+          { value: "auto", label: "Auto" },
+          { value: "custom", label: "Custom" },
+        ],
+      },
+      {
+        key: "routingMode",
+        label: "Dynamic Routing Mode",
+        type: "select",
+        default: "regional",
+        options: [
+          { value: "regional", label: "Regional" },
+          { value: "global", label: "Global" },
+        ],
+      },
+      { key: "mtu", label: "MTU", type: "number", default: 1460 },
+    ],
+    commonConnections: [
+      {
+        to: "gcp-subnet",
+        relationship: "contains",
+        description: "VPC network contains regional subnets",
+      },
+      { to: "gcp-firewall-rule", relationship: "contains" },
+      { to: "gcp-cloud-router", relationship: "contains" },
+    ],
+  },
+  {
+    id: "gcp-subnet",
+    name: "Subnet",
+    fullName: "Google Cloud VPC Subnetwork",
+    provider: "gcp",
+    category: "networking",
+    description: "A regional IP range carved out of a VPC network.",
+    icon: "🟩",
+    scope: "region",
+    isContainer: true,
+    nativeType: "compute.googleapis.com/Subnetwork",
+    keywords: ["subnet", "subnetwork", "regional", "ip range"],
+    configFields: [
+      {
+        key: "ipCidrRange",
+        label: "IP CIDR Range",
+        type: "cidr",
+        placeholder: "10.0.0.0/24",
+        default: "10.0.0.0/24",
+        required: true,
+      },
+      { key: "region", label: "Region", type: "string", placeholder: "us-central1" },
+      {
+        key: "privateIpGoogleAccess",
+        label: "Private Google Access",
+        type: "boolean",
+        default: true,
+      },
+    ],
+    commonConnections: [
+      {
+        to: "gcp-compute-engine",
+        relationship: "contains",
+        description: "VMs launch into a subnet",
+      },
+    ],
+  },
+  {
+    id: "gcp-firewall-rule",
+    name: "Firewall Rule",
+    fullName: "Google Cloud VPC Firewall Rule",
+    provider: "gcp",
+    category: "networking",
+    description: "Stateful rule controlling traffic to and from VM instances.",
+    icon: "🧱",
+    scope: "global",
+    nativeType: "compute.googleapis.com/Firewall",
+    keywords: ["firewall", "rule", "security", "stateful"],
+    configFields: [
+      {
+        key: "direction",
+        label: "Direction",
+        type: "select",
+        default: "INGRESS",
+        options: [
+          { value: "INGRESS", label: "Ingress" },
+          { value: "EGRESS", label: "Egress" },
+        ],
+      },
+      {
+        key: "action",
+        label: "Action",
+        type: "select",
+        default: "ALLOW",
+        options: [
+          { value: "ALLOW", label: "Allow" },
+          { value: "DENY", label: "Deny" },
+        ],
+      },
+      { key: "sourceRanges", label: "Source Ranges", type: "text", placeholder: "0.0.0.0/0" },
+      { key: "allowed", label: "Allowed Protocols/Ports", type: "text", placeholder: "tcp:443" },
+    ],
+    commonConnections: [
+      { to: "gcp-vpc-network", relationship: "attached_to" },
+      { to: "gcp-compute-engine", relationship: "allows" },
+    ],
+  },
+  {
+    id: "gcp-backend-service",
+    name: "Load Balancing",
+    fullName: "Google Cloud Load Balancing Backend Service",
+    abbreviation: "LB",
+    provider: "gcp",
+    category: "networking",
+    description: "Distributes traffic across a group of backends for a load balancer.",
+    icon: "⚖️",
+    scope: "global",
+    nativeType: "compute.googleapis.com/BackendService",
+    keywords: ["load balancer", "backend service", "lb", "traffic"],
+    configFields: [
+      {
+        key: "protocol",
+        label: "Protocol",
+        type: "select",
+        default: "HTTPS",
+        options: [
+          { value: "HTTP", label: "HTTP" },
+          { value: "HTTPS", label: "HTTPS" },
+          { value: "TCP", label: "TCP" },
+          { value: "UDP", label: "UDP" },
+        ],
+      },
+      {
+        key: "loadBalancingScheme",
+        label: "Scheme",
+        type: "select",
+        default: "EXTERNAL_MANAGED",
+        options: [
+          { value: "EXTERNAL_MANAGED", label: "External (Managed)" },
+          { value: "INTERNAL_MANAGED", label: "Internal (Managed)" },
+        ],
+      },
+      { key: "timeoutSec", label: "Timeout (s)", type: "number", default: 30 },
+    ],
+    commonConnections: [
+      { to: "gcp-instance-group-manager", relationship: "targets" },
+      { to: "gcp-cloud-cdn", relationship: "routes_to" },
+    ],
+  },
+  {
+    id: "gcp-cloud-dns",
+    name: "Cloud DNS",
+    fullName: "Google Cloud DNS Managed Zone",
+    provider: "gcp",
+    category: "networking",
+    description: "Scalable, authoritative DNS service for your domains.",
+    icon: "🧬",
+    scope: "global",
+    nativeType: "dns.googleapis.com/ManagedZone",
+    keywords: ["dns", "managed zone", "domain", "records"],
+    configFields: [
+      { key: "dnsName", label: "DNS Name", type: "string", placeholder: "example.com." },
+      {
+        key: "visibility",
+        label: "Visibility",
+        type: "select",
+        default: "public",
+        options: [
+          { value: "public", label: "Public" },
+          { value: "private", label: "Private" },
+        ],
+      },
+      { key: "dnssec", label: "DNSSEC", type: "boolean", default: false },
+    ],
+    commonConnections: [{ to: "gcp-backend-service", relationship: "routes_to" }],
+  },
+  {
+    id: "gcp-cloud-router",
+    name: "Cloud Router",
+    fullName: "Google Cloud Router",
+    provider: "gcp",
+    category: "networking",
+    description: "Dynamic BGP route exchange between your VPC and peer networks.",
+    icon: "🧭",
+    scope: "region",
+    nativeType: "compute.googleapis.com/Router",
+    keywords: ["router", "bgp", "routing", "dynamic"],
+    configFields: [
+      { key: "asn", label: "BGP ASN", type: "number", default: 64514 },
+      { key: "region", label: "Region", type: "string", placeholder: "us-central1" },
+    ],
+    commonConnections: [
+      { to: "gcp-vpc-network", relationship: "attached_to" },
+      { to: "gcp-cloud-nat", relationship: "contains" },
+    ],
+  },
+  {
+    id: "gcp-cloud-nat",
+    name: "Cloud NAT",
+    fullName: "Google Cloud NAT Gateway",
+    abbreviation: "NAT",
+    provider: "gcp",
+    category: "networking",
+    description: "Managed outbound NAT for private instances without external IPs.",
+    icon: "↗️",
+    scope: "region",
+    nativeType: "compute.googleapis.com/RouterNat",
+    keywords: ["nat", "egress", "outbound", "gateway"],
+    configFields: [
+      {
+        key: "natIpAllocateOption",
+        label: "NAT IP Allocation",
+        type: "select",
+        default: "AUTO_ONLY",
+        options: [
+          { value: "AUTO_ONLY", label: "Auto Only" },
+          { value: "MANUAL_ONLY", label: "Manual Only" },
+        ],
+      },
+      {
+        key: "sourceSubnetworkIpRangesToNat",
+        label: "Subnet Ranges",
+        type: "select",
+        default: "ALL_SUBNETWORKS_ALL_IP_RANGES",
+        options: [
+          { value: "ALL_SUBNETWORKS_ALL_IP_RANGES", label: "All Subnetworks (all ranges)" },
+          { value: "LIST_OF_SUBNETWORKS", label: "List of Subnetworks" },
+        ],
+      },
+    ],
+    commonConnections: [
+      { to: "gcp-cloud-router", relationship: "attached_to" },
+      { to: "gcp-subnet", relationship: "routes_to" },
+    ],
+  },
+  {
+    id: "gcp-cloud-cdn",
+    name: "Cloud CDN",
+    fullName: "Google Cloud CDN (URL Map)",
+    abbreviation: "CDN",
+    provider: "gcp",
+    category: "edge",
+    description: "Global content delivery network that caches content at the edge.",
+    icon: "🌐",
+    scope: "global",
+    nativeType: "compute.googleapis.com/UrlMap",
+    keywords: ["cdn", "url map", "edge", "cache", "content delivery"],
+    configFields: [
+      {
+        key: "defaultService",
+        label: "Default Backend",
+        type: "string",
+        placeholder: "web-backend",
+      },
+      {
+        key: "cacheMode",
+        label: "Cache Mode",
+        type: "select",
+        default: "CACHE_ALL_STATIC",
+        options: [
+          { value: "USE_ORIGIN_HEADERS", label: "Use Origin Headers" },
+          { value: "CACHE_ALL_STATIC", label: "Cache All Static" },
+          { value: "FORCE_CACHE_ALL", label: "Force Cache All" },
+        ],
+      },
+    ],
+    commonConnections: [
+      { to: "gcp-backend-service", relationship: "routes_to" },
+      { to: "gcp-cloud-storage", relationship: "reads_from" },
+    ],
+  },
+];
+
+export default networking;

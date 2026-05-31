@@ -4,9 +4,14 @@ title: Service Registry & Schema
 
 # The Service Registry & Schema
 
-The registry is the single source of truth for AWS service metadata. The UI,
-validation engine, and MCP/IaC importers all read from it — nothing about a
-service is hardcoded elsewhere.
+The registry is the single source of truth for cloud service metadata, across
+**AWS, Google Cloud and Azure**. The UI, validation engine, and discovery/IaC
+importers all read from it — nothing about a service is hardcoded elsewhere.
+
+It is **multi-cloud by composition**: AWS is the original (and default) provider,
+with GCP and Azure catalogs flattened in alongside it. A `CloudProvider`
+(`"aws" | "gcp" | "azure"`, with `CLOUD_PROVIDERS` as the runtime list) tags each
+service, and a provider-namespaced `nativeType` is the cross-layer join key.
 
 ## Schema (`src/aws/types.ts`)
 
@@ -16,37 +21,55 @@ The registry is built from a small set of structures.
 
 The reusable definition of one AWS service. Key fields:
 
-- `id` — canonical kebab-case id, stable across versions (e.g. `"ec2-instance"`).
+- `id` — canonical kebab-case id, **globally unique** across providers (AWS uses
+  bare ids like `"ec2-instance"`; GCP/Azure prefix theirs, e.g. `"gcp-compute-engine"`,
+  `"azure-vm"`).
+- `provider` — `CloudProvider` (`"aws" | "gcp" | "azure"`). **Optional**: an entry
+  without it is treated as `"aws"`, so the existing AWS catalogs needed no edit.
 - `name` / `fullName` / `abbreviation` — display strings.
-- `category` — one of the 14 `ServiceCategoryId`s; drives palette grouping and
-  the default colour.
-- `icon` — currently an emoji token, swappable for the AWS icon set later.
-- `scope` — a `ServiceScope` (`global | region | az | vpc | subnet`) describing
-  where the resource conceptually lives (see
+- `category` — one of the 14 `ServiceCategoryId`s (shared across providers); drives
+  palette grouping and the default colour.
+- `icon` — an emoji token.
+- `scope` — a `ServiceScope`
+  (`global | region | az | vpc | subnet | project | resource-group`) describing
+  where the resource conceptually lives. `project` (GCP) and `resource-group`
+  (Azure) were added for the new providers (see
   [Data Model → placement scopes](/docs/architecture/data-model#placement-scopes)).
-- `isContainer` — `true` for services that visually contain others (VPC, Subnet).
+- `isContainer` — `true` for services that visually contain others (VPC, Subnet,
+  Azure Resource Group).
 - `color` — optional per-service override; otherwise the category colour wins.
 - `configFields` — the dynamic inspector form schema (see `ConfigField`).
 - `commonConnections` — suggested outgoing edges for hints / auto-wiring.
-- `cfnType` — the CloudFormation type, which **doubles as the MCP / Cloud Control
-  import discriminator** (see [MCP Integration](/docs/architecture/mcp-integration)).
+- `nativeType` — the **provider-native resource type**: the cross-layer join key
+  for IaC import/export and live discovery. AWS = CloudFormation type
+  (`AWS::EC2::Instance`); GCP = Cloud Asset Inventory type
+  (`compute.googleapis.com/Instance`); Azure = ARM type
+  (`Microsoft.Compute/virtualMachines`).
+- `cfnType` — the AWS CloudFormation type. For AWS entries it equals `nativeType`;
+  the registry falls back to it when `nativeType` is absent, so AWS catalogs keep
+  using `cfnType` unchanged (see [MCP Integration](/docs/architecture/mcp-integration)).
+- `cfnPropertyNames` — optional map of config-key → provider-native property name,
+  used to emit real property names on export where they differ from Strata's keys.
 - `arnPattern`, `keywords`, `docsUrl` — reference / search metadata.
 
 ```ts
 export interface ServiceDefinition {
   id: string;
+  provider?: CloudProvider; // defaults to "aws"
   name: string;
   fullName: string;
   abbreviation?: string;
   category: ServiceCategoryId;
   description: string;
   icon: string;
-  scope: ServiceScope;
+  scope: ServiceScope; // + "project" | "resource-group"
   isContainer?: boolean;
   color?: string;
   configFields: ConfigField[];
   commonConnections: CommonConnection[];
-  cfnType?: string;
+  nativeType?: string; // the cross-provider join key
+  cfnType?: string; // AWS; === nativeType, the fallback for it
+  cfnPropertyNames?: Record<string, string>;
   arnPattern?: string;
   keywords?: string[];
   docsUrl?: string;
@@ -78,29 +101,36 @@ legend) and `icon`. Defined in `CATEGORIES` and ordered by `CATEGORY_ORDER`
 
 ## Registry aggregation (`src/aws/registry.ts`)
 
-`registry.ts` imports every category catalog from `src/aws/services/*.ts`,
-`flat()`-tens them into `SERVICES`, and builds two indexes:
+`registry.ts` imports every provider's category catalogs — AWS from
+`src/aws/services/*.ts`, GCP from `src/gcp/services/*.ts`, Azure from
+`src/azure/services/*.ts` — `flat()`-tens them into one `SERVICES` list (AWS
+first, preserving its order), and builds two indexes:
 
-- `SERVICE_INDEX` — `id → ServiceDefinition` for O(1) lookup.
-- `CFN_INDEX` — `cfnType → ServiceDefinition`, the join table the MCP importer
-  uses. `cfnType` is **not unique**: the registry intentionally models variants of
-  one CloudFormation type as distinct services (e.g. public vs private
-  `AWS::EC2::Subnet`, or `AWS::Lambda::Function` as `lambda` and `lambda-edge`).
-  The index is **first-wins** — the first service for a `cfnType` becomes the
-  canonical variant `getServiceByCfnType` returns; each subsequent collision is
-  recorded in `CFN_TYPE_COLLISIONS` and surfaced as a **warning** by
-  `validateRegistry()` (not an integrity error). MCP import maps to the canonical
-  variant; a downstream refinement step can reclassify by inspecting properties.
+- `SERVICE_INDEX` — `id → ServiceDefinition` for O(1) lookup (ids are globally
+  unique).
+- `NATIVE_INDEX` — `(provider, nativeType) → ServiceDefinition`, the join table the
+  IaC and discovery layers use, keyed `"<provider>|<nativeType>"`. `nativeType` is
+  **not unique within a provider**: the registry intentionally models variants of
+  one native type as distinct services (e.g. public vs private `AWS::EC2::Subnet`,
+  or Azure App Service and Functions both on `Microsoft.Web/sites`). The index is
+  **first-wins** — the first service for a `(provider, type)` pair becomes the
+  canonical variant `getServiceByNativeType` returns; each subsequent collision is
+  recorded in `NATIVE_TYPE_COLLISIONS` and surfaced as a **warning** by
+  `validateRegistry()` (not an integrity error). For AWS entries the key falls back
+  to `cfnType` via `serviceNativeType()`, so the AWS path is unchanged.
 
-Public accessors include `getService`, `requireService`, `getServiceByCfnType`,
-`allServices`, `servicesByCategory`, `serviceColor` (per-service override →
-category colour fallback), `serviceIcon`, `defaultConfig` (builds the initial
-config object from `ConfigField.default`s), and `searchServices` (free-text over
-name / fullName / description / id / keywords).
+Public accessors include `getService`, `requireService`,
+`getServiceByNativeType(provider, type)`, `getServiceByCfnType` (a thin
+AWS-scoped wrapper, kept for the existing CloudFormation/MCP call sites),
+`serviceProvider` (effective provider, defaulting to `"aws"`), `serviceNativeType`
+(`nativeType ?? cfnType`), `allServices(provider?)`, `servicesByCategory(category,
+provider?)`, `serviceColor`, `serviceIcon`, `defaultConfig`, and
+`searchServices(query, provider?)` — the provider-filtered overloads back the
+palette's All / AWS / GCP / Azure selector.
 
 `validateRegistry()` is a guardrail returning `RegistryIssue[]` (each
 `level: "error" | "warn"`): `error`s for duplicate ids and unknown categories, and
-`warn`s for dangling `commonConnections` targets and shared-`cfnType` collisions.
+`warn`s for dangling `commonConnections` targets and shared-`nativeType` collisions.
 **It is wired into CI** — `src/aws/registry.test.ts` asserts there are zero
 error-level issues, so a bad catalog entry fails the build (see
 [Testing](/docs/architecture/testing)).

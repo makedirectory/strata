@@ -121,6 +121,9 @@ export const WRITABLE_FIELDS = [
   "resources",
   "relationships",
   "viewport",
+  // Round-trip carrier for IaC template sections (Parameters/Outputs/…). Rides
+  // along as opaque template data; per-resource `raw` persists inside `resources`.
+  "iacSource",
 ] as const satisfies readonly (keyof InfrastructureGraph)[];
 
 /**

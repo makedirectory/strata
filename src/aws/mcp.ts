@@ -35,19 +35,27 @@
  */
 import type { InfrastructureGraph, ResourceInstance, Relationship } from "./model";
 import { emptyGraph, DEFAULT_NODE_SIZE } from "./model";
-import type { RelationshipKind } from "./types";
+import type { RelationshipKind, CloudProvider } from "./types";
 import { RELATIONSHIPS } from "./categories";
-import { getServiceByCfnType } from "./registry";
+import { getServiceByNativeType } from "./registry";
 
 /**
- * A single resource as surfaced by an MCP server / Cloud Control API, after
- * light normalisation by the caller. `resourceType` (the CloudFormation type)
- * is the only strictly-required field for mapping.
+ * A single resource as surfaced by an MCP server / Cloud Control API / GCP
+ * Cloud Asset Inventory / Azure Resource Graph, after light normalisation by
+ * the caller. `resourceType` (the provider-native type) is the only strictly-
+ * required field for mapping; `provider` selects the resolver namespace.
  */
 export interface DiscoveredResource {
   arn?: string;
-  /** CloudFormation type, e.g. "AWS::EC2::Instance". The registry join key. */
+  /**
+   * Provider-native resource type — the registry join key. AWS CloudFormation
+   * type ("AWS::EC2::Instance"), GCP Cloud Asset Inventory type
+   * ("compute.googleapis.com/Instance"), or Azure ARM type
+   * ("Microsoft.Compute/virtualMachines").
+   */
   resourceType: string;
+  /** Cloud provider for `resourceType` resolution (defaults to AWS). */
+  provider?: CloudProvider;
   logicalId?: string;
   name?: string;
   region?: string;
@@ -129,7 +137,7 @@ export function mapDiscoveredToGraph(
   const mappable: { res: DiscoveredResource; id: string; serviceId: string }[] = [];
 
   for (const res of resources) {
-    const service = getServiceByCfnType(res.resourceType);
+    const service = getServiceByNativeType(res.provider ?? "aws", res.resourceType);
     if (!service) continue; // unmapped — skipped, reported by unmappedTypes()
     // De-duplicate by ARN: the resource id IS the ARN, so two resources sharing
     // an ARN would produce ResourceInstances with identical ids (which
@@ -142,7 +150,7 @@ export function mapDiscoveredToGraph(
 
   // Second pass: build ResourceInstances with config, placement and layout.
   const instances: ResourceInstance[] = mappable.map(({ res, id, serviceId }, index) => {
-    const service = getServiceByCfnType(res.resourceType)!;
+    const service = getServiceByNativeType(res.provider ?? "aws", res.resourceType)!;
 
     // Filter incoming properties down to the keys the service actually models.
     const config: Record<string, unknown> = {};
@@ -222,7 +230,8 @@ export function mapDiscoveredToGraph(
 export function unmappedTypes(resources: DiscoveredResource[]): string[] {
   const seen = new Set<string>();
   for (const res of resources) {
-    if (!getServiceByCfnType(res.resourceType)) seen.add(res.resourceType);
+    if (!getServiceByNativeType(res.provider ?? "aws", res.resourceType))
+      seen.add(res.resourceType);
   }
   return [...seen];
 }

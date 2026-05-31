@@ -25,6 +25,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-cloudcontrol": "^3.1057.0",
+    "@azure/arm-resourcegraph": "^4.2.1",
+    "@azure/identity": "^4.13.1",
+    "@google-cloud/asset": "^6.3.2",
     "js-yaml": "^4.1.1",
     "next": "^15.5.18",
     "nextra": "^4.6.1",

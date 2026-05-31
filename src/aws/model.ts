@@ -8,13 +8,19 @@
  * canvas position. This is what the server stores and what the MCP importer
  * produces.
  */
-import type { RelationshipKind } from "./types";
+import type { RelationshipKind, CloudProvider } from "./types";
 import { getService } from "./registry";
 
-/** An AWS account in scope for a diagram/environment. */
+/**
+ * A cloud account/project/subscription in scope for a diagram/environment.
+ * `accountId` is provider-shaped: an AWS 12-digit account id, a GCP project id,
+ * or an Azure subscription GUID.
+ */
 export interface Account {
   id: string;
-  /** 12-digit AWS account id. */
+  /** Cloud provider (defaults to AWS for back-compat). */
+  provider?: CloudProvider;
+  /** AWS 12-digit account id | GCP project-id | Azure subscription GUID. */
   accountId: string;
   name: string;
   /** e.g. "prod", "staging", "sandbox". */
@@ -61,8 +67,35 @@ export interface ResourceInstance {
   arn?: string;
   source: ResourceSource;
 
+  /**
+   * Verbatim provider-native source captured at import, for faithful re-emit.
+   * The renderer/inspector never read this — it exists purely so IaC export can
+   * reconstruct the original resource (with real property names and intrinsic
+   * functions intact) instead of a lossy scaffold. Absent for manually-created
+   * resources. Contains template data only — never credentials.
+   */
+  raw?: RawSource;
+
   // ---- presentation ----
   position?: CanvasPosition;
+}
+
+/** Lossless carrier of a resource's original IaC source (see `ResourceInstance.raw`). */
+export interface RawSource {
+  /** Source IaC format the `type`/`properties` belong to. */
+  format: "cloudformation" | "arm" | "terraform";
+  /** Original resource type, exact — preserves variant identity. */
+  type: string;
+  /** Original properties, with intrinsic functions (Ref/GetAtt/…) intact. */
+  properties?: Record<string, unknown>;
+  /** Explicit dependency logical ids (CloudFormation `DependsOn`, ARM `dependsOn`). */
+  dependsOn?: string[];
+  /** CloudFormation `Condition` gating this resource, if any. */
+  condition?: string;
+  /** Resource-level metadata block. */
+  metadata?: Record<string, unknown>;
+  /** ARM `apiVersion` (Azure only). */
+  apiVersion?: string;
 }
 
 /** A typed, directional (or symmetric) edge between two resources. */
@@ -92,11 +125,34 @@ export interface InfrastructureGraph {
   resources: ResourceInstance[];
   relationships: Relationship[];
   viewport?: Viewport;
+  /**
+   * Round-trip carrier for IaC template sections Strata doesn't model as graph
+   * nodes (CloudFormation/ARM Parameters, Outputs, Mappings, Conditions, …).
+   * Captured on import so export can re-emit a faithful template. Template data
+   * only — never credentials.
+   */
+  iacSource?: IacSource;
   /** ISO timestamps; stamped by the server/repository, never inside scripts. */
   createdAt?: string;
   updatedAt?: string;
   /** Schema version for forward migration. */
   schemaVersion: number;
+}
+
+/** Template-level sections preserved for faithful IaC re-emit (see `InfrastructureGraph.iacSource`). */
+export interface IacSource {
+  format: "cloudformation" | "arm";
+  formatVersion?: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+  mappings?: Record<string, unknown>;
+  conditions?: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  transform?: unknown;
+  /** ARM template `$schema`/`contentVersion` (Azure only). */
+  armSchema?: string;
+  contentVersion?: string;
 }
 
 export const SCHEMA_VERSION = 1;
