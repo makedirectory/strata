@@ -31,6 +31,12 @@ export type ExportFormat = "cloudformation-json" | "cloudformation-yaml" | "terr
 export interface ExportReport {
   /** Number of resources emitted. */
   exported: number;
+  /**
+   * Of `exported`, how many were re-emitted **verbatim** from a captured
+   * `raw` source (faithful round-trip) vs. scaffolded from Strata's model.
+   * `exported - faithful` resources are scaffolds the user must finish.
+   */
+  faithful: number;
   /** Resources omitted because the registry has no target type for them. */
   skipped: { id: string; serviceId: string; reason: string }[];
   /** Required provider fields we don't model, emitted as placeholders. */
@@ -150,7 +156,7 @@ function knownConfig(
 }
 
 function emptyReport(): ExportReport {
-  return { exported: 0, skipped: [], todos: [], warnings: [] };
+  return { exported: 0, faithful: 0, skipped: [], todos: [], warnings: [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +178,12 @@ export function exportCloudFormation(graph: InfrastructureGraph): CloudFormation
   const resources: Record<string, unknown> = {};
   for (const { resource, logicalId } of planned) {
     const svc = getService(resource.serviceId);
-    if (!svc?.cfnType) {
+    // A captured CloudFormation `raw` source re-emits faithfully even if the
+    // registry entry has since lost its cfnType, so resolve the emitted Type
+    // from `raw` first, falling back to the registry.
+    const faithfulRaw = resource.raw?.format === "cloudformation" ? resource.raw : undefined;
+    const cfnType = faithfulRaw?.type ?? svc?.cfnType;
+    if (!cfnType) {
       report.skipped.push({
         id: resource.id,
         serviceId: resource.serviceId,
@@ -180,16 +191,37 @@ export function exportCloudFormation(graph: InfrastructureGraph): CloudFormation
       });
       continue;
     }
-    const { values, todoKeys } = knownConfig(resource, logicalId, report);
-    const properties: Record<string, unknown> = { ...values };
-    for (const key of todoKeys) properties[key] = "TODO: required — set this value";
 
-    const entry: Record<string, unknown> = { Type: svc.cfnType };
-    if (Object.keys(properties).length > 0) entry.Properties = properties;
-    const dependsOn = dependencyTargets(resource, graph, ids)
+    const computedDependsOn = dependencyTargets(resource, graph, ids)
       .map((id) => logicalById.get(id))
       .filter((v): v is string => Boolean(v));
-    if (dependsOn.length > 0) entry.DependsOn = dependsOn;
+
+    let entry: Record<string, unknown>;
+    if (faithfulRaw) {
+      // Faithful path: re-emit the verbatim Type + Properties (intrinsics intact).
+      entry = { Type: faithfulRaw.type };
+      if (faithfulRaw.properties && Object.keys(faithfulRaw.properties).length > 0) {
+        entry.Properties = faithfulRaw.properties;
+      }
+      if (faithfulRaw.condition) entry.Condition = faithfulRaw.condition;
+      if (faithfulRaw.metadata) entry.Metadata = faithfulRaw.metadata;
+      // Prefer the original DependsOn; fall back to the graph-derived deps.
+      const dependsOn = faithfulRaw.dependsOn?.length ? faithfulRaw.dependsOn : computedDependsOn;
+      if (dependsOn.length > 0) entry.DependsOn = dependsOn;
+      report.faithful++;
+    } else {
+      // Scaffold path: property names follow Strata's model (with the optional
+      // cfnPropertyNames map applied) and required-missing fields become TODOs.
+      const { values, todoKeys } = knownConfig(resource, logicalId, report);
+      const renamed = applyPropertyNames(svc, values);
+      const properties: Record<string, unknown> = { ...renamed };
+      for (const key of todoKeys) {
+        properties[svc?.cfnPropertyNames?.[key] ?? key] = "TODO: required — set this value";
+      }
+      entry = { Type: cfnType };
+      if (Object.keys(properties).length > 0) entry.Properties = properties;
+      if (computedDependsOn.length > 0) entry.DependsOn = computedDependsOn;
+    }
 
     resources[logicalId] = entry;
     report.exported++;
@@ -201,17 +233,49 @@ export function exportCloudFormation(graph: InfrastructureGraph): CloudFormation
   if (report.skipped.length > 0) {
     report.warnings.push(`${report.skipped.length} resource(s) skipped (no CloudFormation type).`);
   }
+  const scaffolded = report.exported - report.faithful;
+  if (report.faithful > 0 && scaffolded > 0) {
+    report.warnings.push(
+      `${report.faithful} resource(s) re-emitted faithfully; ${scaffolded} scaffolded from Strata's model.`,
+    );
+  }
 
-  const template = {
-    AWSTemplateFormatVersion: "2010-09-09",
-    Description: HEADER_NOTE,
-    Resources: resources,
+  // Re-emit captured template sections (Parameters/Outputs/…) for faithful
+  // round-trip; otherwise fall back to a minimal scaffold header.
+  const src = graph.iacSource?.format === "cloudformation" ? graph.iacSource : undefined;
+  const template: Record<string, unknown> = {
+    AWSTemplateFormatVersion: src?.formatVersion ?? "2010-09-09",
+    Description: src?.description ?? HEADER_NOTE,
   };
+  if (src?.parameters) template.Parameters = src.parameters;
+  if (src?.mappings) template.Mappings = src.mappings;
+  if (src?.conditions) template.Conditions = src.conditions;
+  if (src?.metadata) template.Metadata = src.metadata;
+  if (src?.transform !== undefined) template.Transform = src.transform;
+  template.Resources = resources;
+  if (src?.outputs) template.Outputs = src.outputs;
+
   return {
     json: JSON.stringify(template, null, 2),
     yaml: yaml.dump(template, { lineWidth: 120, noRefs: true }),
     report,
   };
+}
+
+/**
+ * Apply a service's optional `cfnPropertyNames` map to rename Strata config
+ * keys to their provider-native property names (CFN Stage 3 / multi-cloud).
+ * Keys without a mapping pass through unchanged.
+ */
+function applyPropertyNames(
+  svc: ReturnType<typeof getService>,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const map = svc?.cfnPropertyNames;
+  if (!map) return values;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(values)) out[map[k] ?? k] = v;
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,19 +316,22 @@ function hclValue(value: unknown, indent: string): string {
   return JSON.stringify(String(value));
 }
 
-export function exportTerraform(graph: InfrastructureGraph): TerraformExport {
+export function exportTerraform(
+  graph: InfrastructureGraph,
+  serviceIdToTfType: Record<string, string> = SERVICE_ID_TO_TF_TYPE,
+): TerraformExport {
   const report = emptyReport();
   const planned = planResources(graph);
   const ids = new Set(planned.map((p) => p.resource.id));
   const addressById = new Map<string, string>();
   for (const p of planned) {
-    const tfType = SERVICE_ID_TO_TF_TYPE[p.resource.serviceId];
+    const tfType = serviceIdToTfType[p.resource.serviceId];
     if (tfType) addressById.set(p.resource.id, `${tfType}.${p.tfName}`);
   }
 
   const blocks: string[] = [];
   for (const { resource, tfName } of planned) {
-    const tfType = SERVICE_ID_TO_TF_TYPE[resource.serviceId];
+    const tfType = serviceIdToTfType[resource.serviceId];
     if (!tfType) {
       report.skipped.push({
         id: resource.id,

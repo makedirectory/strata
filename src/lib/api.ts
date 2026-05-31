@@ -8,6 +8,8 @@
  */
 import type { InfrastructureGraph, GraphSummary } from "../aws/model";
 import type { DiscoverResult } from "../aws/discovery";
+import type { GcpDiscoverResult } from "../gcp/discovery";
+import type { AzureDiscoverResult } from "../azure/discovery";
 
 /** True for plain (non-null, non-array) objects — safe to read keys from. */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -136,5 +138,44 @@ export async function runDiscovery(opts: {
   return parseJson<DiscoverResult>(
     res,
     (v): v is DiscoverResult => isRecord(v) && Array.isArray(v.resources),
+  );
+}
+
+/**
+ * POST /api/discover/gcp → run a live Cloud Asset Inventory scan with the
+ * server's ambient Application Default Credentials. `scope` is a
+ * "projects/<id>" | "folders/<id>" | "organizations/<id>" string.
+ */
+export async function runGcpDiscovery(opts: {
+  scope: string;
+  types: string[];
+}): Promise<GcpDiscoverResult> {
+  const res = await fetch("/api/discover/gcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return parseJson<GcpDiscoverResult>(
+    res,
+    (v): v is GcpDiscoverResult => isRecord(v) && Array.isArray(v.resources),
+  );
+}
+
+/**
+ * POST /api/discover/azure → run a live Azure Resource Graph scan with the
+ * server's ambient DefaultAzureCredential across the given subscription id(s).
+ */
+export async function runAzureDiscovery(opts: {
+  subscriptions: string[];
+  types: string[];
+}): Promise<AzureDiscoverResult> {
+  const res = await fetch("/api/discover/azure", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return parseJson<AzureDiscoverResult>(
+    res,
+    (v): v is AzureDiscoverResult => isRecord(v) && Array.isArray(v.resources),
   );
 }

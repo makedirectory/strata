@@ -9,6 +9,17 @@
  * — no UI code changes required.
  */
 
+/**
+ * Cloud provider a service belongs to. The registry is multi-cloud: AWS is the
+ * original (and default) provider, with GCP and Azure added alongside it. See
+ * `getServiceByNativeType` for the provider-aware join key used by IaC import/
+ * export and live discovery.
+ */
+export type CloudProvider = "aws" | "gcp" | "azure";
+
+/** Runtime list of every provider, for filters/iteration. */
+export const CLOUD_PROVIDERS = ["aws", "gcp", "azure"] as const satisfies readonly CloudProvider[];
+
 /** Top-level grouping used for palette sections, colour coding and filtering. */
 export type ServiceCategoryId =
   | "networking"
@@ -97,9 +108,19 @@ export interface CommonConnection {
  * validation (e.g. an EC2 instance must sit inside a Subnet, an S3 bucket is
  * regional, IAM is global).
  */
-export type ServiceScope = "global" | "region" | "az" | "vpc" | "subnet";
+export type ServiceScope =
+  | "global"
+  | "region"
+  | "az"
+  | "vpc"
+  | "subnet"
+  // ---- multi-cloud additions ----
+  /** GCP project / org-level placement (no AWS analog). */
+  | "project"
+  /** Azure resource group — a mandatory regional container for resources. */
+  | "resource-group";
 
-/** The core, reusable definition of an AWS service. */
+/** The core, reusable definition of a cloud service (any provider). */
 export interface ServiceDefinition {
   /** Canonical kebab-case id, stable across versions (e.g. "ec2-instance"). */
   id: string;
@@ -108,6 +129,12 @@ export interface ServiceDefinition {
   /** Full product name (e.g. "Amazon Elastic Compute Cloud"). */
   fullName: string;
   abbreviation?: string;
+  /**
+   * Cloud provider. Optional for back-compat: an entry without `provider` is
+   * treated as `"aws"` by the registry, so the existing AWS catalogs need no
+   * edit. GCP/Azure catalogs set it explicitly.
+   */
+  provider?: CloudProvider;
   category: ServiceCategoryId;
   description: string;
   /** Icon token — currently an emoji, swappable for the AWS icon set later. */
@@ -122,9 +149,20 @@ export interface ServiceDefinition {
   configFields: ConfigField[];
   /** Suggested outgoing connections (used for hints + auto-wiring). */
   commonConnections: CommonConnection[];
-  /** CloudFormation type, also used as the MCP/import discriminator. */
+  /** CloudFormation type, also used as the MCP/import discriminator (AWS only). */
   cfnType?: string;
-  /** ARN pattern for reference / parsing imported ARNs. */
+  /**
+   * Provider-native canonical resource type — the cross-layer join key for IaC
+   * import/export and live discovery, generalising `cfnType` across providers:
+   *   - AWS:   CloudFormation type, e.g. "AWS::EC2::Instance" (mirrors cfnType).
+   *   - GCP:   Cloud Asset Inventory type, e.g. "compute.googleapis.com/Instance".
+   *   - Azure: ARM resource type, e.g. "Microsoft.Compute/virtualMachines".
+   * For AWS entries this may be omitted; the registry falls back to `cfnType`.
+   */
+  nativeType?: string;
+  /** The provider-native IaC property names for each modeled config field. */
+  cfnPropertyNames?: Record<string, string>;
+  /** ARN pattern for reference / parsing imported ARNs (AWS). */
   arnPattern?: string;
   /** Free-text search keywords. */
   keywords?: string[];

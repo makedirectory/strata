@@ -9,9 +9,12 @@ import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
 import { RELATIONSHIP_CLASSES, RELATIONSHIP_CLASS_ORDER } from "../../aws/relationshipClasses";
 import type { GraphSummary } from "../../aws/model";
 import { exportIaC, type ExportFormat } from "../../aws/iacExport";
-import { listDiscoverableTypes, parsePastedExport, type DiscoveryType } from "../../aws/discovery";
+import { listDiscoverableTypes, parsePastedExport } from "../../aws/discovery";
+import { listGcpDiscoverableTypes, parseGcpExport } from "../../gcp/discovery";
+import { listAzureDiscoverableTypes, parseAzureExport } from "../../azure/discovery";
 import { mapDiscoveredToGraph, unmappedTypes, type DiscoveredResource } from "../../aws/mcp";
-import { runDiscovery } from "../../lib/api";
+import type { CloudProvider } from "../../aws/types";
+import { runDiscovery, runGcpDiscovery, runAzureDiscovery } from "../../lib/api";
 
 const VIEW_PRESETS = [
   { id: "all", label: "All" },
@@ -454,12 +457,18 @@ function TopBar() {
         {/* Data: bring infrastructure in (connect / import), send it out (export),
             or clear. (⌘K palette remains the full index.) */}
         <Menu label="Data ▾" title="Connect, import, export, and clear" align="right">
-          <MenuItem onClick={openConnect} title="Discover live AWS resources or paste an export">
-            Connect to AWS…
+          <MenuItem
+            onClick={openConnect}
+            title="Discover live AWS, GCP or Azure resources, or paste an export"
+          >
+            Connect to cloud…
           </MenuItem>
           <MenuItem onClick={importJSONDialog}>Import JSON…</MenuItem>
-          <MenuItem onClick={importIaCDialog} title="Import Terraform or CloudFormation">
-            Import IaC (Terraform / CloudFormation)…
+          <MenuItem
+            onClick={importIaCDialog}
+            title="Import Terraform (AWS/GCP/Azure), CloudFormation, or an Azure ARM template"
+          >
+            Import IaC (Terraform / CloudFormation / ARM)…
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={exportJSON}>Export JSON</MenuItem>
@@ -681,8 +690,8 @@ function StartHub() {
             </span>
             <span className="hub-card-title">Import IaC</span>
             <span className="hub-card-desc">
-              Terraform or CloudFormation. Maps known resource types into an editable diagram;
-              unmapped types are listed after import.
+              Terraform (AWS/GCP/Azure), CloudFormation, or an Azure ARM template. Maps known
+              resource types into an editable diagram; unmapped types are listed after import.
             </span>
           </button>
 
@@ -724,9 +733,9 @@ function StartHub() {
             <span className="hub-card-icon" aria-hidden="true">
               ☁️
             </span>
-            <span className="hub-card-title">Connect to AWS</span>
+            <span className="hub-card-title">Connect to cloud</span>
             <span className="hub-card-desc">
-              Discover live resources via Cloud Control (or paste an export) and map them onto the
+              Discover live AWS, GCP or Azure resources (or paste an export) and map them onto the
               canvas.
             </span>
           </button>
@@ -902,17 +911,53 @@ function ExportDialog() {
   );
 }
 
-/** CloudFormation types pre-selected for a live scan (if present in the registry). */
-const COMMON_DISCOVERY_TYPES = new Set([
-  "AWS::EC2::VPC",
-  "AWS::EC2::Subnet",
-  "AWS::EC2::Instance",
-  "AWS::EC2::SecurityGroup",
-  "AWS::S3::Bucket",
-  "AWS::Lambda::Function",
-  "AWS::RDS::DBInstance",
-  "AWS::DynamoDB::Table",
-]);
+/** Native types pre-selected for a live scan, per provider (if present in the registry). */
+const COMMON_DISCOVERY_TYPES: Record<CloudProvider, Set<string>> = {
+  aws: new Set([
+    "AWS::EC2::VPC",
+    "AWS::EC2::Subnet",
+    "AWS::EC2::Instance",
+    "AWS::EC2::SecurityGroup",
+    "AWS::S3::Bucket",
+    "AWS::Lambda::Function",
+    "AWS::RDS::DBInstance",
+    "AWS::DynamoDB::Table",
+  ]),
+  gcp: new Set([
+    "compute.googleapis.com/Instance",
+    "compute.googleapis.com/Network",
+    "compute.googleapis.com/Subnetwork",
+    "storage.googleapis.com/Bucket",
+    "sqladmin.googleapis.com/Instance",
+    "container.googleapis.com/Cluster",
+  ]),
+  azure: new Set([
+    "Microsoft.Compute/virtualMachines",
+    "Microsoft.Network/virtualNetworks",
+    "Microsoft.Storage/storageAccounts",
+    "Microsoft.Sql/servers",
+    "Microsoft.ContainerService/managedClusters",
+    "Microsoft.Resources/resourceGroups",
+  ]),
+};
+
+/** A provider-native discoverable type, uniform across providers for the UI. */
+interface UnifiedType {
+  native: string;
+  label: string;
+}
+
+/** Registry-derived discoverable types for a provider, normalised to {native,label}. */
+function discoverableTypesFor(provider: CloudProvider): UnifiedType[] {
+  if (provider === "gcp")
+    return listGcpDiscoverableTypes().map((t) => ({ native: t.assetType, label: t.label }));
+  if (provider === "azure")
+    return listAzureDiscoverableTypes().map((t) => ({ native: t.armType, label: t.label }));
+  return listDiscoverableTypes().map((t) => ({ native: t.cfnType, label: t.label }));
+}
+
+const PROVIDER_LABEL: Record<CloudProvider, string> = { aws: "AWS", gcp: "GCP", azure: "Azure" };
+const PROVIDER_ORDER: CloudProvider[] = ["aws", "gcp", "azure"];
 
 /**
  * True on a shared/hosted deployment. The hosted instance must NOT fall back to
@@ -929,24 +974,39 @@ const STRATA_HOSTED =
  *  paste path normalises an existing export with no credentials at all. */
 function ConnectDialog() {
   const { connectOpen, closeConnect, importDiscoveredGraph } = useFlow();
-  const allTypes = React.useMemo<DiscoveryType[]>(() => listDiscoverableTypes(), []);
+
+  const [provider, setProvider] = React.useState<CloudProvider>("aws");
+  const allTypes = React.useMemo<UnifiedType[]>(() => discoverableTypesFor(provider), [provider]);
 
   const [source, setSource] = React.useState<"live" | "paste">("live");
   const [region, setRegion] = React.useState("us-east-1");
+  const [gcpScope, setGcpScope] = React.useState("projects/my-project");
+  const [azureSubs, setAzureSubs] = React.useState("");
   const [accessKeyId, setAccessKeyId] = React.useState("");
   const [secretAccessKey, setSecretAccessKey] = React.useState("");
   const [sessionToken, setSessionToken] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(
-    () =>
-      new Set(allTypes.filter((t) => COMMON_DISCOVERY_TYPES.has(t.cfnType)).map((t) => t.cfnType)),
+    () => new Set(COMMON_DISCOVERY_TYPES.aws),
   );
   const [filter, setFilter] = React.useState("");
   const [pasteText, setPasteText] = React.useState("");
   const [phase, setPhase] = React.useState<"setup" | "running" | "review">("setup");
   const [error, setError] = React.useState<string | null>(null);
   const [found, setFound] = React.useState<DiscoveredResource[]>([]);
-  const [scanned, setScanned] = React.useState<{ type: string; count: number }[]>([]);
+  const [scanNote, setScanNote] = React.useState<string>("");
   const [warnings, setWarnings] = React.useState<string[]>([]);
+
+  // When the provider changes, reset the type selection to that provider's
+  // common defaults (intersected with what the registry models) and go back to
+  // the setup step so a stale review can't be imported under a new provider.
+  React.useEffect(() => {
+    const available = new Set(discoverableTypesFor(provider).map((t) => t.native));
+    setSelected(new Set([...COMMON_DISCOVERY_TYPES[provider]].filter((t) => available.has(t))));
+    setPhase("setup");
+    setFound([]);
+    setError(null);
+    setFilter("");
+  }, [provider]);
 
   React.useEffect(() => {
     if (!connectOpen) return;
@@ -963,28 +1023,33 @@ function ConnectDialog() {
     ? allTypes.filter(
         (t) =>
           t.label.toLowerCase().includes(filter.toLowerCase()) ||
-          t.cfnType.toLowerCase().includes(filter.toLowerCase()),
+          t.native.toLowerCase().includes(filter.toLowerCase()),
       )
     : allTypes;
 
-  const toggleType = (cfnType: string) =>
+  const toggleType = (native: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(cfnType)) next.delete(cfnType);
-      else next.add(cfnType);
+      if (next.has(native)) next.delete(native);
+      else next.add(native);
       return next;
     });
+
+  const scopeLabel = provider === "aws" ? region : provider === "gcp" ? gcpScope : azureSubs;
+  // GCP/Azure live scans use the server's ambient creds, which a hosted
+  // instance won't expose — so they're only available on a local deployment.
+  const liveBlocked = STRATA_HOSTED && provider !== "aws";
 
   // Select-all acts on the currently *visible* (filtered) types: filter, then
   // "Select all" adds just the matches. Toggles to "Clear" once all are on.
   const allVisibleSelected =
-    visibleTypes.length > 0 && visibleTypes.every((t) => selected.has(t.cfnType));
+    visibleTypes.length > 0 && visibleTypes.every((t) => selected.has(t.native));
   const toggleAllVisible = () =>
     setSelected((prev) => {
       const next = new Set(prev);
       for (const t of visibleTypes) {
-        if (allVisibleSelected) next.delete(t.cfnType);
-        else next.add(t.cfnType);
+        if (allVisibleSelected) next.delete(t.native);
+        else next.add(t.native);
       }
       return next;
     });
@@ -993,17 +1058,33 @@ function ConnectDialog() {
     setError(null);
     setPhase("running");
     try {
-      const creds = accessKeyId.trim()
-        ? {
-            accessKeyId: accessKeyId.trim(),
-            secretAccessKey: secretAccessKey.trim(),
-            sessionToken: sessionToken.trim() || undefined,
-          }
-        : undefined;
-      const result = await runDiscovery({ region, types: [...selected], creds });
-      setFound(result.resources);
-      setScanned(result.scanned);
-      setWarnings(result.warnings);
+      if (provider === "aws") {
+        const creds = accessKeyId.trim()
+          ? {
+              accessKeyId: accessKeyId.trim(),
+              secretAccessKey: secretAccessKey.trim(),
+              sessionToken: sessionToken.trim() || undefined,
+            }
+          : undefined;
+        const result = await runDiscovery({ region, types: [...selected], creds });
+        setFound(result.resources);
+        setScanNote(`scanned ${result.scanned.length} type(s) in ${region}`);
+        setWarnings(result.warnings);
+      } else if (provider === "gcp") {
+        const result = await runGcpDiscovery({ scope: gcpScope, types: [...selected] });
+        setFound(result.resources);
+        setScanNote(`scanned ${gcpScope}`);
+        setWarnings(result.warnings);
+      } else {
+        const subscriptions = azureSubs
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const result = await runAzureDiscovery({ subscriptions, types: [...selected] });
+        setFound(result.resources);
+        setScanNote(`scanned ${result.scanned.subscriptions} subscription(s)`);
+        setWarnings(result.warnings);
+      }
       setPhase("review");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Discovery failed.");
@@ -1014,9 +1095,14 @@ function ConnectDialog() {
   const runPaste = () => {
     setError(null);
     try {
-      const resources = parsePastedExport(pasteText);
+      const resources =
+        provider === "gcp"
+          ? parseGcpExport(pasteText)
+          : provider === "azure"
+            ? parseAzureExport(pasteText)
+            : parsePastedExport(pasteText);
       setFound(resources);
-      setScanned([]);
+      setScanNote("");
       setWarnings([]);
       setPhase("review");
     } catch (err) {
@@ -1025,7 +1111,9 @@ function ConnectDialog() {
   };
 
   const doImport = (mode: "merge" | "replace") => {
-    const graph = mapDiscoveredToGraph(found, { name: `Discovered (${region})` });
+    const graph = mapDiscoveredToGraph(found, {
+      name: `${PROVIDER_LABEL[provider]} discovery (${scopeLabel || "scan"})`,
+    });
     importDiscoveredGraph(graph, mode);
   };
 
@@ -1039,14 +1127,28 @@ function ConnectDialog() {
         className="connect"
         role="dialog"
         aria-modal="true"
-        aria-label="Connect to AWS"
+        aria-label="Connect to cloud"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="hub-header">
-          <h2 className="hub-title">Connect to AWS</h2>
+          <h2 className="hub-title">Connect to cloud</h2>
           <button className="hub-close" onClick={closeConnect} aria-label="Close">
             ✕
           </button>
+        </div>
+
+        <div className="connect-seg" role="tablist" aria-label="Cloud provider">
+          {PROVIDER_ORDER.map((p) => (
+            <button
+              key={p}
+              role="tab"
+              aria-selected={provider === p}
+              className={provider === p ? "active" : ""}
+              onClick={() => setProvider(p)}
+            >
+              {PROVIDER_LABEL[p]}
+            </button>
+          ))}
         </div>
 
         <div className="connect-seg" role="tablist" aria-label="Discovery source">
@@ -1077,51 +1179,88 @@ function ConnectDialog() {
                 🔒
               </span>
               <span>
-                Your credentials are <strong>never stored</strong>. They&apos;re sent over HTTPS,
-                used in-memory for this one scan, then discarded — never written to disk, logged, or
-                saved into the diagram. Prefer <strong>temporary, read-only</strong> keys.
+                {provider === "aws" ? (
+                  <>
+                    Your credentials are <strong>never stored</strong>. They&apos;re sent over
+                    HTTPS, used in-memory for this one scan, then discarded — never written to disk,
+                    logged, or saved into the diagram. Prefer <strong>temporary, read-only</strong>{" "}
+                    keys.
+                  </>
+                ) : (
+                  <>
+                    No credentials are entered or sent here. The scan runs server-side with the
+                    machine&apos;s{" "}
+                    <strong>ambient {provider === "gcp" ? "ADC" : "Azure"} credentials</strong> and
+                    returns only resource descriptions — credentials are{" "}
+                    <strong>never stored</strong>, returned, or saved into the diagram.
+                  </>
+                )}
               </span>
             </div>
-            <label className="export-field">
-              <span>Access key ID{STRATA_HOSTED ? "" : " (optional)"}</span>
-              <input
-                value={accessKeyId}
-                onChange={(e) => setAccessKeyId(e.target.value)}
-                placeholder="AKIA… / ASIA…"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </label>
-            <label className="export-field">
-              <span>Secret access key</span>
-              <input
-                type="password"
-                value={secretAccessKey}
-                onChange={(e) => setSecretAccessKey(e.target.value)}
-                placeholder="••••••••••••••••"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </label>
-            <label className="export-field">
-              <span>Session token (recommended)</span>
-              <input
-                type="password"
-                value={sessionToken}
-                onChange={(e) => setSessionToken(e.target.value)}
-                placeholder="Temporary STS credentials — leave blank for permanent keys"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </label>
-            <label className="export-field">
-              <span>Region</span>
-              <input
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
-                placeholder="us-east-1"
-              />
-            </label>
+            {provider === "aws" && (
+              <>
+                <label className="export-field">
+                  <span>Access key ID{STRATA_HOSTED ? "" : " (optional)"}</span>
+                  <input
+                    value={accessKeyId}
+                    onChange={(e) => setAccessKeyId(e.target.value)}
+                    placeholder="AKIA… / ASIA…"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="export-field">
+                  <span>Secret access key</span>
+                  <input
+                    type="password"
+                    value={secretAccessKey}
+                    onChange={(e) => setSecretAccessKey(e.target.value)}
+                    placeholder="••••••••••••••••"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="export-field">
+                  <span>Session token (recommended)</span>
+                  <input
+                    type="password"
+                    value={sessionToken}
+                    onChange={(e) => setSessionToken(e.target.value)}
+                    placeholder="Temporary STS credentials — leave blank for permanent keys"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="export-field">
+                  <span>Region</span>
+                  <input
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    placeholder="us-east-1"
+                  />
+                </label>
+              </>
+            )}
+            {provider === "gcp" && (
+              <label className="export-field">
+                <span>Scope</span>
+                <input
+                  value={gcpScope}
+                  onChange={(e) => setGcpScope(e.target.value)}
+                  placeholder="projects/my-project | folders/123 | organizations/456"
+                />
+              </label>
+            )}
+            {provider === "azure" && (
+              <label className="export-field">
+                <span>Subscription id(s)</span>
+                <input
+                  value={azureSubs}
+                  onChange={(e) => setAzureSubs(e.target.value)}
+                  placeholder="comma-separated subscription GUIDs"
+                />
+              </label>
+            )}
             <div className="connect-types-head">
               <span>Resource types ({selected.size} selected)</span>
               <button
@@ -1147,34 +1286,60 @@ function ConnectDialog() {
             </div>
             <div className="connect-types">
               {visibleTypes.map((t) => (
-                <label key={t.cfnType} className="connect-type">
+                <label key={t.native} className="connect-type">
                   <input
                     type="checkbox"
-                    checked={selected.has(t.cfnType)}
-                    onChange={() => toggleType(t.cfnType)}
+                    checked={selected.has(t.native)}
+                    onChange={() => toggleType(t.native)}
                   />
                   <span>{t.label}</span>
-                  <span className="connect-type-cfn">{t.cfnType}</span>
+                  <span className="connect-type-cfn">{t.native}</span>
                 </label>
               ))}
             </div>
-            <div className="connect-note">
-              Use <strong>temporary, read-only</strong> credentials — run{" "}
-              <code>aws sts get-session-token</code> or assume a read-only role, and prefer the{" "}
-              <code>ReadOnlyAccess</code> policy. Keys are sent over HTTPS, used for this one scan,
-              and never stored, logged, or saved into the diagram.
-              {!STRATA_HOSTED &&
-                " Leave the keys blank to use this server's own credentials (local use only)."}{" "}
-              Relationships aren&apos;t inferred from Cloud Control — discovered resources land as
-              nodes you can wire up.
-            </div>
+            {provider === "aws" ? (
+              <div className="connect-note">
+                Use <strong>temporary, read-only</strong> credentials — run{" "}
+                <code>aws sts get-session-token</code> or assume a read-only role, and prefer the{" "}
+                <code>ReadOnlyAccess</code> policy. Keys are sent over HTTPS, used for this one
+                scan, and never stored, logged, or saved into the diagram.
+                {!STRATA_HOSTED &&
+                  " Leave the keys blank to use this server's own credentials (local use only)."}{" "}
+                Relationships aren&apos;t inferred from Cloud Control — discovered resources land as
+                nodes you can wire up.
+              </div>
+            ) : (
+              <div className="connect-note">
+                {provider === "gcp" ? (
+                  <>
+                    Live scans use the server&apos;s{" "}
+                    <strong>Application Default Credentials</strong> via Cloud Asset Inventory — run{" "}
+                    <code>gcloud auth application-default login</code> (read-only). Nothing is
+                    stored or saved into the diagram.
+                  </>
+                ) : (
+                  <>
+                    Live scans use the server&apos;s <strong>DefaultAzureCredential</strong> via
+                    Azure Resource Graph — run <code>az login</code> (read-only). Nothing is stored
+                    or saved into the diagram.
+                  </>
+                )}{" "}
+                {liveBlocked &&
+                  "Live scans are disabled on this hosted instance — use Paste export."}
+              </div>
+            )}
             <div className="connect-actions">
               <button
                 className="btn-start"
                 disabled={
                   phase === "running" ||
                   selected.size === 0 ||
-                  (STRATA_HOSTED && !(accessKeyId.trim() && secretAccessKey.trim()))
+                  liveBlocked ||
+                  (provider === "azure" && !azureSubs.trim()) ||
+                  (provider === "gcp" && !gcpScope.trim()) ||
+                  (provider === "aws" &&
+                    STRATA_HOSTED &&
+                    !(accessKeyId.trim() && secretAccessKey.trim()))
                 }
                 onClick={runLive}
               >
@@ -1185,14 +1350,25 @@ function ConnectDialog() {
         ) : (
           <div className="connect-body">
             <div className="connect-note">
-              Paste the output of <code>aws cloudcontrol list-resources --type-name …</code> (or a
-              JSON array of resources). Nothing is sent anywhere — parsing happens locally.
+              {provider === "aws" &&
+                "Paste the output of `aws cloudcontrol list-resources --type-name …` (or a JSON array of resources)."}
+              {provider === "gcp" &&
+                "Paste the output of `gcloud asset list --format=json` (or a JSON array of assets)."}
+              {provider === "azure" &&
+                'Paste the output of `az graph query -q "Resources" -o json` (or a JSON array of resources).'}{" "}
+              Nothing is sent anywhere — parsing happens locally.
             </div>
             <textarea
               className="connect-paste"
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
-              placeholder='{ "TypeName": "AWS::S3::Bucket", "ResourceDescriptions": [ … ] }'
+              placeholder={
+                provider === "gcp"
+                  ? '[ { "assetType": "storage.googleapis.com/Bucket", "resource": { "data": { … } } } ]'
+                  : provider === "azure"
+                    ? '{ "data": [ { "type": "Microsoft.Storage/storageAccounts", "name": "…" } ] }'
+                    : '{ "TypeName": "AWS::S3::Bucket", "ResourceDescriptions": [ … ] }'
+              }
             />
             <div className="connect-actions">
               <button className="btn-start" disabled={!pasteText.trim()} onClick={runPaste}>
@@ -1210,15 +1386,17 @@ function ConnectDialog() {
               {unmapped.length > 0 && (
                 <span className="export-warn"> · {unmapped.length} unmapped type(s)</span>
               )}
-              {scanned.length > 0 && (
-                <span className="connect-scanned">
-                  {" "}
-                  · scanned {scanned.length} type(s) in {region}
-                </span>
-              )}
+              {scanNote && <span className="connect-scanned"> · {scanNote}</span>}
             </div>
             {unmapped.length > 0 && (
               <div className="connect-note">Not yet modelled (skipped): {unmapped.join(", ")}</div>
+            )}
+            {provider !== "aws" && (
+              <div className="connect-note">
+                Resources import as typed nodes; most property fields aren&apos;t mapped yet (the
+                provider&apos;s field names differ from Strata&apos;s config), so the inspector may
+                be sparse. Relationships aren&apos;t inferred — wire them up on the canvas.
+              </div>
             )}
             {warnings.map((w, i) => (
               <div className="connect-note connect-warn" key={i}>

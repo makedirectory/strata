@@ -4,29 +4,36 @@ title: Importing & Exporting IaC
 
 # Importing & Exporting Infrastructure-as-Code
 
-Already have infrastructure described in CloudFormation or Terraform? Instead of
-redrawing it by hand, import it and Strata renders it as a typed diagram — with
-containment (VPC → subnet → instance) and relationships derived automatically.
+Already have infrastructure described as code? Instead of redrawing it by hand,
+import it and Strata renders it as a typed diagram — across **AWS, Google Cloud
+and Azure** — with containment (VPC → subnet → instance) and relationships derived
+automatically.
 
 ## Supported formats
 
-- **CloudFormation** templates, in either **JSON or YAML** (including the short-form
-  intrinsic tags like `!Ref`, `!GetAtt`, and `!Sub`).
+- **CloudFormation** templates (AWS), in either **JSON or YAML** (including the
+  short-form intrinsic tags like `!Ref`, `!GetAtt`, and `!Sub`).
+- **Azure ARM templates** (JSON) — the typed `resources[]` array, with `dependsOn`
+  and `resourceId(…)` references.
 - **Terraform**, as the JSON produced by `terraform show -json` (current state) or
-  `terraform plan -json` (planned changes).
+  `terraform plan -json` (planned changes), for the **`aws`, `google`, and
+  `azurerm`** providers. A single state file may mix providers.
 
-Strata auto-detects which of the two formats you pasted, so in most cases you don't
-need to tell it.
+Strata auto-detects the format and provider from the document, so in most cases you
+don't need to tell it. (Resource types are provider-prefixed — `aws_*`,
+`google_*`, `azurerm_*` for Terraform; the ARM/CloudFormation type carries the
+namespace — so a mixed-cloud state resolves into one diagram.)
 
 ## How to import
 
-1. Open the importer — **Data ▾ → Import IaC (Terraform / CloudFormation)…**, the
-   **Import IaC** card in the Start hub, or **Import IaC (Terraform /
-   CloudFormation)** in the ⌘K command palette.
-2. Select the template or state file. Strata auto-detects the format.
-3. Strata parses it, matches each resource to a known AWS service, lays the nodes
-   out on a grid, and draws the typed relationships. The status line reports
-   _"Imported N resource(s) from &lt;format&gt;."_ (plus any unmapped types).
+1. Open the importer — **Data ▾ → Import IaC (Terraform / CloudFormation / ARM)…**,
+   the **Import IaC** card in the Start hub, or **Import IaC** in the ⌘K command
+   palette.
+2. Select the template or state file. Strata auto-detects format and provider.
+3. Strata parses it, matches each resource to a known service in the multi-cloud
+   catalog, lays the nodes out on a grid, and draws the typed relationships. The
+   status line reports _"Imported N resource(s) from &lt;format&gt;."_ (plus any
+   unmapped types).
 
 Containment is reconstructed from the source:
 
@@ -34,8 +41,12 @@ Containment is reconstructed from the source:
   it points at another resource in the same template via `!Ref` / `!GetAtt`) nests
   that resource inside its parent. Remaining references and `DependsOn` become
   `depends_on` edges.
-- In **Terraform**, a `vpc_id` or `subnet_id` value that matches another resource's
-  `id` nests it under that parent. `depends_on` becomes `depends_on` edges.
+- In **ARM**, child resource types (e.g. `Microsoft.Sql/servers/databases`) nest
+  under their parent, and `dependsOn` / `resourceId(…)` references become
+  `depends_on` edges.
+- In **Terraform**, a containment reference (`vpc_id`/`subnet_id` on AWS,
+  `network`/`subnetwork` on GCP — matched by id, name, or self-link) nests a
+  resource under its parent. `depends_on` becomes `depends_on` edges.
 
 ## Generating Terraform input
 
@@ -94,6 +105,11 @@ The reverse direction: turn the diagram on your canvas into **CloudFormation** o
 **Terraform**. Open the **Export to IaC** dialog from **Data ▾ → Export to IaC…**,
 the **Export to IaC** card in the Start hub (shown once the canvas has resources),
 or **Export to IaC (Terraform / CloudFormation)** in the ⌘K command palette.
+
+> **Provider scope.** The export dialog currently emits **AWS** CloudFormation and
+> Terraform; GCP/Azure resources in a mixed diagram are reported as skipped. (GCP
+> Terraform and Azure ARM/Terraform generation exist in the codebase and are on the
+> roadmap for the dialog.)
 
 In the dialog you can:
 

@@ -22,13 +22,41 @@ write, sorts `list()` newest-first, tolerates absent/corrupt storage as empty, a
 surfaces a quota overflow as the friendly error _"Browser storage is full — delete a
 saved diagram or export to JSON."_
 
+### What's stored locally — and why it isn't encrypted
+
+`localStorage` holds **diagrams** (`strata:graphs:v1`) and **saved views**
+(layer/overlay UI state) — and nothing else. In particular it holds **no
+credentials**:
+
+- Discovery credentials never reach the browser store. AWS keys entered in the
+  Connect dialog live only in transient React state, are sent to `/api/discover`
+  over HTTPS for one scan, and are discarded server-side; GCP/Azure use the
+  server's ambient credentials and nothing is entered at all. The
+  no-credentials-in-graph invariant (see
+  [Live Discovery & MCP](/docs/architecture/mcp-integration#credential-boundary-non-negotiable))
+  means a saved diagram can't contain a secret either — config is filtered to
+  registry-known fields.
+- So **there's nothing credential-shaped to encrypt.** What's persisted is the
+  user's own architecture diagram (resource types, names, config, relationships) —
+  comparable to a local file they created.
+
+Client-side encryption of that diagram data would be **security theatre** unless
+tied to a user-supplied passphrase: any key shipped in the app's own JS is readable
+by anyone with the bundle, so it protects nothing. A real at-rest guarantee needs a
+passphrase (with the usual UX cost — lose it, lose the diagrams) or a server-side
+datastore with proper access control (the retained `Repository` tier below is where
+that would live). The current protections are that `localStorage` is
+**origin-scoped** (same-origin only) and that genuinely sensitive material never
+enters it in the first place.
+
 > **The server tier below is retained, not wired up.** The `Repository` interface,
 > its file/SQL backends, and the `/api/graphs` Route Handlers all still exist and
 > still work — they are kept for a future durable, multi-user backend
 > (Postgres/DynamoDB). The live UI simply no longer calls them for graph
-> persistence. The one server route the UI _does_ still use is **`/api/discover`**
-> (live AWS discovery). The rest of this page documents that retained server tier,
-> which is where a durable backend will plug in.
+> persistence. The server routes the UI _does_ still use are **`/api/discover`**,
+> **`/api/discover/gcp`**, and **`/api/discover/azure`** (live cloud discovery). The
+> rest of this page documents that retained server tier, which is where a durable
+> backend will plug in.
 
 ## The graph Route Handlers (retained for a future backend)
 
