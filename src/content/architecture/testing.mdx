@@ -51,16 +51,20 @@ as an `InfrastructureGraph`.
 
 ## Validators as CI guardrails
 
-Two validators are designed to be the first line of defence and should be run in CI
-over fixtures:
+Two validators are the first line of defence, and **both are exercised by the
+suite that runs in CI**:
 
 - **`validateRegistry()`** (`src/aws/registry.ts`) — catches duplicate service ids,
   unknown categories, dangling `commonConnections` targets, and `cfnType`
-  collisions.
+  collisions. It runs at module load _and_ is asserted directly in
+  `src/aws/registry.test.ts`, which fails the build on any **error**-level issue
+  ("returns NO error-level issues — CI integrity guardrail").
 - **`validateGraph()`** (`src/aws/model.ts`) — catches duplicate resource ids,
   `parentId`s pointing at missing resources, and relationships referencing missing
-  endpoints.
+  endpoints. It runs on every API write and is covered by the model and route
+  tests.
 
-Today `validateRegistry()` runs at module load and `validateGraph()` runs on every
-API write. Wrapping both in tests that fail the build on any reported issue closes
-the gap. See [Roadmap → item 6](/docs/architecture/roadmap).
+CI itself lives in `.github/workflows/ci.yml`: it runs `typecheck`, `lint`,
+`format:check`, `test:coverage` (which includes `registry.test.ts`), and `build` on
+every push/PR, so a registry regression breaks the build. See
+[Roadmap → Recently shipped](/docs/architecture/roadmap).

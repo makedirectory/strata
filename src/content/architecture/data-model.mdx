@@ -56,9 +56,9 @@ reference, distinct from the relationship graph. Helpers:
 - `resourcesByAccount(graph, accountId)`.
 - `relationshipsOf(graph, resourceId)`.
 
-> **Note:** containment is _modeled_ today but nested visual rendering (drawing
-> children inside their parent container) is phase-2. See
-> [Roadmap](/docs/architecture/roadmap).
+> **Note:** containment is both _modeled_ here and _rendered_ — children pack
+> visually inside their parent's bounds via the pure layout engine in
+> `src/canvas/layout.ts`. See [Visual Mapping](/docs/architecture/visual-mapping).
 
 ## Placement scopes
 
@@ -72,8 +72,8 @@ an EC2 instance must sit inside a subnet, and so on.
 - `validateGraph(graph)` returns structural errors: duplicate resource ids,
   `parentId`s pointing at missing resources, and relationships referencing missing
   `from`/`to`. The API enforces this on every write (see
-  [Persistence](/docs/architecture/persistence)). **Wire into CI** (see
-  [Roadmap](/docs/architecture/roadmap)).
+  [Persistence](/docs/architecture/persistence)) and it is covered by the model and
+  route tests in CI (see [Testing](/docs/architecture/testing)).
 - `summarize(graph) → GraphSummary` produces the lightweight shape list endpoints
   return (avoids shipping full graphs).
 - `emptyGraph(name)` produces a minimal valid graph; `id`/timestamps are assigned

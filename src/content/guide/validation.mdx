@@ -5,18 +5,32 @@ title: Validation & Rules
 # Validation & Rule Suggestions
 
 Strata is **design-first**: it helps you catch problems and apply best practices
-_before_ you build the infrastructure. Two actions in the toolbar (and the inspector)
-support this — **Validate** and **Suggest Rules**.
+_before_ you build the infrastructure. Two actions support this, available in both
+the **Analyze ▾** menu (top bar) and the inspector (right panel): **Validate
+architecture** and **Suggest rules**.
+
+## Where to run them
+
+- **Analyze ▾ menu** — **Validate architecture** and **Suggest rules**.
+- **Inspector panels** — at the bottom of the inspector are a **Validation** panel
+  (with a **Run** button) and a **Rule Suggestions** panel (with a **Generate**
+  button). These are always visible, even when no node is selected.
+- **Command palette** — **Validate architecture** and **Suggest rules** (under
+  Tools).
+
+All three trigger the same checks against the current canvas.
 
 ## Validate the architecture
 
-Click **Validate** (the "Check architecture" action) to run a set of best-practice
-checks across your whole diagram. Results come back as a list of findings, each with
-a level:
+Run **Validate architecture** (or click **Run** in the inspector's **Validation**
+panel) to run a set of best-practice checks across your whole diagram. Results come
+back as a list of findings, each tagged with a level:
 
 - **error** — something that is wrong or will not work as drawn.
 - **warn** — a likely problem or a best-practice deviation worth reviewing.
 - **ok** — a check that passed.
+
+When everything passes, the panel reads **"No issues found."**
 
 The checks reason over the typed graph — your resources and the relationships
 between them — rather than just looking at isolated nodes. For example, they
@@ -30,22 +44,28 @@ parent network.
 
 ## Suggest rules
 
-Click **Suggest Rules** to generate concrete, best-practice configuration
-suggestions for the supporting resources your architecture implies — for example:
+Run **Suggest rules** (or click **Generate** in the inspector's **Rule Suggestions**
+panel) to generate concrete, best-practice configuration suggestions for the
+supporting resources your architecture implies — for example:
 
 - **Security group** ingress rules (e.g. public HTTP/HTTPS to a load balancer, and
   load-balancer-to-service rules for the targets behind it).
 - **Route table** routes (e.g. an Internet Gateway route for public subnets, a NAT
   Gateway egress route for private subnets).
 
-Each suggestion is scoped to the resource it applies to and describes the rule in
-plain terms (direction, protocol, port, source/target, and a comment explaining
-why). Use these as a checklist when you turn the design into real infrastructure.
+Each suggestion is grouped by the resource type and **scope** it applies to and
+describes the rule in plain terms (direction, protocol, port, source/target, and a
+comment explaining why). Use these as a checklist when you turn the design into real
+infrastructure. If your diagram doesn't imply any such rules yet, the panel reads
+**"No suggestions yet—add ALB/Service, Subnets, NACLs…"**.
 
 ## A typical workflow
 
 1. Draw or [import](/docs/guide/importing-iac) your architecture.
-2. Click **Validate** and resolve any errors and warnings.
-3. Click **Suggest Rules** to see the security-group and routing rules your design
+2. Run **Validate architecture** and resolve any errors and warnings.
+3. Run **Suggest rules** to see the security-group and routing rules your design
    implies.
 4. [Save the diagram](/docs/guide/saving) once you're happy with it.
+
+> Both run against the current state of the canvas, so re-run them after making
+> changes.

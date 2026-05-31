@@ -1,0 +1,109 @@
+---
+title: Keyboard & Commands
+---
+
+# Keyboard Shortcuts & Command Palette
+
+A consolidated reference for every keyboard shortcut and every entry in the **⌘K**
+command palette.
+
+## Canvas keyboard shortcuts
+
+These work while the canvas has focus (not while you're typing in a text field).
+
+| Action                             | Shortcut                           |
+| ---------------------------------- | ---------------------------------- |
+| Open the command palette           | `⌘K` / `Ctrl K` (or `/`)           |
+| Toggle **Connect** / **Move** mode | `C`                                |
+| Duplicate the selected node        | `D`                                |
+| Group the selection into a new VPC | `G`                                |
+| Delete selected node(s) / edge(s)  | `Delete` / `Backspace`             |
+| Pan (hold and drag)                | `Space` (or middle-mouse drag)     |
+| Undo / Redo                        | `⌘Z` / `⇧⌘Z` (`Ctrl Z` / `Ctrl Y`) |
+| Close a dialog / palette           | `Esc`                              |
+
+### Mouse & trackpad
+
+- **Pan** — scroll the wheel or two-finger-drag the trackpad; or hold **Space** and
+  drag; or drag with the middle mouse button.
+- **Zoom** — hold **⌘ / Ctrl** and scroll, or pinch on a trackpad. Zoom is
+  cursor-anchored: the point under the pointer stays put.
+- **Marquee select** — in **Move** mode, drag a box across empty canvas to select
+  everything inside it.
+
+### Two ways to wire a connection
+
+1. **Connect mode** — press **C** (or click **Connect** under **Modes** in the left
+   panel), click the source node, then click the target node. Press **C** again or
+   click **Move** to stop.
+2. **Port drag** — without changing mode, click a small **dot (port)** on the edge
+   of a node to start a wire, then click the target node. Either way the
+   relationship type is inferred from the two services involved.
+
+## The command palette (⌘K)
+
+Press **⌘K** / **Ctrl K** to open it (or **/** when you're not typing in a field).
+Type to filter, use **↑ / ↓** to move, **Enter** to run, and **Esc** to close. The
+input placeholder reads _"Type a command, service, or node…"_.
+
+Commands are grouped exactly as they appear in the list. In **presentation /
+read-only** mode the editing commands (those that change the model) are hidden.
+
+### View
+
+- **Fit to view**
+- **Tidy — auto-arrange**
+- **Zoom to selection**
+- **Zoom to 100%**
+- **Zoom in** (keeps the palette open)
+- **Zoom out** (keeps the palette open)
+- **Center**
+- **View: Network**
+- **View: Security**
+- **View: Data flow**
+- **View: High-level (collapse all)**
+- **View: Show all**
+- **Edges: Curved**
+- **Edges: Orthogonal**
+- **Density: Comfortable**
+- **Density: Compact**
+- **Environment tint: on / off** (the label reflects the current state)
+- **Presentation mode: enter / exit** (label reflects current state)
+- **Overlay: IAM trust**
+- **Overlay: Network paths**
+- **Overlay: Heat (degree)**
+- **Overlay: None**
+
+### Edit
+
+- **Toggle Connect / Move mode**
+- **Start / New diagram…** (opens the Start hub)
+- **Undo**
+- **Redo**
+- **Clear canvas**
+
+### Tools
+
+- **Validate architecture**
+- **Suggest rules**
+- **Export JSON**
+- **Export to IaC (Terraform / CloudFormation)**
+- **Import JSON**
+- **Import IaC (Terraform / CloudFormation)**
+- **Save diagram**
+- **Connect to AWS (discover live resources)**
+- **Load preset: Basic AWS**
+- **Load preset: ECS + ALB**
+
+### Add service
+
+Type a service name (e.g. `lambda`, `s3`, `vpc`) and the palette lists matching
+**Add …** entries (up to six). Choosing one drops that service onto the canvas.
+Hidden in presentation mode.
+
+### Jump to node
+
+Type the name of a node already on the canvas and the palette offers **Go to …**
+entries (up to eight). Choosing one centers that node; if it's hidden inside a
+collapsed container or a summary chip, Strata expands the path to reveal it.
+Matching nodes are also highlighted live on the canvas as you type.
