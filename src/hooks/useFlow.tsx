@@ -201,6 +201,14 @@ interface FlowContextValue {
   replaceConfirmOpen: boolean;
   /** Resolve the pending replace confirmation. "save" persists first. */
   resolveReplaceConfirm: (choice: "save" | "discard" | "cancel") => void;
+
+  // ---- Export to IaC (Flow 3) ----
+  /** Whether the "Export to IaC" dialog is open. */
+  exportIaCOpen: boolean;
+  openExportIaC: () => void;
+  closeExportIaC: () => void;
+  /** Build the current model as an InfrastructureGraph (for the export dialog). */
+  snapshotGraph: () => InfrastructureGraph;
   runValidateUI: () => void;
   runRulesUI: () => void;
   saveToServer: () => void;
@@ -292,6 +300,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const replaceResolverRef = useRef<((proceed: boolean) => void) | null>(null);
   const openStartHub = useCallback(() => setStartHubOpen(true), []);
   const closeStartHub = useCallback(() => setStartHubOpen(false), []);
+
+  const [exportIaCOpen, setExportIaCOpen] = React.useState(false);
+  const openExportIaC = useCallback(() => setExportIaCOpen(true), []);
+  const closeExportIaC = useCallback(() => setExportIaCOpen(false), []);
 
   /**
    * Gate any graph-replacing action behind an unsaved-work check. Resolves
@@ -1462,6 +1474,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       startBlank,
       replaceConfirmOpen,
       resolveReplaceConfirm,
+      exportIaCOpen,
+      openExportIaC,
+      closeExportIaC,
+      snapshotGraph: buildGraph,
       runValidateUI: runValidate,
       runRulesUI: runSuggest,
       saveToServer,
@@ -1540,6 +1556,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       startBlank,
       replaceConfirmOpen,
       resolveReplaceConfirm,
+      exportIaCOpen,
+      openExportIaC,
+      closeExportIaC,
+      buildGraph,
       saveToServer,
       listSavedGraphs,
       loadGraph,

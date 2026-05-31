@@ -198,6 +198,12 @@ export const CommandPalette: React.FC = () => {
       { id: "rules", title: "Suggest rules", group: "Tools", run: flow.runRulesUI },
       { id: "export", title: "Export JSON", group: "Tools", run: flow.exportJSON },
       {
+        id: "export-iac",
+        title: "Export to IaC (Terraform / CloudFormation)",
+        group: "Tools",
+        run: flow.openExportIaC,
+      },
+      {
         id: "import-json",
         title: "Import JSON",
         group: "Tools",
