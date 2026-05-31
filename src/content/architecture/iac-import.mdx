@@ -1,0 +1,184 @@
+---
+title: IaC Import
+---
+
+# Infrastructure-as-Code Import
+
+Beyond live MCP discovery (see [MCP Integration](/docs/architecture/mcp-integration)),
+Strata imports **declared** infrastructure from existing Infrastructure-as-Code into
+the same `InfrastructureGraph` that the canvas renders. The module is
+`src/aws/iac.ts` — pure and dependency-light (only `js-yaml`, for CloudFormation
+YAML). Two source formats are supported:
+
+- **CloudFormation** templates (JSON _or_ YAML).
+- **Terraform** `terraform show -json` output (state under `values.root_module`,
+  plan under `planned_values.root_module`) and `terraform plan -json`
+  (`resource_changes[]`).
+
+## Entry points
+
+| Function                                | Purpose                                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `importIaC(content, opts?)`             | Main string entry point. Parses JSON/YAML, then routes by `opts.format` or auto-detects. |
+| `importCloudFormation(template, name?)` | Per-format importer for an already-parsed CloudFormation object.                         |
+| `importTerraform(tf, name?)`            | Per-format importer for an already-parsed Terraform JSON object.                         |
+| `detectFormat(doc)`                     | Heuristic classifier returning `"cloudformation"` or `"terraform"`.                      |
+
+`importIaC` first parses the document (JSON or YAML), then — unless `opts.format`
+forces a format — calls `detectFormat(doc)`, which classifies the parsed object as:
+
+- **`"cloudformation"`** when it has a top-level `Resources` map or an
+  `AWSTemplateFormatVersion`, or
+- **`"terraform"`** when it has `values`, `planned_values`, `resource_changes`,
+  `terraform_version`, or `format_version`.
+
+All importers return an **`IacImportResult`**:
+
+```ts
+interface IacImportResult {
+  graph: InfrastructureGraph;
+  format: IacFormat; // "cloudformation" | "terraform"
+  unmappedTypes: string[]; // source types with no registry mapping
+  warnings: string[]; // skipped resources, ambiguities, …
+}
+```
+
+## Join keys
+
+The two formats differ only in how a source resource is matched to a registry
+`ServiceDefinition`:
+
+- **CloudFormation:** a resource's `Type` (e.g. `"AWS::EC2::Instance"`) **is** the
+  registry `cfnType`, so `getServiceByCfnType()` resolves it directly — the same
+  join key used by MCP discovery.
+- **Terraform:** HCL carries no CloudFormation type, so the module ships its own
+  join table, **`TF_TYPE_TO_SERVICE_ID`** (`Record<tfType, serviceId>`, e.g.
+  `aws_instance → "ec2-instance"`). It is exported and meant to be extended freely
+  as the catalog grows.
+
+## YAML short-tag handling
+
+CloudFormation YAML uses short-form intrinsic tags (`!Ref`, `!GetAtt`, `!Sub`, …).
+`cfnYamlSchema()` registers a `js-yaml` type for every tag in `CFN_TAGS` (across
+scalar/sequence/mapping kinds) that constructs the equivalent `{ Ref: … }` /
+`{ "Fn::<Tag>": … }` object form. The rest of the importer then sees a uniform
+structure regardless of whether the source was JSON or YAML.
+
+## Shared builder, containment & relationship derivation
+
+Both paths normalise their source resources into a common internal `ResolvedItem[]`
+(`id`, `serviceId`, `name`, optional `parentId`, `properties`, `relationships`) and
+feed it through one **`buildGraph()`**, which:
+
+- filters each resource's raw properties down to the service's known `configFields`
+  keys,
+- lays nodes out on a simple grid (auto-layout),
+- keeps a `parentId` only when it resolves to another imported resource, and
+- emits typed `Relationship`s, **de-duplicated** with self-loops and dangling
+  targets dropped (all `source: "imported"`).
+
+Containment and relationships are **derived** per format:
+
+- **CloudFormation:** `parentId` comes from the first matching `CFN_CONTAINMENT_PROPS`
+  property (`SubnetId`, `VpcId`, `ClusterArn`, …) whose `Ref`/`Fn::GetAtt`
+  (`cfnRefTarget` / `collectCfnRefs`) points at another in-template resource;
+  remaining `Ref`/`GetAtt` references plus `DependsOn` become `depends_on` edges.
+- **Terraform:** a resource's `id` attribute is indexed, so a resolved `subnet_id` /
+  `vpc_id` value yields a `parentId`; `depends_on` addresses become `depends_on`
+  edges.
+
+## Example: CloudFormation (YAML)
+
+A VPC with a subnet nested under it and an instance nested under the subnet. The
+subnet's `VpcId` (a `!Ref`) drives containment, so the subnet nests under the VPC
+and the instance under the subnet:
+
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+  MySubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVpc
+      CidrBlock: 10.0.1.0/24
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref MySubnet
+      InstanceType: t3.micro
+```
+
+```ts
+import { importIaC } from "@/aws/iac";
+
+const result = importIaC(yamlString); // format auto-detected as "cloudformation"
+// result.graph        → renderable InfrastructureGraph
+// result.unmappedTypes → e.g. [] (all three types are in the registry)
+```
+
+## Example: Terraform (`terraform show -json`)
+
+Generate the JSON, then feed it to `importIaC`:
+
+```bash
+terraform show -json > state.json
+```
+
+```json
+{
+  "format_version": "1.0",
+  "values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_vpc.main",
+          "type": "aws_vpc",
+          "name": "main",
+          "values": { "id": "vpc-123", "cidr_block": "10.0.0.0/16" }
+        },
+        {
+          "address": "aws_subnet.app",
+          "type": "aws_subnet",
+          "name": "app",
+          "values": { "id": "subnet-456", "vpc_id": "vpc-123" }
+        }
+      ]
+    }
+  }
+}
+```
+
+Here the subnet's `vpc_id` (`"vpc-123"`) matches the VPC's `id` attribute, so the
+subnet nests under `aws_vpc.main`. Nested `child_modules` are walked recursively.
+
+## Registry gaps: `unmappedTypes`
+
+Source resource types with no registry mapping — an unknown `cfnType`, or a
+Terraform type absent from `TF_TYPE_TO_SERVICE_ID` — are **skipped** and collected
+into `IacImportResult.unmappedTypes`, with a count surfaced in `warnings`. These are
+the direct candidates for new catalog entries (see
+[Service Registry](/docs/architecture/service-registry)) or new
+`TF_TYPE_TO_SERVICE_ID` rows.
+
+## Extending Terraform coverage (`TF_TYPE_TO_SERVICE_ID`)
+
+`TF_TYPE_TO_SERVICE_ID` is an exported `Record<string, string>` in `src/aws/iac.ts`.
+To map a new Terraform resource type, add one row keyed by the HCL type, valued by
+an existing registry `serviceId`:
+
+```ts
+export const TF_TYPE_TO_SERVICE_ID: Record<string, string> = {
+  // …existing rows…
+  aws_cloudfront_distribution: "cloudfront",
+  aws_globalaccelerator_accelerator: "global-accelerator",
+};
+```
+
+If no suitable `serviceId` exists yet, add the service to the registry first (one
+catalog entry — see the Service Registry docs), then reference its `id` here.
+Multiple Terraform types may map to the same `serviceId` (e.g. `aws_lb`, `aws_alb`,
+and `aws_elb` all map to `"elastic-load-balancer"`).

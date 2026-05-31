@@ -1,552 +1,1565 @@
 "use client";
-import React, { createContext, useContext, useRef } from "react";
+import React, { createContext, useContext, useRef, useCallback, useEffect } from "react";
 import { useFlowStore } from "./useFlowStore";
-import type { FlowNode, FlowEdge, NodeType } from "../types";
 import { useCanvasInteraction } from "./useCanvasInteraction";
 import { useCanvasRenderer } from "./useCanvasRenderer";
+import type { ResourceInstance, Relationship, InfrastructureGraph } from "../aws/model";
+import { emptyGraph, DEFAULT_NODE_SIZE } from "../aws/model";
+import type { CanvasMode, CanvasDensity, Selection } from "../types";
+import type { RelationshipKind } from "../aws/types";
+import { defaultConfig, getService } from "../aws/registry";
+import {
+  validateArchitecture,
+  suggestRules as suggestRulesEngine,
+  type ValidationResult,
+  type RuleSuggestion,
+} from "../aws/rules";
+import { listGraphs, getGraph, createGraph, updateGraph, deleteGraph } from "../lib/api";
+import type { GraphSummary } from "../aws/model";
+import { importIaC } from "../aws/iac";
+import {
+  zoomAbout,
+  zoomByFactor,
+  fitView,
+  boundsOf,
+  viewportWorldRect,
+  minimapTransform,
+  minimapToWorld,
+  panToCenter,
+  expandRect,
+  gridPack,
+  type Rect,
+  type Vec2,
+  type GuideLine,
+} from "../canvas/geometry";
+import { computeLayout, summaryKey, type LayoutResult } from "../canvas/layout";
+import { RELATIONSHIP_CLASS_ORDER, type RelationshipClass } from "../aws/relationshipClasses";
+import {
+  iamTrustOverlay,
+  securityPathOverlay,
+  heatByDegree,
+  heatColor,
+  type OverlayKind,
+  type OverlayLit,
+} from "../aws/overlays";
+import type { ServiceCategoryId } from "../aws/types";
+import type { LayerState } from "./useFlowStore";
 
-// ---------- Palette ----------
-const PALETTE = [
-  { type: "VPC" as NodeType, color: "var(--accent)", defaults: { name: "VPC", cidr: "10.0.0.0/16" } },
-  { type: "Subnet (Public)" as NodeType, color: "var(--accent)", defaults: { name: "Public Subnet", cidr: "10.0.1.0/24", public: true } },
-  { type: "Subnet (Private)" as NodeType, color: "var(--accent)", defaults: { name: "Private Subnet", cidr: "10.0.2.0/24", public: false } },
-  { type: "Route Table" as NodeType, color: "var(--accent)", defaults: { name: "Route Table" } },
-  { type: "NACL" as NodeType, color: "var(--accent)", defaults: { name: "NACL" } },
-  { type: "Internet Gateway" as NodeType, color: "var(--yellow)", defaults: { name: "IGW" } },
-  { type: "NAT Gateway" as NodeType, color: "var(--yellow)", defaults: { name: "NAT GW" } },
-  { type: "ECS Cluster" as NodeType, color: "var(--accent-2)", defaults: { name: "ECS Cluster" } },
-  { type: "ECS Service" as NodeType, color: "var(--accent-2)", defaults: { name: "Service", notes: "port 80" } },
-  { type: "EC2" as NodeType, color: "var(--accent-2)", defaults: { name: "EC2" } },
-  { type: "ALB" as NodeType, color: "var(--yellow)", defaults: { name: "ALB" } },
-  { type: "Target Group" as NodeType, color: "var(--yellow)", defaults: { name: "Target Group" } },
-  { type: "Security Group" as NodeType, color: "var(--yellow)", defaults: { name: "SG" } },
-  { type: "RDS" as NodeType, color: "var(--green)", defaults: { name: "RDS" } },
-  { type: "S3" as NodeType, color: "var(--green)", defaults: { name: "S3 Bucket" } },
-  { type: "ECR" as NodeType, color: "var(--green)", defaults: { name: "ECR" } },
-  { type: "CloudWatch" as NodeType, color: "var(--blue)", defaults: { name: "CloudWatch" } },
-  { type: "IAM Role" as NodeType, color: "var(--blue)", defaults: { name: "IAM Role" } }
-];
+/** Above this many resources the renderer culls to the viewport. */
+const CULL_THRESHOLD = 250;
+/** Collapse this many same-type leaf children of a container into a summary. */
+const SUMMARY_THRESHOLD = 5;
 
-// ---------- Context Interface ----------
-interface FlowContextValue {
-  PALETTE: typeof PALETTE;
-  state: {
-    nodes: ReturnType<typeof useFlowStore>['nodes'];
-    edges: ReturnType<typeof useFlowStore>['edges'];
-    pan: ReturnType<typeof useFlowStore>['pan'];
-    mode: ReturnType<typeof useFlowStore>['mode'];
-    nextId: ReturnType<typeof useFlowStore>['nextId'];
-  };
-  worldRef: React.RefObject<HTMLDivElement>;
-  svgRef: React.RefObject<SVGSVGElement>;
-  minimapRef: React.RefObject<HTMLCanvasElement>;
-  selection: ReturnType<typeof useFlowStore>['selection'];
-  
-  // Actions
-  setMode: ReturnType<typeof useFlowStore>['setMode'];
-  toggleMode: () => void;
-  select: ReturnType<typeof useFlowStore>['setSelection'];
-  addNode: ReturnType<typeof useFlowStore>['addNode'];
-  addNodeFromPalette: (type: NodeType, x: number, y: number) => void;
-  removeSelection: ReturnType<typeof useFlowStore>['removeSelection'];
-  duplicateSelection: ReturnType<typeof useFlowStore>['duplicateSelection'];
-  groupIntoVPC: () => void;
-  connect: ReturnType<typeof useFlowStore>['connect'];
-  updateInspectorFields: (patch: any) => void;
+/** Built-in view-mode presets → relationship-class emphasis. */
+export type ViewPreset = "all" | "network" | "security" | "data" | "high-level";
 
-  // Canvas interaction
-  onNodeMouseDown: (e: React.MouseEvent, node: any) => void;
-  onCanvasMouseDown: (e: React.MouseEvent) => void;
-  onCanvasClick: () => void;
-  onMouseMove: (e: MouseEvent) => void;
-  onMouseUp: () => void;
-  onWheelZoom: (e: React.WheelEvent) => void;
-  setSpacePressed: (pressed: boolean) => void;
-  screenToWorld: (pt: { x: number; y: number }) => { x: number; y: number };
+/** A user-saved view (layer state) persisted to localStorage. */
+interface SavedView {
+  name: string;
+  hiddenCategories: string[];
+  hiddenRelClasses: string[];
+  filterMode: "dim" | "hide";
+  environmentTint: boolean;
+}
+const SAVED_VIEWS_KEY = "strata.savedViews";
 
-  // Canvas rendering
+function readSavedViews(): SavedView[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SAVED_VIEWS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as SavedView[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Canvas-only, high-churn slice — viewport + transient drag visuals + the
+ * imperative draw / pointer handlers. Lives in its own context so panning,
+ * zooming and hovering re-render ONLY the canvas, never the side panels.
+ */
+interface FlowCanvasContextValue {
+  viewport: ReturnType<typeof useFlowStore>["viewport"];
+  guides: GuideLine[];
+  marquee: Rect | null;
   draw: () => void;
   drawMinimap: () => void;
+  onCanvasMouseDown: (e: React.MouseEvent) => void;
+  onMouseMove: (e: MouseEvent) => void;
+  onMouseUp: () => void;
+  onWheelZoom: (e: WheelEvent) => void;
+  addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
+  minimapNavigate: (clientX: number, clientY: number) => void;
+}
+
+interface FlowContextValue {
+  state: {
+    resources: ResourceInstance[];
+    relationships: Relationship[];
+    mode: CanvasMode;
+    density: CanvasDensity;
+  };
+  worldRef: React.RefObject<HTMLDivElement | null>;
+  svgRef: React.RefObject<SVGSVGElement | null>;
+  minimapRef: React.RefObject<HTMLCanvasElement | null>;
+  selection: Selection;
+  /** Ids of all selected nodes (single or marquee/group multi-selection). */
+  selectedIds: string[];
+
+  // Actions
+  setMode: (m: CanvasMode) => void;
+  toggleMode: () => void;
+  setDensity: (d: CanvasDensity) => void;
+  /** Focus a container (zoom-to-fit + dim others), or null to clear. */
+  focusContainer: (id: string | null) => void;
+  /** Double-click handler for a node id (toggles container focus). */
+  onNodeDoubleClick: (id: string) => void;
+  /** Select + centre on a node (⌘K jump / search). */
+  goToResource: (id: string) => void;
+  /** Setter for the live search-match highlight (read by the renderer only). */
+  setSearchMatches: (ids: ReadonlySet<string>) => void;
+  /** Ancestor path of the focus target, root → leaf (clickable crumbs). */
+  breadcrumb: Array<{ id: string; name: string }>;
+  /** Currently focused container id, or null. */
+  focusedContainerId: string | null;
+
+  // Layers / filters / overlays (Phase 3)
+  hiddenCategories: ReadonlySet<string>;
+  hiddenRelClasses: ReadonlySet<string>;
+  filterMode: "dim" | "hide";
+  environmentTint: boolean;
+  edgeStyle: "curved" | "orthogonal";
+  setEdgeStyle: (s: "curved" | "orthogonal") => void;
+  /** Presentation / read-only mode (hides editing chrome, gates edits). */
+  presentation: boolean;
+  setPresentation: (on: boolean) => void;
+  /** Active analytical overlay (Phase 6). */
+  activeOverlay: OverlayKind;
+  setActiveOverlay: (o: OverlayKind) => void;
+  toggleCategory: (id: ServiceCategoryId) => void;
+  toggleRelClass: (id: RelationshipClass) => void;
+  setFilterMode: (m: "dim" | "hide") => void;
+  setEnvironmentTint: (on: boolean) => void;
+  applyViewPreset: (name: ViewPreset) => void;
+  savedViews: ReadonlyArray<{ name: string }>;
+  saveView: (name: string) => void;
+  applySavedView: (name: string) => void;
+  deleteSavedView: (name: string) => void;
+
+  select: (sel: Selection) => void;
+  removeSelection: () => void;
+  duplicateSelection: () => void;
+  groupIntoVPC: () => void;
+  updateResourceField: (patch: {
+    name?: string;
+    region?: string;
+    config?: Record<string, unknown>;
+  }) => void;
+  updateRelationshipKind: (kind: RelationshipKind) => void;
+
+  // Canvas interaction / view controls (the high-frequency draw + pointer
+  // handlers live in FlowCanvasContext, not here).
+  onCanvasClick: () => void;
+  setSpacePressed: (pressed: boolean) => void;
   fitToView: () => void;
   center: () => void;
+  /** Auto-arrange top-level nodes into a tidy grid. */
+  tidy: () => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  zoomReset: () => void;
+  zoomToSelection: () => void;
 
   // History
-  undo: ReturnType<typeof useFlowStore>['undo'];
-  redo: ReturnType<typeof useFlowStore>['redo'];
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 
-  // Placeholder functions (to be implemented)
+  // Sidebar / IO
+  /** Alias of {@link runValidateUI}, consumed by the top toolbar. */
   validate: () => void;
+  /** Alias of {@link runRulesUI}, consumed by the top toolbar. */
   suggestRules: () => void;
   exportJSON: () => void;
   importJSONDialog: () => void;
-  clear: ReturnType<typeof useFlowStore>['clear'];
+  importIaCDialog: () => void;
+  clear: () => void;
   loadPreset: (presetName: string) => void;
+
+  // ---- Start hub + unsaved-work guard (Flow 2) ----
+  /** True when there are unsaved changes a replace action would lose. */
+  dirty: boolean;
+  /** Whether the "Start a diagram" hub modal is open. */
+  startHubOpen: boolean;
+  openStartHub: () => void;
+  closeStartHub: () => void;
+  /** Start a fresh blank diagram (guarded by the unsaved-work check). */
+  startBlank: () => void;
+  /** Whether the replace-confirmation dialog is showing. */
+  replaceConfirmOpen: boolean;
+  /** Resolve the pending replace confirmation. "save" persists first. */
+  resolveReplaceConfirm: (choice: "save" | "discard" | "cancel") => void;
   runValidateUI: () => void;
   runRulesUI: () => void;
-  validationHtml: string;
-  rulesHtml: string;
+  saveToServer: () => void;
+  /** List saved graphs for the Load menu. */
+  listSavedGraphs: () => Promise<GraphSummary[]>;
+  /** Load a saved graph by id. */
+  loadGraph: (id: string) => Promise<void>;
+  /** Delete a saved graph by id. */
+  deleteSavedGraph: (id: string) => Promise<void>;
+  /** Structured validation findings, or `null` before the first run. */
+  validationResults: ValidationResult[] | null;
+  /** Structured rule suggestions, or `null` before the first run. */
+  ruleSuggestions: RuleSuggestion[] | null;
   status: string;
 }
 
-const FlowContext = createContext<FlowContextValue>(null as any);
-export const useFlow = () => useContext(FlowContext);
+const FlowContext = createContext<FlowContextValue | null>(null);
+const FlowCanvasContext = createContext<FlowCanvasContextValue | null>(null);
 
-// ---------- Provider ----------
+/** Access the Flow context. Throws if used outside a {@link FlowProvider}. */
+export const useFlow = (): FlowContextValue => {
+  const ctx = useContext(FlowContext);
+  if (ctx === null) {
+    throw new Error("useFlow must be used within a <FlowProvider>.");
+  }
+  return ctx;
+};
+
+/** Access the Canvas-only context (viewport + draw/pointer handlers). */
+export const useFlowCanvas = (): FlowCanvasContextValue => {
+  const ctx = useContext(FlowCanvasContext);
+  if (ctx === null) {
+    throw new Error("useFlowCanvas must be used within a <FlowProvider>.");
+  }
+  return ctx;
+};
+
 export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const worldRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const minimapRef = useRef<HTMLCanvasElement>(null);
 
-  // Use our new hooks
   const store = useFlowStore();
   const interaction = useCanvasInteraction();
   const renderer = useCanvasRenderer(worldRef, svgRef, minimapRef);
 
-  // Derived state
-  const state = {
-    nodes: store.nodes,
-    edges: store.edges,
-    pan: store.pan,
-    mode: store.mode,
-    nextId: store.nextId
-  };
+  // Stable store methods pulled out as locals. Callbacks that *call* these must
+  // depend on the local (not `store.x`) — otherwise eslint demands the whole
+  // `store` object, which changes every render and would defeat the memoized
+  // context (re-rendering panels on every pan/hover).
+  const {
+    getViewport,
+    replaceAll: storeReplaceAll,
+    setGraphId: storeSetGraphId,
+    uid: storeUid,
+    setCollapsedIds,
+    expandGroup,
+    setFocusedContainerId,
+    clear: storeClear,
+    markSaved: storeMarkSaved,
+  } = store;
 
-  // Helper functions
-  const toggleMode = () => store.setMode(store.mode === "connect" ? "move" : "connect");
-  
-  const addNodeFromPalette = (type: NodeType, x: number, y: number) => {
-    const paletteItem = PALETTE.find(p => p.type === type);
-    const worldPos = interaction.screenToWorld({ x, y }, store.pan);
-    store.addNode(type, worldPos.x, worldPos.y, paletteItem?.defaults || {});
-  };
+  // Destructure the stable (useCallback) members so handler deps below stay
+  // referentially stable across renders.
+  const {
+    screenToWorld,
+    onMouseMove: iOnMouseMove,
+    onMouseUp: iOnMouseUp,
+    onWheelZoom: iOnWheelZoom,
+    onNodeMouseDown: iOnNodeMouseDown,
+    onCanvasMouseDown: iOnCanvasMouseDown,
+    onConnect: iOnConnect,
+    center: iCenter,
+  } = interaction;
+  const { draw: rDraw, drawMinimap: rDrawMinimap } = renderer;
 
-  const groupIntoVPC = () => {
-    if (!store.selection || store.selection.type !== 'node') return;
-    const n = store.nodes.find(x => x.id === store.selection?.id);
-    if (!n) return;
-    store.addNode('VPC', n.x - 80, n.y - 80, { name: 'VPC', cidr: '10.0.0.0/16' });
-  };
+  const [validationResults, setValidationResults] = React.useState<ValidationResult[] | null>(null);
+  const [ruleSuggestions, setRuleSuggestions] = React.useState<RuleSuggestion[] | null>(null);
+  const [status, setStatus] = React.useState<string>(
+    "Scroll to pan · ⌘/pinch to zoom · drag empty canvas to select · Space+drag to pan · C to connect.",
+  );
+  // Transient alignment guides shown while dragging a node (world coordinates).
+  const [guides, setGuides] = React.useState<GuideLine[]>([]);
 
-  const updateInspectorFields = (patch: any) => {
-    if (!store.selection) return;
-    if (store.selection.type === "node") {
-      store.updateNodeProps(store.selection.id, patch);
-      // Update selection to reflect new node props
-      const updatedNode = store.nodes.find(n => n.id === store.selection?.id);
-      if (updatedNode) {
-        store.setSelection({ type: "node", id: updatedNode.id, node: updatedNode });
-      }
-    } else if (store.selection.type === "edge" && patch.rel) {
-      // TODO: Implement edge update in store
-      console.log('Update edge rel:', patch.rel);
+  // ---- Start hub + unsaved-work guard (Flow 2) --------------------------
+  const [startHubOpen, setStartHubOpen] = React.useState(false);
+  const [replaceConfirmOpen, setReplaceConfirmOpen] = React.useState(false);
+  // Resolver for the in-flight confirmReplaceIfDirty() promise.
+  const replaceResolverRef = useRef<((proceed: boolean) => void) | null>(null);
+  const openStartHub = useCallback(() => setStartHubOpen(true), []);
+  const closeStartHub = useCallback(() => setStartHubOpen(false), []);
+
+  /**
+   * Gate any graph-replacing action behind an unsaved-work check. Resolves
+   * `true` immediately when there is nothing to lose; otherwise opens the
+   * confirm dialog and resolves once the user chooses (true = proceed).
+   */
+  const confirmReplaceIfDirty = useCallback((): Promise<boolean> => {
+    if (!store.dirty || store.resources.length === 0) return Promise.resolve(true);
+    // If a confirm is already pending, resolve the superseded one as "canceled"
+    // before opening a new dialog — otherwise its awaiter hangs forever once
+    // this overwrites the resolver ref.
+    if (replaceResolverRef.current) {
+      replaceResolverRef.current(false);
+      replaceResolverRef.current = null;
     }
-  };
-
-  // Canvas interaction handlers
-  const onNodeMouseDown = (e: React.MouseEvent, node: any) => {
-    interaction.onNodeMouseDown(e, node, store.pan, store.commitCurrentState);
-    store.setSelection({ type: "node", id: node.id, node });
-  };
-
-  const onCanvasMouseDown = (e: React.MouseEvent) => {
-    interaction.onCanvasMouseDown(e);
-  };
-
-  const onCanvasClick = () => {
-    // Only deselect when clicking canvas background
-    store.setSelection(null);
-  };
-
-  const onMouseMove = (e: MouseEvent) => {
-    interaction.onMouseMove(e, store.nodes, store.pan, store.updateNode, store.setPan);
-  };
-
-  const onMouseUp = () => {
-    interaction.onMouseUp(store.commitCurrentState);
-  };
-
-  const onWheelZoom = (e: React.WheelEvent) => {
-    interaction.onWheelZoom(e, store.pan, store.setPan);
-  };
-
-  const screenToWorld = (pt: { x: number; y: number }) => {
-    return interaction.screenToWorld(pt, store.pan);
-  };
-
-  // Canvas rendering
-  const draw = () => {
-    renderer.draw(
-      store.nodes,
-      store.edges,
-      store.pan,
-      store.selection,
-      onNodeMouseDown,
-      (nodeId: string, type: 'start' | 'end') => {
-        interaction.onConnect(nodeId, type, store.connect);
-      },
-      store.setSelection
-    );
-  };
-
-  const drawMinimap = () => {
-    renderer.drawMinimap(store.nodes);
-  };
-
-  const fitToView = () => {
-    interaction.fitToView(store.nodes, worldRef, store.setPan);
-  };
-
-  const center = () => {
-    interaction.center(store.pan, store.setPan);
-  };
-
-  // Sidebar output state
-  const [validationHtml, setValidationHtml] = React.useState<string>("");
-  const [rulesHtml, setRulesHtml] = React.useState<string>("");
-
-  function cidrContains(parent: string, child: string) {
-    try {
-      const [pBase, pMaskStr] = parent.split('/');
-      const [cBase, cMaskStr] = child.split('/');
-      const pMask = Number(pMaskStr), cMask = Number(cMaskStr);
-      const toInt = (ip: string) => ip.split('.').reduce((acc, oct) => (acc << 8) + Number(oct), 0) >>> 0;
-      const pInt = toInt(pBase), cInt = toInt(cBase);
-      const pNet = pInt & (~0 << (32 - pMask));
-      const cNet = cInt & (~0 << (32 - cMask));
-      return (cNet >>> 0) >= (pNet >>> 0) && (cNet >>> 0) <= ((pNet | ((1 << (32 - pMask)) - 1)) >>> 0);
-    } catch { return true; }
-  }
-
-  function validateInner() {
-    const out: Array<["error"|"warn"|"ok", string]> = [];
-    const ofType = (t: NodeType) => store.nodes.filter(n => n.type === t);
-    const get = (id: string) => store.nodes.find(n => n.id === id);
-    const incoming = (id: string, rel?: FlowEdge["rel"]) => store.edges.filter(e => e.to === id && (!rel || e.rel === rel));
-    const outgoing = (id: string, rel?: FlowEdge["rel"]) => store.edges.filter(e => e.from === id && (!rel || e.rel === rel));
-
-    store.nodes.filter(n => /Subnet/.test(n.type)).forEach(sn => {
-      const parentVPC = incoming(sn.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'VPC');
-      if (!parentVPC) out.push(["error", `Subnet “${sn.props.name}” should be attached_to a VPC.`]);
-      if (parentVPC && sn.props.cidr && parentVPC.props.cidr) {
-        if (!cidrContains(parentVPC.props.cidr!, sn.props.cidr!)) out.push(["error", `Subnet ${sn.props.cidr} not inside VPC ${parentVPC.props.cidr}.`]);
-      }
+    return new Promise<boolean>((resolve) => {
+      replaceResolverRef.current = resolve;
+      setReplaceConfirmOpen(true);
     });
+  }, [store.dirty, store.resources.length]);
 
-    ofType('Route Table').forEach(rt => {
-      const subs = outgoing(rt.id, 'attached_to').map(e => get(e.to)).filter(n => /Subnet/.test(n!.type));
-      if (subs.length === 0) out.push(["warn", `Route Table “${rt.props.name}” is not attached_to any Subnet.`]);
-    });
+  // `viewport` is intentionally NOT here — it lives in the Canvas-only context
+  // so panels don't re-render on pan/zoom.
+  const state = React.useMemo(
+    () => ({
+      resources: store.resources,
+      relationships: store.relationships,
+      mode: store.mode,
+      density: store.density,
+    }),
+    [store.resources, store.relationships, store.mode, store.density],
+  );
 
-    ofType('NACL').forEach(nacl => {
-      const subs = outgoing(nacl.id, 'attached_to').map(e => get(e.to)).filter(n => /Subnet/.test(n!.type));
-      if (subs.length === 0) out.push(["warn", `NACL “${nacl.props.name}” is not attached_to any Subnet.`]);
-    });
+  // ---- containment layout -------------------------------------------------
+  const isContainerPred = useCallback(
+    (r: ResourceInstance) => !!getService(r.serviceId)?.isContainer,
+    [],
+  );
+  // Effective rects for every visible node (containers auto-fit + pack their
+  // children; collapsed ones hide descendants; the live drag override detaches
+  // a subtree to the cursor). The renderer, edges and hit-testing all read this.
+  const layout: LayoutResult = React.useMemo(
+    () =>
+      computeLayout(store.resources, {
+        collapsed: store.collapsed,
+        isContainer: isContainerPred,
+        density: store.density,
+        override: store.dragOverride,
+        summarize: { threshold: SUMMARY_THRESHOLD, expandedGroups: store.expandedGroups },
+      }),
+    [
+      store.resources,
+      store.collapsed,
+      store.density,
+      store.dragOverride,
+      store.expandedGroups,
+      isContainerPred,
+    ],
+  );
+  // Environment-tint overlay: resource id → tint colour, from its account's
+  // environment (or an Environment tag), null when the overlay is off.
+  const envTintById = React.useMemo<ReadonlyMap<string, string> | null>(() => {
+    if (!store.environmentTint) return null;
+    const accById = new Map(store.accounts.map((a) => [a.id, a]));
+    const tint = (env: string | undefined, accountColor?: string): string => {
+      if (accountColor) return accountColor;
+      const e = (env ?? "").toLowerCase();
+      if (e.includes("prod")) return "#f87171";
+      if (e.includes("stag")) return "#fbbf24";
+      if (e.includes("dev")) return "#34d399";
+      if (e.includes("sand") || e.includes("test")) return "#60a5fa";
+      return "#94a3b8";
+    };
+    const m = new Map<string, string>();
+    for (const r of store.resources) {
+      const acc = r.accountId ? accById.get(r.accountId) : undefined;
+      const env = acc?.environment ?? r.tags?.Environment ?? r.tags?.environment;
+      if (acc || env) m.set(r.id, tint(env, acc?.color));
+    }
+    return m;
+  }, [store.environmentTint, store.accounts, store.resources]);
 
-    ofType('Internet Gateway').forEach(igw => {
-      const vpc = outgoing(igw.id, 'attached_to').map(e => get(e.to)).find(n => n && n.type === 'VPC');
-      if (!vpc) out.push(["error", `IGW “${igw.props.name}” must be attached_to a VPC.`]);
-    });
+  // ---- analytical overlays (Phase 6) -------------------------------------
+  // Lit node/edge set for the IAM-trust or security-path overlay (selection-
+  // aware); null for none/heat (which don't dim).
+  const overlayLit = React.useMemo<OverlayLit | null>(() => {
+    const focus = store.selection?.type === "node" ? store.selection.id : null;
+    if (store.activeOverlay === "iam")
+      return iamTrustOverlay(store.resources, store.relationships, focus);
+    if (store.activeOverlay === "security")
+      return securityPathOverlay(store.resources, store.relationships, focus);
+    return null;
+  }, [store.activeOverlay, store.resources, store.relationships, store.selection]);
+  // Heat overlay tint map (degree proxy), reusing the background-tint channel.
+  const overlayHeat = React.useMemo<ReadonlyMap<string, string> | null>(() => {
+    if (store.activeOverlay !== "heat") return null;
+    const heat = heatByDegree(store.resources, store.relationships);
+    const m = new Map<string, string>();
+    for (const [id, t] of heat) m.set(id, heatColor(t));
+    return m;
+  }, [store.activeOverlay, store.resources, store.relationships]);
 
-    store.nodes.filter(n => /Subnet/.test(n.type) && n.props.public).forEach(sn => {
-      const rt = incoming(sn.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Route Table');
-      const hasIGW = store.edges.some(e => rt && e.from === rt.id && e.rel === 'routes_to' && get(e.to)?.type === 'Internet Gateway');
-      if (sn.props.public && (!rt || !hasIGW)) out.push(["error", `Public Subnet “${sn.props.name}” should have Route Table → routes_to → IGW.`]);
-    });
+  // Id set of the focused container's subtree (for focus-container dimming).
+  const focusSubtree = React.useMemo<ReadonlySet<string> | null>(() => {
+    const root = store.focusedContainerId;
+    if (!root) return null;
+    const childrenByParent = new Map<string, string[]>();
+    for (const r of store.resources) {
+      if (!r.parentId) continue;
+      const list = childrenByParent.get(r.parentId);
+      if (list) list.push(r.id);
+      else childrenByParent.set(r.parentId, [r.id]);
+    }
+    const set = new Set<string>();
+    const stack = [root];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (set.has(id)) continue;
+      set.add(id);
+      for (const c of childrenByParent.get(id) ?? []) stack.push(c);
+    }
+    return set;
+  }, [store.focusedContainerId, store.resources]);
 
-    ofType('NAT Gateway').forEach(nat => {
-      const subnet = incoming(nat.id, 'attached_to').map(e => get(e.from)).find(n => /Subnet/.test(n!.type));
-      if (!subnet || !subnet.props.public) out.push(["error", `NAT Gateway should be placed in a public Subnet (attached_to).`]);
-    });
-
-    store.nodes.filter(n => /Subnet/.test(n.type) && !n.props.public).forEach(sn => {
-      const rt = incoming(sn.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Route Table');
-      const hasNAT = store.edges.some(e => rt && e.from === rt.id && e.rel === 'routes_to' && get(e.to)?.type === 'NAT Gateway');
-      if (!rt || !hasNAT) out.push(["warn", `Private Subnet “${sn.props.name}” usually needs Route Table → routes_to → NAT GW for egress.`]);
-    });
-
-    ofType('ALB').forEach(alb => {
-      const subs = incoming(alb.id, 'attached_to').map(e => get(e.from)).filter(n => /Subnet/.test(n!.type));
-      const publicCount = subs.filter(s => s!.props.public).length;
-      if (publicCount === 0) out.push(["warn", `ALB “${alb.props.name}” is not placed in any public Subnet (attach via attached_to).`]);
-      const tg = outgoing(alb.id, 'targets').map(e => get(e.to)).find(n => n && n.type === 'Target Group');
-      if (!tg) out.push(["warn", `ALB should targets a Target Group.`]);
-    });
-
-    ofType('Target Group').forEach(tg => {
-      const target = outgoing(tg.id, 'targets').map(e => get(e.to)).find(n => n && /ECS Service|EC2/.test(n!.type));
-      if (!target) out.push(["warn", `Target Group “${tg.props.name}” should targets an ECS Service or EC2.`]);
-    });
-
-    ofType('ECS Service').forEach(svc => {
-      const subs = incoming(svc.id, 'attached_to').map(e => get(e.from)).filter(n => /Subnet/.test(n!.type));
-      if (subs.length === 0) out.push(["error", `ECS Service “${svc.props.name}” must be attached_to Subnet(s).`]);
-      const sg = incoming(svc.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Security Group');
-      if (!sg) out.push(["error", `ECS Service “${svc.props.name}” should be attached_to a Security Group.`]);
-    });
-
-    ofType('RDS').forEach(rds => {
-      const subs = incoming(rds.id, 'attached_to').map(e => get(e.from)).filter(n => /Subnet/.test(n!.type));
-      if (subs.length === 0) out.push(["warn", `RDS “${rds.props.name}” should be attached_to private Subnet(s).`]);
-      subs.forEach(s => { if (s!.props.public) out.push(["warn", `RDS ideally not in public Subnet “${s!.props.name}”.`]); });
-      const sg = incoming(rds.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Security Group');
-      if (!sg) out.push(["warn", `RDS should be attached_to a Security Group.`]);
-    });
-
-    const html = out.map(([level, msg]) => `<div class="mt-1">
-      <span class="badge" style="border-color:${level === 'error' ? 'var(--danger)' : level === 'warn' ? 'var(--yellow)' : 'var(--green)'}; color:${level === 'error' ? 'var(--danger)' : level === 'warn' ? 'var(--yellow)' : 'var(--green)'}">${level}</span>
-      <span class="ml-1">${msg}</span>
-    </div>`).join('');
-    setValidationHtml(html || '<span style="color:var(--green)">No issues found.</span>');
-    return out;
-  }
-
-  function guessServicePort(svc: FlowNode) {
-    const m = /port\s+(\d{2,5})/i.exec(svc.props.notes || '');
-    return m ? m[1] : '80';
-  }
-
-  function suggestRulesInner() {
-    const out: Array<{ scope: string; type: string; rules: any[] }> = [];
-    const get = (id: string) => store.nodes.find(n => n.id === id)!;
-    const incoming = (id: string, rel?: FlowEdge["rel"]) => store.edges.filter(e => e.to === id && (!rel || e.rel === rel));
-    const outgoing = (id: string, rel?: FlowEdge["rel"]) => store.edges.filter(e => e.from === id && (!rel || e.rel === rel));
-
-    const albs = store.nodes.filter(n => n.type === 'ALB');
-    albs.forEach(alb => {
-      out.push({ scope: alb.props.name, type: 'Security Group', rules: [
-        { dir: 'ingress', proto: 'tcp', port: '80,443', src: '0.0.0.0/0', comment: 'Public HTTP/HTTPS to ALB' }
-      ]});
-      const tg = outgoing(alb.id, 'targets').map(e => get(e.to)).find(n => n && n.type === 'Target Group');
-      const svc = tg ? outgoing(tg.id, 'targets').map(e => get(e.to)).find(n => n && /ECS Service|EC2/.test(n.type)) : null;
-      if (svc) {
-        const svcSg = incoming(svc.id, 'attached_to').map(e => get(e.from)).find(n => n && n.type === 'Security Group');
-        if (svcSg) {
-          out.push({ scope: svcSg.props.name, type: 'Security Group', rules: [
-            { dir: 'ingress', proto: 'tcp', port: guessServicePort(svc), src: `sg:${alb.props.name}`, comment: 'ALB to Service' }
-          ]});
+  /** Deepest visible container under a world point, excluding a node's subtree
+   *  (so a container can't be dropped into itself). Used for drag-to-reparent. */
+  const containerAt = useCallback(
+    (point: Vec2, excludeId: string): string | null => {
+      // Build the excluded subtree (excludeId + all descendants).
+      const desc = new Set<string>([excludeId]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const r of store.resources) {
+          if (r.parentId && desc.has(r.parentId) && !desc.has(r.id)) {
+            desc.add(r.id);
+            grew = true;
+          }
         }
       }
+      let best: { id: string; depth: number } | null = null;
+      for (const [id, rect] of layout.rects) {
+        if (desc.has(id) || !layout.isContainerNode(id)) continue;
+        const inside =
+          point.x >= rect.x &&
+          point.x <= rect.x + rect.w &&
+          point.y >= rect.y &&
+          point.y <= rect.y + rect.h;
+        if (!inside) continue;
+        const d = layout.depth.get(id) ?? 0;
+        if (!best || d > best.depth) best = { id, depth: d };
+      }
+      return best?.id ?? null;
+    },
+    [store.resources, layout],
+  );
+
+  /** Assemble the current model into an InfrastructureGraph. */
+  const buildGraph = useCallback((): InfrastructureGraph => {
+    const base = emptyGraph("AWS Architecture");
+    return {
+      ...base,
+      id: store.graphId || "",
+      accounts: store.accounts,
+      resources: store.resources,
+      relationships: store.relationships,
+      // Read the live viewport so buildGraph (export/save) stays referentially
+      // stable across pans — keeps the panel context from re-rendering.
+      viewport: getViewport(),
+    };
+  }, [store.graphId, store.accounts, store.resources, store.relationships, getViewport]);
+
+  const { setMode: storeSetMode, addResource: storeAddResource } = store;
+
+  const toggleMode = useCallback(
+    () => storeSetMode(store.mode === "connect" ? "move" : "connect"),
+    [storeSetMode, store.mode],
+  );
+
+  const addResourceFromPalette = useCallback(
+    (serviceId: string, x: number, y: number) => {
+      const world = screenToWorld({ x, y }, store.viewport);
+      storeAddResource(serviceId, world.x, world.y);
+    },
+    [screenToWorld, storeAddResource, store.viewport],
+  );
+
+  // Keep the selection's cached `resource` / `relationship` snapshot fresh
+  // when the underlying model changes (e.g. after an inspector edit).
+  const {
+    selection: storeSelection,
+    resources: storeResources,
+    relationships: storeRelationships,
+    setSelection,
+  } = store;
+  useEffect(() => {
+    const sel = storeSelection;
+    if (!sel) return;
+    if (sel.type === "node") {
+      const r = storeResources.find((x) => x.id === sel.id);
+      if (r && r !== sel.resource) {
+        setSelection({ type: "node", id: r.id, resource: r });
+      }
+    } else if (sel.type === "edge") {
+      const rel = storeRelationships.find((x) => x.id === sel.id);
+      if (rel) {
+        const from = storeResources.find((x) => x.id === rel.from);
+        const to = storeResources.find((x) => x.id === rel.to);
+        if (rel !== sel.relationship) {
+          setSelection({
+            type: "edge",
+            id: rel.id,
+            relationship: rel,
+            fromName: from?.name ?? rel.from,
+            toName: to?.name ?? rel.to,
+          });
+        }
+      }
+    }
+  }, [storeSelection, storeResources, storeRelationships, setSelection]);
+
+  const {
+    updateResource: storeUpdateResource,
+    updateRelationshipKind: storeUpdateRelationshipKind,
+    updateResourcePosition,
+    updateResourcePositions,
+    setViewport: storeSetViewport,
+    commitCurrentState,
+    setSelection: storeSetSelection,
+    setSelectedIds: storeSetSelectedIds,
+    connect: storeConnect,
+  } = store;
+
+  // ---- selection helpers (single + multi kept consistent) ----------------
+  const selectSingle = useCallback(
+    (id: string) => {
+      const r = store.resources.find((x) => x.id === id);
+      storeSetSelectedIds([id]);
+      if (r) storeSetSelection({ type: "node", id, resource: r });
+    },
+    [store.resources, storeSetSelectedIds, storeSetSelection],
+  );
+  const clearSelection = useCallback(() => {
+    storeSetSelectedIds([]);
+    storeSetSelection(null);
+  }, [storeSetSelectedIds, storeSetSelection]);
+  /** Apply a marquee result: 0 → clear, 1 → single (Inspector detail), N → multi. */
+  const applyMarquee = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) {
+        clearSelection();
+      } else if (ids.length === 1) {
+        selectSingle(ids[0]);
+      } else {
+        storeSetSelectedIds(ids);
+        storeSetSelection(null);
+      }
+    },
+    [clearSelection, selectSingle, storeSetSelectedIds, storeSetSelection],
+  );
+
+  // Transient marquee selection rectangle (world coords) drawn while dragging.
+  const [marquee, setMarquee] = React.useState<Rect | null>(null);
+
+  // Hovered node id → drives focus-dimming. Deduped so repeated enters of the
+  // same node don't re-render.
+  const [hoverId, setHoverId] = React.useState<string | null>(null);
+  const onHover = useCallback((id: string | null) => {
+    setHoverId((prev) => (prev === id ? prev : id));
+  }, []);
+  // Focus = the hovered node, else the single selected node. Its 1-hop
+  // neighbourhood stays lit; everything else dims.
+  const focusId = hoverId ?? (store.selection?.type === "node" ? store.selection.id : null);
+
+  const updateResourceField = useCallback(
+    (patch: { name?: string; region?: string; config?: Record<string, unknown> }) => {
+      if (store.selection?.type !== "node") return;
+      storeUpdateResource(store.selection.id, patch);
+    },
+    [store.selection, storeUpdateResource],
+  );
+
+  const updateRelationshipKind = useCallback(
+    (kind: RelationshipKind) => {
+      if (store.selection?.type !== "edge") return;
+      storeUpdateRelationshipKind(store.selection.id, kind);
+    },
+    [store.selection, storeUpdateRelationshipKind],
+  );
+
+  const onCanvasMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      iOnCanvasMouseDown(e, {
+        pan: store.viewport,
+        mode: store.mode,
+        readOnly: store.presentation,
+        setMarquee,
+        clearSelection,
+      });
+    },
+    [iOnCanvasMouseDown, store.viewport, store.mode, store.presentation, clearSelection],
+  );
+  const onMouseMove = useCallback(
+    (e: MouseEvent) => {
+      iOnMouseMove(e, {
+        rects: layout.rects,
+        pan: store.viewport,
+        updatePositions: updateResourcePositions,
+        updatePan: storeSetViewport,
+        setGuides,
+        setMarquee,
+        setOverride: store.setDragOverride,
+      });
+    },
+    [
+      iOnMouseMove,
+      layout,
+      store.viewport,
+      updateResourcePositions,
+      storeSetViewport,
+      store.setDragOverride,
+    ],
+  );
+  const onMouseUp = useCallback(() => {
+    iOnMouseUp({
+      rects: layout.rects,
+      commitState: commitCurrentState,
+      selectSingle,
+      applyMarquee,
+      clearSelection,
+      setGuides,
+      setMarquee,
+      setOverride: store.setDragOverride,
+      containerAt,
+      setParent: store.setParent,
     });
+  }, [
+    iOnMouseUp,
+    layout,
+    commitCurrentState,
+    selectSingle,
+    applyMarquee,
+    clearSelection,
+    store.setDragOverride,
+    containerAt,
+    store.setParent,
+  ]);
+  const onWheelZoom = useCallback(
+    (e: WheelEvent) => iOnWheelZoom(e, getViewport(), storeSetViewport),
+    [iOnWheelZoom, getViewport, storeSetViewport],
+  );
 
-    store.nodes.filter(n => /Subnet/.test(n.type) && !n.props.public).forEach(sn => {
-      out.push({ scope: sn.props.name, type: 'Route Table', rules: [
-        { route: '0.0.0.0/0', target: 'NAT Gateway', comment: 'Egress for private subnet' }
-      ]});
+  const onNodeMouseDown = useCallback(
+    (e: React.MouseEvent, resource: ResourceInstance) => {
+      // Selection is decided inside the interaction layer (selectSingle): a node
+      // in a multi-selection keeps the group for dragging; any other node
+      // becomes the single selection.
+      iOnNodeMouseDown(e, resource, {
+        pan: store.viewport,
+        mode: store.mode,
+        resources: store.resources,
+        selectedIds: store.selectedIds,
+        rects: layout.rects,
+        readOnly: store.presentation,
+        connect: storeConnect,
+        selectSingle,
+      });
+    },
+    [
+      iOnNodeMouseDown,
+      store.viewport,
+      store.mode,
+      store.resources,
+      store.selectedIds,
+      layout,
+      store.presentation,
+      storeConnect,
+      selectSingle,
+    ],
+  );
+
+  // Stable connect callback: its identity only changes when resources/connect
+  // change, NOT on viewport changes. This lets the renderer's viewport-only
+  // fast path (which compares callback references) actually short-circuit on
+  // pan/zoom instead of running a full structural diff every frame.
+  const onConnectCb = useCallback(
+    (id: string, type: "start" | "end") => {
+      iOnConnect(id, type, store.resources, storeConnect);
+    },
+    [iOnConnect, store.resources, storeConnect],
+  );
+
+  /** Canvas-wrap pixel size (falls back to the window if not yet mounted). */
+  const viewSize = useCallback(() => {
+    const el = worldRef.current?.parentElement as HTMLElement | null;
+    const r = el?.getBoundingClientRect();
+    return { width: r?.width ?? window.innerWidth, height: r?.height ?? window.innerHeight };
+  }, []);
+
+  const { toggleExpandedGroup: storeToggleExpandedGroup } = store;
+  const onExpandGroup = useCallback(
+    (parentId: string, serviceId: string) =>
+      storeToggleExpandedGroup(summaryKey(parentId, serviceId)),
+    [storeToggleExpandedGroup],
+  );
+
+  const draw = useCallback(() => {
+    // Cull to the viewport only for large graphs; keep the fast path otherwise.
+    let cullViewport: Rect | null = null;
+    if (store.resources.length > CULL_THRESHOLD) {
+      const vw = viewportWorldRect(store.viewport, viewSize());
+      cullViewport = expandRect(vw, Math.max(vw.w, vw.h) * 0.3);
+    }
+    rDraw(
+      store.resources,
+      store.relationships,
+      store.viewport,
+      store.selection,
+      store.selectedIds,
+      store.density,
+      focusId,
+      layout,
+      store.collapsed,
+      focusSubtree,
+      store.hiddenCategories,
+      store.hiddenRelClasses,
+      store.filterMode,
+      overlayHeat ?? envTintById,
+      store.activeOverlay === "heat" ? "heat" : "env",
+      cullViewport,
+      store.edgeStyle,
+      store.searchMatches,
+      overlayLit,
+      onNodeMouseDown,
+      onConnectCb,
+      storeSetSelection,
+      onHover,
+      store.toggleCollapsed,
+      onExpandGroup,
+    );
+  }, [
+    viewSize,
+    rDraw,
+    store.resources,
+    store.relationships,
+    store.viewport,
+    store.selection,
+    store.selectedIds,
+    store.density,
+    focusId,
+    layout,
+    store.collapsed,
+    focusSubtree,
+    store.hiddenCategories,
+    store.hiddenRelClasses,
+    store.filterMode,
+    envTintById,
+    overlayHeat,
+    overlayLit,
+    store.activeOverlay,
+    store.edgeStyle,
+    store.searchMatches,
+    onNodeMouseDown,
+    onConnectCb,
+    storeSetSelection,
+    onHover,
+    store.toggleCollapsed,
+    onExpandGroup,
+  ]);
+  const drawMinimap = useCallback(
+    () => rDrawMinimap(store.resources, layout, store.viewport, viewSize()),
+    [rDrawMinimap, store.resources, layout, store.viewport, viewSize],
+  );
+  const fitToView = useCallback(() => {
+    const bounds = boundsOf([...layout.rects.values()]);
+    if (!bounds) {
+      storeSetViewport({ x: 200, y: 120, scale: 1 });
+      return;
+    }
+    storeSetViewport(fitView(bounds, viewSize()));
+  }, [layout, storeSetViewport, viewSize]);
+  const center = useCallback(
+    () => iCenter(getViewport(), storeSetViewport),
+    [iCenter, getViewport, storeSetViewport],
+  );
+
+  /** Auto-arrange top-level nodes into a tidy grid (one undo step). Containers
+   *  already auto-pack their children via the layout engine. */
+  const tidy = useCallback(() => {
+    const ids = new Set(store.resources.map((r) => r.id));
+    const top = store.resources.filter(
+      (r) => !r.parentId || r.parentId === r.id || !ids.has(r.parentId),
+    );
+    if (top.length === 0) return;
+    const items = top.map((r) => {
+      const rect = layout.rects.get(r.id);
+      return { id: r.id, w: rect?.w ?? DEFAULT_NODE_SIZE.w, h: rect?.h ?? DEFAULT_NODE_SIZE.h };
     });
+    const packed = gridPack(items, { originX: 80, originY: 80, gap: 48 });
+    updateResourcePositions(packed.map((p) => ({ id: p.id, x: p.x, y: p.y })));
+    commitCurrentState();
+  }, [store.resources, layout, updateResourcePositions, commitCurrentState]);
 
-    store.nodes.filter(n => /Subnet/.test(n.type) && n.props.public).forEach(sn => {
-      out.push({ scope: sn.props.name, type: 'Route Table', rules: [
-        { route: '0.0.0.0/0', target: 'Internet Gateway', comment: 'Public internet access' }
-      ]});
-    });
+  /** Zoom about the viewport centre by a multiplicative factor. */
+  const zoomBy = useCallback(
+    (factor: number) => {
+      const v = viewSize();
+      storeSetViewport(zoomByFactor(getViewport(), { x: v.width / 2, y: v.height / 2 }, factor));
+    },
+    [viewSize, getViewport, storeSetViewport],
+  );
+  const zoomIn = useCallback(() => zoomBy(1.2), [zoomBy]);
+  const zoomOut = useCallback(() => zoomBy(1 / 1.2), [zoomBy]);
 
-    store.nodes.filter(n => n.type === 'NACL').forEach(nacl => {
-      out.push({ scope: nacl.props.name, type: 'NACL', rules: [
-        { num: 100, dir: 'ingress', proto: 'tcp', port: '1024-65535', src: '0.0.0.0/0', allow: true, comment: 'Ephemeral return traffic' },
-        { num: 110, dir: 'egress', proto: 'tcp', port: '0-65535', dst: '0.0.0.0/0', allow: true, comment: 'All egress' }
-      ]});
-    });
+  /** Reset to 100% (scale 1) keeping the viewport centre fixed. */
+  const zoomReset = useCallback(() => {
+    const v = viewSize();
+    storeSetViewport(zoomAbout(getViewport(), { x: v.width / 2, y: v.height / 2 }, 1));
+  }, [viewSize, getViewport, storeSetViewport]);
 
-    const html = out.map(block => {
-      const rows = (block.rules || []).map(r => `<li>${Object.entries(r).map(([k, v]) => `<span style=\"color:#9fb3c8\">${k}</span>: ${v}`).join(', ')}</li>`).join('');
-      return `<div style=\"margin:6px 0 10px; padding:8px; border:1px solid #223055; border-radius:10px; background:#0d1831;\">
-        <div style=\"font-weight:700;\">${block.type} — <span style=\"color:#a5b4fc\">${block.scope}</span></div>
-        <ul style=\"margin:6px 0 0 16px;\">${rows}</ul>
-      </div>`;
-    }).join('');
-    setRulesHtml(html || '<span style="color:var(--sub)">No suggestions yet—add ALB/Service, Subnets, NACLs…</span>');
-  }
+  /** Frame the current selection (falls back to fit-all when nothing is selected). */
+  const zoomToSelection = useCallback(() => {
+    const ids = store.selectedIds.length
+      ? store.selectedIds
+      : store.selection?.type === "node"
+        ? [store.selection.id]
+        : [];
+    if (ids.length === 0) {
+      fitToView();
+      return;
+    }
+    const boxes = ids.map((id) => layout.rects.get(id)).filter((r): r is Rect => !!r);
+    const bounds = boundsOf(boxes);
+    if (!bounds) return;
+    storeSetViewport(fitView(bounds, viewSize(), { maxScale: 1.4 }));
+  }, [store.selectedIds, store.selection, layout, fitToView, storeSetViewport, viewSize]);
 
-  const validate = () => { validateInner(); };
-  const suggestRules = () => { suggestRulesInner(); };
-  const runValidateUI = () => { validateInner(); };
-  const runRulesUI = () => { suggestRulesInner(); };
+  /**
+   * Focus a container: frame its subtree (zoom-to-fit) and dim everything
+   * outside it. Toggling the same container off clears the focus.
+   */
+  const focusContainer = useCallback(
+    (id: string | null) => {
+      setFocusedContainerId(id);
+      if (!id) return;
+      const bounds = layout.rects.get(id);
+      if (bounds) storeSetViewport(fitView(bounds, viewSize(), { maxScale: 1.2 }));
+    },
+    [setFocusedContainerId, layout, storeSetViewport, viewSize],
+  );
 
-  function exportJSON() {
-    const data = { nodes: store.nodes, edges: store.edges, pan: store.pan, nextId: store.nextId };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'aws-flow.json'; a.click();
-  }
+  /**
+   * Select a node and centre the viewport on it (⌘K jump / search). If the
+   * target is hidden inside collapsed containers or behind an "N×" summary,
+   * reveal it first (expand ancestors + its summary group), then centre using a
+   * freshly-computed layout so the camera lands correctly this tick.
+   */
+  const goToResource = useCallback(
+    (id: string) => {
+      selectSingle(id);
+      const byId = new Map(store.resources.map((r) => [r.id, r]));
+      const target = byId.get(id);
+      if (!target) return;
 
-  function importJSONDialog() {
-    const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/json';
-    input.onchange = (e: any) => {
-      const f = e.target.files?.[0]; if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const data = JSON.parse(String(reader.result));
-          store.setNodes(data.nodes || []); store.setEdges(data.edges || []); store.setPan(data.pan || store.pan); store.nextId = data.nextId || 1; store.setSelection(null);
-        } catch { alert('Invalid JSON'); }
+      // Expand every collapsed ancestor on the path to the root.
+      const nextCollapsed = new Set(store.collapsed);
+      const guard = new Set<string>();
+      let cur = target.parentId;
+      while (cur && byId.has(cur) && !guard.has(cur)) {
+        guard.add(cur);
+        nextCollapsed.delete(cur);
+        cur = byId.get(cur)?.parentId;
+      }
+      // Expand the target's own summary group, if it is summarized.
+      const nextExpanded = new Set(store.expandedGroups);
+      if (target.parentId) nextExpanded.add(summaryKey(target.parentId, target.serviceId));
+
+      if (nextCollapsed.size !== store.collapsed.size) setCollapsedIds(nextCollapsed);
+      nextExpanded.forEach((k) => expandGroup(k));
+
+      // Centre using a layout that reflects the revealed state.
+      const revealed = computeLayout(store.resources, {
+        collapsed: nextCollapsed,
+        isContainer: isContainerPred,
+        density: store.density,
+        summarize: { threshold: SUMMARY_THRESHOLD, expandedGroups: nextExpanded },
+      });
+      const rect = revealed.rects.get(id);
+      if (rect) {
+        storeSetViewport(
+          panToCenter(
+            { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 },
+            viewSize(),
+            getViewport().scale,
+          ),
+        );
+      }
+    },
+    [
+      selectSingle,
+      store.resources,
+      store.collapsed,
+      store.expandedGroups,
+      setCollapsedIds,
+      expandGroup,
+      store.density,
+      isContainerPred,
+      storeSetViewport,
+      viewSize,
+      getViewport,
+    ],
+  );
+
+  /** Double-clicking a container toggles focus on it (zoom-to-fit + dim others). */
+  const onNodeDoubleClick = useCallback(
+    (id: string) => {
+      if (!layout.isContainerNode(id)) return;
+      focusContainer(store.focusedContainerId === id ? null : id);
+    },
+    [layout, focusContainer, store.focusedContainerId],
+  );
+
+  /** Ancestor path (root → target) of the focused container, else the single
+   *  selected node — rendered as a clickable breadcrumb. */
+  const breadcrumb = React.useMemo<Array<{ id: string; name: string }>>(() => {
+    const targetId =
+      store.focusedContainerId ?? (store.selection?.type === "node" ? store.selection.id : null);
+    if (!targetId) return [];
+    const byId = new Map(store.resources.map((r) => [r.id, r]));
+    const chain: Array<{ id: string; name: string }> = [];
+    const guard = new Set<string>();
+    let cur = byId.get(targetId);
+    while (cur && !guard.has(cur.id)) {
+      guard.add(cur.id);
+      chain.unshift({ id: cur.id, name: cur.name });
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    return chain;
+  }, [store.focusedContainerId, store.selection, store.resources]);
+
+  // ---- view presets + saved views ----------------------------------------
+  const { setLayers: storeSetLayers } = store;
+
+  const applyViewPreset = useCallback(
+    (name: ViewPreset) => {
+      const hideAllBut = (keep: RelationshipClass): Set<RelationshipClass> =>
+        new Set(RELATIONSHIP_CLASS_ORDER.filter((c) => c !== keep));
+      const base: LayerState = {
+        hiddenCategories: new Set(),
+        hiddenRelClasses: new Set(),
+        filterMode: "dim",
+        environmentTint: store.environmentTint,
       };
-      reader.readAsText(f);
+      switch (name) {
+        case "network":
+          storeSetLayers({ ...base, hiddenRelClasses: hideAllBut("network") });
+          break;
+        case "security":
+          storeSetLayers({ ...base, hiddenRelClasses: hideAllBut("permission") });
+          break;
+        case "data":
+          storeSetLayers({ ...base, hiddenRelClasses: hideAllBut("data") });
+          break;
+        case "high-level": {
+          storeSetLayers(base);
+          setCollapsedIds(
+            store.resources.filter((r) => layout.isContainerNode(r.id)).map((r) => r.id),
+          );
+          break;
+        }
+        case "all":
+        default:
+          storeSetLayers(base);
+          setCollapsedIds([]);
+          break;
+      }
+    },
+    [storeSetLayers, setCollapsedIds, store.environmentTint, store.resources, layout],
+  );
+
+  const [savedViews, setSavedViews] = React.useState<SavedView[]>([]);
+  useEffect(() => {
+    setSavedViews(readSavedViews());
+  }, []);
+  const persistViews = useCallback((views: SavedView[]) => {
+    setSavedViews(views);
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(views));
+      } catch {
+        /* storage unavailable / quota — keep the in-memory list */
+      }
+    }
+  }, []);
+  const saveView = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const view: SavedView = {
+        name: trimmed,
+        hiddenCategories: [...store.hiddenCategories],
+        hiddenRelClasses: [...store.hiddenRelClasses],
+        filterMode: store.filterMode,
+        environmentTint: store.environmentTint,
+      };
+      persistViews([...savedViews.filter((v) => v.name !== trimmed), view]);
+    },
+    [
+      savedViews,
+      persistViews,
+      store.hiddenCategories,
+      store.hiddenRelClasses,
+      store.filterMode,
+      store.environmentTint,
+    ],
+  );
+  const applySavedView = useCallback(
+    (name: string) => {
+      const v = savedViews.find((x) => x.name === name);
+      if (!v) return;
+      storeSetLayers({
+        hiddenCategories: new Set(v.hiddenCategories as ServiceCategoryId[]),
+        hiddenRelClasses: new Set(v.hiddenRelClasses as RelationshipClass[]),
+        filterMode: v.filterMode,
+        environmentTint: v.environmentTint,
+      });
+    },
+    [savedViews, storeSetLayers],
+  );
+  const deleteSavedView = useCallback(
+    (name: string) => persistViews(savedViews.filter((v) => v.name !== name)),
+    [savedViews, persistViews],
+  );
+
+  /**
+   * Centre the viewport on the world point under a minimap pixel (client
+   * coords). Used by minimap click + drag-to-navigate. The minimap transform is
+   * recomputed from the same inputs the renderer uses so clicks land precisely.
+   */
+  const minimapNavigate = useCallback(
+    (clientX: number, clientY: number) => {
+      const el = minimapRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const bw = el.width || 180;
+      const bh = el.height || 120;
+      // Map display pixels → canvas backing-store pixels (they match today, but
+      // stay correct if the minimap is ever resized in CSS).
+      const mx = (clientX - rect.left) * (bw / rect.width);
+      const my = (clientY - rect.top) * (bh / rect.height);
+      const vp = getViewport();
+      const view = viewSize();
+      const content = boundsOf([...layout.rects.values()]);
+      const t = minimapTransform(content, viewportWorldRect(vp, view), { w: bw, h: bh });
+      const world = minimapToWorld(t, { x: mx, y: my });
+      storeSetViewport(panToCenter(world, view, vp.scale));
+    },
+    [minimapRef, getViewport, viewSize, layout, storeSetViewport],
+  );
+
+  // ---- Validation + rule suggestions -------------------------------------
+  // Expose STRUCTURED results; the Inspector renders them as React elements
+  // (no raw HTML / dangerouslySetInnerHTML).
+  const runValidate = useCallback(() => {
+    setValidationResults(validateArchitecture(buildGraph()));
+  }, [buildGraph]);
+
+  const runSuggest = useCallback(() => {
+    setRuleSuggestions(suggestRulesEngine(buildGraph()));
+  }, [buildGraph]);
+
+  // ---- Export / Import ----------------------------------------------------
+  const exportJSON = useCallback(() => {
+    const graph = buildGraph();
+    const blob = new Blob([JSON.stringify(graph, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "aws-architecture.json";
+    a.click();
+  }, [buildGraph]);
+
+  const importJSONDialog = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onerror = () => setStatus("Import failed: could not read file.");
+      reader.onload = async () => {
+        try {
+          const parsed = JSON.parse(String(reader.result)) as unknown;
+          if (typeof parsed !== "object" || parsed === null) {
+            throw new Error("not an object");
+          }
+          const g = parsed as Partial<InfrastructureGraph>;
+          if (!Array.isArray(g.resources)) {
+            throw new Error("missing resources array");
+          }
+          // Confirm AFTER parsing, just before the destructive replace, so a
+          // bad file never costs the user their current work.
+          if (!(await confirmReplaceIfDirty())) {
+            setStatus("Import canceled.");
+            return;
+          }
+          storeReplaceAll({
+            resources: g.resources ?? [],
+            relationships: g.relationships ?? [],
+            viewport: g.viewport,
+            accounts: g.accounts ?? [],
+            graphId: g.id ?? "",
+          });
+          setStatus(`Imported "${g.name ?? "architecture"}".`);
+        } catch {
+          // Swallow the underlying parse/validation detail to avoid surfacing
+          // internal error text to the user.
+          setStatus("Import failed: not a valid architecture file.");
+        }
+      };
+      reader.readAsText(file);
     };
     input.click();
-  }
-  function loadPreset(presetName: string) {
-    if (presetName === "aws-basic") {
-      loadBasicAWSSetup();
-    } else if (presetName === "ecs-alb") {
-      loadECSALBSetup();
+  }, [storeReplaceAll, confirmReplaceIfDirty]);
+
+  const importIaCDialog = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,.yaml,.yml,.tf,.tfstate,.template";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onerror = () => setStatus("Import failed: could not read file.");
+      reader.onload = async () => {
+        try {
+          const text = String(reader.result);
+          const result = importIaC(text, { name: file.name });
+          const { graph, format, unmappedTypes, warnings } = result;
+          if (!(await confirmReplaceIfDirty())) {
+            setStatus("Import canceled.");
+            return;
+          }
+          storeReplaceAll({
+            resources: graph.resources ?? [],
+            relationships: graph.relationships ?? [],
+            viewport: graph.viewport,
+            accounts: graph.accounts ?? [],
+            graphId: graph.id ?? "",
+          });
+          storeSetSelection(null);
+          const parts = [`Imported ${graph.resources.length} resource(s) from ${format}.`];
+          if (unmappedTypes.length > 0) {
+            parts.push(`Unmapped types: ${unmappedTypes.join(", ")}.`);
+          }
+          if (warnings.length > 0) {
+            parts.push(warnings.join(" "));
+          }
+          setStatus(parts.join(" "));
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "unknown error";
+          setStatus(`IaC import failed: ${detail}`);
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [storeReplaceAll, storeSetSelection, confirmReplaceIfDirty]);
+
+  // ---- Server save / load -------------------------------------------------
+  const saveToServer = useCallback(async () => {
+    try {
+      setStatus("Saving to server…");
+      const graph = buildGraph();
+      const saved = store.graphId
+        ? await updateGraph(store.graphId, graph)
+        : await createGraph(graph);
+      storeSetGraphId(saved.id);
+      storeMarkSaved();
+      setStatus(`Saved "${saved.name}" (${saved.id}).`);
+    } catch {
+      setStatus("Save failed: API unavailable.");
     }
-  }
+  }, [buildGraph, store.graphId, storeSetGraphId, storeMarkSaved]);
 
-  function loadBasicAWSSetup() {
-    const newNodes: FlowNode[] = [];
-    const newEdges: FlowEdge[] = [];
-    const addSeed = (type: NodeType, x: number, y: number, props: any) => {
-      const id = store.uid();
-      const node: FlowNode = {
-        id,
-        type,
-        x,
-        y,
-        w: 200,
-        h: 96,
-        props: {
-          name: props.name || type + ' ' + id,
-          cidr: props.cidr || '',
-          public: !!props.public,
-          az: props.az || '',
-          notes: props.notes || ''
-        }
+  /** List saved graphs for the Load menu (returns [] and reports on failure). */
+  const listSavedGraphs = useCallback(async (): Promise<GraphSummary[]> => {
+    try {
+      return await listGraphs();
+    } catch {
+      setStatus("Load failed: API unavailable.");
+      return [];
+    }
+  }, []);
+
+  /** Load a saved graph by id (replaces the current model). */
+  const loadGraph = useCallback(
+    async (id: string) => {
+      if (!(await confirmReplaceIfDirty())) return;
+      try {
+        setStatus("Loading from server…");
+        const g = await getGraph(id);
+        storeReplaceAll({
+          resources: g.resources ?? [],
+          relationships: g.relationships ?? [],
+          viewport: g.viewport,
+          accounts: g.accounts ?? [],
+          graphId: g.id,
+        });
+        // Loaded state matches the server — not unsaved work.
+        storeMarkSaved();
+        setStatus(`Loaded "${g.name}".`);
+      } catch {
+        setStatus("Load failed: API unavailable.");
+      }
+    },
+    [storeReplaceAll, confirmReplaceIfDirty, storeMarkSaved],
+  );
+
+  /** Delete a saved graph by id (clears graphId if it was the open one). */
+  const deleteSavedGraph = useCallback(
+    async (id: string) => {
+      try {
+        await deleteGraph(id);
+        if (store.graphId === id) storeSetGraphId("");
+        setStatus("Deleted saved graph.");
+      } catch {
+        setStatus("Delete failed: API unavailable.");
+      }
+    },
+    [store.graphId, storeSetGraphId],
+  );
+
+  // ---- Presets ------------------------------------------------------------
+  const loadPreset = useCallback(
+    async (presetName: string) => {
+      const resources: ResourceInstance[] = [];
+      const relationships: Relationship[] = [];
+      const seed = (
+        serviceId: string,
+        x: number,
+        y: number,
+        name: string,
+        config: Record<string, unknown> = {},
+        parentId?: string,
+      ) => {
+        const id = storeUid();
+        const svc = getService(serviceId);
+        resources.push({
+          id,
+          serviceId,
+          name: name || svc?.name || serviceId,
+          config: { ...defaultConfig(serviceId), ...config },
+          source: "manual",
+          position: { x, y, ...DEFAULT_NODE_SIZE },
+          parentId,
+        });
+        return id;
       };
-      newNodes.push(node);
-      return id;
-    };
-    const linkSeed = (a: string, b: string, rel: FlowEdge["rel"]) => {
-      const id = store.uid();
-      newEdges.push({ id, from: a, to: b, rel });
-    };
-
-    const vpc = addSeed('VPC', 80, 120, { name: 'VPC', cidr: '10.0.0.0/16' });
-    const pubA = addSeed('Subnet (Public)', 140, 220, { name: 'Public A', cidr: '10.0.1.0/24', public: true, az: 'us-east-1a' });
-    const priA = addSeed('Subnet (Private)', 140, 360, { name: 'Private A', cidr: '10.0.2.0/24', public: false, az: 'us-east-1a' });
-    const igw = addSeed('Internet Gateway', 420, 180, { name: 'IGW' });
-
-    linkSeed(vpc, pubA, 'attached_to');
-    linkSeed(vpc, priA, 'attached_to');
-    linkSeed(igw, vpc, 'attached_to');
-
-    store.setNodes(newNodes);
-    store.setEdges(newEdges);
-    store.setSelection(null);
-    store.setPan({ x: 200, y: 120, scale: 1 });
-  }
-
-  function loadECSALBSetup() {
-    const newNodes: FlowNode[] = [];
-    const newEdges: FlowEdge[] = [];
-    const addSeed = (type: NodeType, x: number, y: number, props: any) => {
-      const id = store.uid();
-      const node: FlowNode = {
-        id,
-        type,
-        x,
-        y,
-        w: 200,
-        h: 96,
-        props: {
-          name: props.name || type + ' ' + id,
-          cidr: props.cidr || '',
-          public: !!props.public,
-          az: props.az || '',
-          notes: props.notes || ''
-        }
+      const link = (from: string, to: string, kind: RelationshipKind) => {
+        relationships.push({ id: storeUid(), from, to, kind, source: "manual" });
       };
-      newNodes.push(node);
-      return id;
-    };
-    const linkSeed = (a: string, b: string, rel: FlowEdge["rel"]) => {
-      const id = store.uid();
-      newEdges.push({ id, from: a, to: b, rel });
-    };
 
-    const vpc = addSeed('VPC', 80, 120, { name: 'VPC', cidr: '10.0.0.0/16' });
-    const pubA = addSeed('Subnet (Public)', 140, 220, { name: 'Public A', cidr: '10.0.1.0/24', public: true, az: 'us-east-1a' });
-    const priA = addSeed('Subnet (Private)', 140, 360, { name: 'Private A', cidr: '10.0.2.0/24', public: false, az: 'us-east-1a' });
-    const igw = addSeed('Internet Gateway', 420, 180, { name: 'IGW' });
-    const nat = addSeed('NAT Gateway', 420, 260, { name: 'NAT GW' });
-    const rtp = addSeed('Route Table', 390, 340, { name: 'RT Private' });
-    const rtpb = addSeed('Route Table', 390, 220, { name: 'RT Public' });
-    const nacl = addSeed('NACL', 390, 420, { name: 'App NACL' });
-    const alb = addSeed('ALB', 700, 200, { name: 'ALB' });
-    const sgAlb = addSeed('Security Group', 620, 140, { name: 'SG-ALB' });
-    const ecs = addSeed('ECS Service', 820, 340, { name: 'App Service', notes: 'port 3000' });
-    const sgApp = addSeed('Security Group', 760, 300, { name: 'SG-App' });
-    const tg = addSeed('Target Group', 760, 240, { name: 'TG-App' });
+      if (presetName === "aws-basic") {
+        const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
+        // Subnets nest inside the VPC (containment is nesting, not an edge).
+        seed("subnet-public", 140, 220, "Public A", { cidr: "10.0.1.0/24", az: "us-east-1a" }, vpc);
+        seed(
+          "subnet-private",
+          140,
+          360,
+          "Private A",
+          { cidr: "10.0.2.0/24", az: "us-east-1a" },
+          vpc,
+        );
+        const igw = seed("internet-gateway", 560, 140, "IGW");
+        link(igw, vpc, "attached_to");
+      } else if (presetName === "ecs-alb") {
+        const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
+        const pubA = seed(
+          "subnet-public",
+          140,
+          220,
+          "Public A",
+          { cidr: "10.0.1.0/24", az: "us-east-1a" },
+          vpc,
+        );
+        const priA = seed(
+          "subnet-private",
+          140,
+          360,
+          "Private A",
+          { cidr: "10.0.2.0/24", az: "us-east-1a" },
+          vpc,
+        );
+        const igw = seed("internet-gateway", 760, 140, "IGW");
+        const nat = seed("nat-gateway", 760, 260, "NAT GW");
+        const rtPub = seed("route-table", 760, 380, "RT Public");
+        const rtPri = seed("route-table", 760, 500, "RT Private");
+        const nacl = seed("nacl", 760, 620, "App NACL");
+        const alb = seed("elastic-load-balancer", 1000, 200, "ALB");
+        const sgAlb = seed("security-group", 1000, 80, "SG-ALB");
+        const ecs = seed("ecs-service", 1000, 460, "App Service", { port: 3000 });
+        const sgApp = seed("security-group", 1000, 340, "SG-App");
+        const tg = seed("target-group", 1000, 320, "TG-App", { port: 3000 });
 
-    linkSeed(vpc, pubA, 'attached_to'); linkSeed(vpc, priA, 'attached_to');
-    linkSeed(igw, vpc, 'attached_to');
-    linkSeed(nat, pubA, 'attached_to');
-    linkSeed(rtpb, pubA, 'attached_to'); linkSeed(rtp, priA, 'attached_to');
-    linkSeed(rtpb, igw, 'routes_to'); linkSeed(rtp, nat, 'routes_to');
-    linkSeed(nacl, priA, 'attached_to');
-    linkSeed(alb, pubA, 'attached_to');
-    linkSeed(sgAlb, alb, 'attached_to');
-    linkSeed(alb, tg, 'targets');
-    linkSeed(tg, ecs, 'targets');
-    linkSeed(sgApp, ecs, 'attached_to');
+        link(igw, vpc, "attached_to");
+        link(nat, pubA, "attached_to");
+        link(rtPub, pubA, "attached_to");
+        link(rtPri, priA, "attached_to");
+        link(rtPub, igw, "routes_to");
+        link(rtPri, nat, "routes_to");
+        link(nacl, priA, "attached_to");
+        link(alb, pubA, "attached_to");
+        link(sgAlb, alb, "attached_to");
+        link(alb, tg, "targets");
+        link(tg, ecs, "targets");
+        link(sgApp, ecs, "attached_to");
+      } else {
+        return;
+      }
 
-    store.setNodes(newNodes);
-    store.setEdges(newEdges);
-    store.setSelection(null);
-    store.setPan({ x: 200, y: 120, scale: 1 });
-  }
+      if (!(await confirmReplaceIfDirty())) return;
+      storeReplaceAll({
+        resources,
+        relationships,
+        viewport: { x: 200, y: 120, scale: 1 },
+        accounts: [],
+        graphId: "",
+      });
+    },
+    [storeUid, storeReplaceAll, confirmReplaceIfDirty],
+  );
 
-  const value: FlowContextValue = {
-    PALETTE,
-    state,
-    worldRef,
-    svgRef,
-    minimapRef,
-    selection: store.selection,
+  // Guarded clear — both the toolbar and ⌘K route through here, so the
+  // unsaved-work check applies everywhere. storeClear no longer prompts.
+  const clear = useCallback(async () => {
+    if (await confirmReplaceIfDirty()) storeClear();
+  }, [confirmReplaceIfDirty, storeClear]);
 
-    // Actions
-    setMode: store.setMode,
-    toggleMode,
-    select: store.setSelection,
-    addNode: store.addNode,
-    addNodeFromPalette,
-    removeSelection: store.removeSelection,
-    duplicateSelection: store.duplicateSelection,
-    groupIntoVPC,
-    connect: store.connect,
-    updateInspectorFields,
+  // Start a fresh blank diagram from the hub (guarded), then dismiss the hub.
+  const startBlank = useCallback(async () => {
+    if (await confirmReplaceIfDirty()) {
+      storeClear();
+      setStartHubOpen(false);
+    }
+  }, [confirmReplaceIfDirty, storeClear]);
 
-    // Canvas interaction
-    onNodeMouseDown,
+  // Resolve the pending replace confirmation. "save" persists the current graph
+  // first (so "Save & continue" really saves) before proceeding.
+  const resolveReplaceConfirm = useCallback(
+    async (choice: "save" | "discard" | "cancel") => {
+      setReplaceConfirmOpen(false);
+      const resolve = replaceResolverRef.current;
+      replaceResolverRef.current = null;
+      if (!resolve) return;
+      if (choice === "save") {
+        await saveToServer();
+        resolve(true);
+      } else {
+        resolve(choice === "discard");
+      }
+    },
+    [saveToServer],
+  );
+
+  // Auto-open the hub once per session on a blank canvas — an empty-state
+  // launcher, never a forced gate for a session that already has content.
+  const autoOpenedHubRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedHubRef.current) return;
+    autoOpenedHubRef.current = true;
+    if (store.resources.length === 0) setStartHubOpen(true);
+    // Mount-only: deliberately not reacting to later resource changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Locals so the memoized panel value re-computes when history depth changes
+  // (the booleans, not the stable canUndo/canRedo functions, are the deps).
+  const canUndo = store.canUndo();
+  const canRedo = store.canRedo();
+
+  // The Canvas-only, high-churn slice (viewport, transient drag visuals, and the
+  // imperative draw/pointer handlers). Plain object: the Canvas re-renders on
+  // pan anyway, and no panel consumes this context — so panels are insulated.
+  const canvasValue: FlowCanvasContextValue = {
+    viewport: store.viewport,
+    guides,
+    marquee,
+    draw,
+    drawMinimap,
     onCanvasMouseDown,
-    onCanvasClick,
     onMouseMove,
     onMouseUp,
     onWheelZoom,
-    setSpacePressed: interaction.setSpacePressed,
-    screenToWorld,
-
-    // Canvas rendering
-    draw,
-    drawMinimap,
-    fitToView,
-    center,
-
-    // History
-    undo: store.undo,
-    redo: store.redo,
-
-    // Placeholders
-    validate,
-    suggestRules,
-    exportJSON,
-    importJSONDialog,
-    clear: store.clear,
-    loadPreset,
-    runValidateUI,
-    runRulesUI,
-  validationHtml,
-  rulesHtml,
-    status: "Pan with space ⎵ + drag. Connect mode: C."
+    addResourceFromPalette,
+    minimapNavigate,
   };
 
-  return <FlowContext.Provider value={value}>{children}</FlowContext.Provider>;
+  // Memoized so panels only re-render when something they read actually changes
+  // — NOT on every pan/zoom/hover (those live in FlowCanvasContext).
+  const value: FlowContextValue = React.useMemo(
+    () => ({
+      state,
+      worldRef,
+      svgRef,
+      minimapRef,
+      selection: store.selection,
+      selectedIds: store.selectedIds,
+
+      setMode: store.setMode,
+      toggleMode,
+      setDensity: store.setDensity,
+      focusContainer,
+      onNodeDoubleClick,
+      goToResource,
+      setSearchMatches: store.setSearchMatches,
+      breadcrumb,
+      focusedContainerId: store.focusedContainerId,
+
+      hiddenCategories: store.hiddenCategories,
+      hiddenRelClasses: store.hiddenRelClasses,
+      filterMode: store.filterMode,
+      environmentTint: store.environmentTint,
+      edgeStyle: store.edgeStyle,
+      setEdgeStyle: store.setEdgeStyle,
+      presentation: store.presentation,
+      setPresentation: store.setPresentation,
+      activeOverlay: store.activeOverlay,
+      setActiveOverlay: store.setActiveOverlay,
+      toggleCategory: store.toggleCategory,
+      toggleRelClass: store.toggleRelClass,
+      setFilterMode: store.setFilterMode,
+      setEnvironmentTint: store.setEnvironmentTint,
+      applyViewPreset,
+      savedViews,
+      saveView,
+      applySavedView,
+      deleteSavedView,
+
+      select: store.setSelection,
+      removeSelection: store.removeSelection,
+      duplicateSelection: store.duplicateSelection,
+      groupIntoVPC: store.groupIntoVPC,
+      updateResourceField,
+      updateRelationshipKind,
+
+      onCanvasClick: clearSelection,
+      setSpacePressed: interaction.setSpacePressed,
+      fitToView,
+      center,
+      tidy,
+      zoomIn,
+      zoomOut,
+      zoomReset,
+      zoomToSelection,
+
+      undo: store.undo,
+      redo: store.redo,
+      canUndo,
+      canRedo,
+
+      validate: runValidate,
+      suggestRules: runSuggest,
+      exportJSON,
+      importJSONDialog,
+      importIaCDialog,
+      clear,
+      loadPreset,
+      dirty: store.dirty,
+      startHubOpen,
+      openStartHub,
+      closeStartHub,
+      startBlank,
+      replaceConfirmOpen,
+      resolveReplaceConfirm,
+      runValidateUI: runValidate,
+      runRulesUI: runSuggest,
+      saveToServer,
+      listSavedGraphs,
+      loadGraph,
+      deleteSavedGraph,
+      validationResults,
+      ruleSuggestions,
+      status,
+    }),
+    [
+      state,
+      worldRef,
+      svgRef,
+      minimapRef,
+      store.selection,
+      store.selectedIds,
+      store.setMode,
+      toggleMode,
+      store.setDensity,
+      focusContainer,
+      onNodeDoubleClick,
+      goToResource,
+      store.setSearchMatches,
+      breadcrumb,
+      store.focusedContainerId,
+      store.hiddenCategories,
+      store.hiddenRelClasses,
+      store.filterMode,
+      store.environmentTint,
+      store.edgeStyle,
+      store.setEdgeStyle,
+      store.presentation,
+      store.setPresentation,
+      store.activeOverlay,
+      store.setActiveOverlay,
+      store.toggleCategory,
+      store.toggleRelClass,
+      store.setFilterMode,
+      store.setEnvironmentTint,
+      applyViewPreset,
+      savedViews,
+      saveView,
+      applySavedView,
+      deleteSavedView,
+      store.setSelection,
+      store.removeSelection,
+      store.duplicateSelection,
+      store.groupIntoVPC,
+      updateResourceField,
+      updateRelationshipKind,
+      clearSelection,
+      interaction.setSpacePressed,
+      fitToView,
+      center,
+      tidy,
+      zoomIn,
+      zoomOut,
+      zoomReset,
+      zoomToSelection,
+      store.undo,
+      store.redo,
+      canUndo,
+      canRedo,
+      runValidate,
+      runSuggest,
+      exportJSON,
+      importJSONDialog,
+      importIaCDialog,
+      clear,
+      loadPreset,
+      store.dirty,
+      startHubOpen,
+      openStartHub,
+      closeStartHub,
+      startBlank,
+      replaceConfirmOpen,
+      resolveReplaceConfirm,
+      saveToServer,
+      listSavedGraphs,
+      loadGraph,
+      deleteSavedGraph,
+      validationResults,
+      ruleSuggestions,
+      status,
+    ],
+  );
+
+  return (
+    <FlowContext.Provider value={value}>
+      <FlowCanvasContext.Provider value={canvasValue}>{children}</FlowCanvasContext.Provider>
+    </FlowContext.Provider>
+  );
 };

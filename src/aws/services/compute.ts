@@ -1,0 +1,279 @@
+/**
+ * Compute service catalog.
+ * Every entry is a `ServiceDefinition` and the array is the default export,
+ * mirroring the canonical networking catalog.
+ */
+import type { ServiceDefinition } from "../types";
+
+const compute: ServiceDefinition[] = [
+  {
+    id: "ec2-instance",
+    name: "EC2",
+    fullName: "Amazon Elastic Compute Cloud",
+    abbreviation: "EC2",
+    category: "compute",
+    description: "A virtual server (instance) running in a VPC subnet.",
+    icon: "🖥️",
+    scope: "vpc",
+    cfnType: "AWS::EC2::Instance",
+    arnPattern: "arn:aws:ec2:{region}:{account}:instance/{id}",
+    keywords: ["ec2", "instance", "server", "vm", "compute"],
+    configFields: [
+      {
+        key: "instanceType",
+        label: "Instance Type",
+        type: "select",
+        default: "t3.micro",
+        required: true,
+        options: [
+          { value: "t3.micro", label: "t3.micro" },
+          { value: "t3.medium", label: "t3.medium" },
+          { value: "m5.large", label: "m5.large" },
+          { value: "c5.xlarge", label: "c5.xlarge" },
+          { value: "r5.2xlarge", label: "r5.2xlarge" },
+        ],
+      },
+      { key: "ami", label: "AMI ID", type: "string", placeholder: "ami-0abcdef1234567890" },
+      { key: "keyName", label: "Key Pair", type: "string", placeholder: "my-keypair" },
+      { key: "ebsOptimized", label: "EBS Optimized", type: "boolean", default: false },
+    ],
+    commonConnections: [
+      { to: "ebs-volume", relationship: "attached_to", description: "Instance mounts EBS volumes" },
+      {
+        to: "security-group",
+        relationship: "attached_to",
+        description: "Controls instance network traffic",
+      },
+      {
+        to: "subnet-private",
+        relationship: "depends_on",
+        description: "Launched into a private subnet",
+      },
+      { to: "iam-role", relationship: "assumes", description: "Instance profile role" },
+    ],
+  },
+  {
+    id: "lambda",
+    name: "Lambda",
+    fullName: "AWS Lambda",
+    category: "compute",
+    description: "Runs code in response to events without provisioning servers.",
+    icon: "λ",
+    scope: "region",
+    cfnType: "AWS::Lambda::Function",
+    arnPattern: "arn:aws:lambda:{region}:{account}:function:{name}",
+    keywords: ["lambda", "serverless", "function", "faas", "event"],
+    configFields: [
+      {
+        key: "runtime",
+        label: "Runtime",
+        type: "select",
+        default: "nodejs20.x",
+        required: true,
+        options: [
+          { value: "nodejs20.x", label: "Node.js 20.x" },
+          { value: "python3.12", label: "Python 3.12" },
+          { value: "java21", label: "Java 21" },
+          { value: "go1.x", label: "Go 1.x" },
+          { value: "dotnet8", label: ".NET 8" },
+        ],
+      },
+      { key: "memory", label: "Memory (MB)", type: "number", default: 128 },
+      { key: "timeout", label: "Timeout (s)", type: "number", default: 3 },
+      { key: "handler", label: "Handler", type: "string", placeholder: "index.handler" },
+    ],
+    commonConnections: [
+      {
+        to: "dynamodb",
+        relationship: "reads_from",
+        description: "Function reads/writes table data",
+      },
+      {
+        to: "sqs",
+        relationship: "subscribes_to",
+        description: "Consumes messages via event source mapping",
+      },
+      { to: "s3-bucket", relationship: "writes_to", description: "Reads and writes objects" },
+      { to: "iam-role", relationship: "assumes", description: "Execution role" },
+    ],
+  },
+  {
+    id: "auto-scaling-group",
+    name: "Auto Scaling",
+    fullName: "Amazon EC2 Auto Scaling Group",
+    abbreviation: "ASG",
+    category: "compute",
+    description: "Maintains a fleet of EC2 instances scaling on demand across AZs.",
+    icon: "📈",
+    scope: "vpc",
+    cfnType: "AWS::AutoScaling::AutoScalingGroup",
+    keywords: ["autoscaling", "asg", "scale", "fleet", "capacity"],
+    configFields: [
+      { key: "minSize", label: "Min Size", type: "number", default: 1, required: true },
+      { key: "maxSize", label: "Max Size", type: "number", default: 4, required: true },
+      { key: "desiredCapacity", label: "Desired Capacity", type: "number", default: 2 },
+      {
+        key: "healthCheckType",
+        label: "Health Check Type",
+        type: "select",
+        default: "EC2",
+        options: [
+          { value: "EC2", label: "EC2" },
+          { value: "ELB", label: "ELB" },
+        ],
+      },
+    ],
+    commonConnections: [
+      { to: "ec2-instance", relationship: "contains", description: "ASG launches instances" },
+      {
+        to: "target-group",
+        relationship: "targets",
+        description: "Registers instances with a target group",
+      },
+      {
+        to: "subnet-private",
+        relationship: "depends_on",
+        description: "Spreads instances across subnets",
+      },
+    ],
+  },
+  {
+    id: "batch",
+    name: "Batch",
+    fullName: "AWS Batch",
+    category: "compute",
+    description: "Runs batch computing workloads across managed compute environments.",
+    icon: "🧰",
+    scope: "region",
+    cfnType: "AWS::Batch::JobQueue",
+    keywords: ["batch", "jobs", "queue", "hpc", "compute environment"],
+    configFields: [
+      {
+        key: "computeType",
+        label: "Compute Type",
+        type: "select",
+        default: "FARGATE",
+        required: true,
+        options: [
+          { value: "FARGATE", label: "Fargate" },
+          { value: "EC2", label: "EC2" },
+          { value: "SPOT", label: "EC2 Spot" },
+        ],
+      },
+      { key: "maxvCpus", label: "Max vCPUs", type: "number", default: 16 },
+      { key: "priority", label: "Queue Priority", type: "number", default: 1 },
+    ],
+    commonConnections: [
+      { to: "ecr", relationship: "reads_from", description: "Pulls job container images" },
+      { to: "s3-bucket", relationship: "writes_to", description: "Persists job output to S3" },
+      { to: "iam-role", relationship: "assumes", description: "Job execution role" },
+    ],
+  },
+  {
+    id: "lightsail",
+    name: "Lightsail",
+    fullName: "Amazon Lightsail",
+    category: "compute",
+    description: "Simplified virtual private servers with bundled compute and storage.",
+    icon: "💡",
+    scope: "region",
+    cfnType: "AWS::Lightsail::Instance",
+    keywords: ["lightsail", "vps", "simple", "server", "bundle"],
+    configFields: [
+      {
+        key: "bundleId",
+        label: "Bundle",
+        type: "select",
+        default: "nano_2_0",
+        required: true,
+        options: [
+          { value: "nano_2_0", label: "Nano (512 MB)" },
+          { value: "micro_2_0", label: "Micro (1 GB)" },
+          { value: "small_2_0", label: "Small (2 GB)" },
+          { value: "medium_2_0", label: "Medium (4 GB)" },
+        ],
+      },
+      {
+        key: "blueprintId",
+        label: "Blueprint",
+        type: "select",
+        default: "amazon_linux_2023",
+        options: [
+          { value: "amazon_linux_2023", label: "Amazon Linux 2023" },
+          { value: "ubuntu_22_04", label: "Ubuntu 22.04" },
+          { value: "wordpress", label: "WordPress" },
+        ],
+      },
+    ],
+    commonConnections: [
+      { to: "route53", relationship: "connects_to", description: "DNS for the instance" },
+      { to: "s3-bucket", relationship: "writes_to", description: "Stores application data" },
+    ],
+  },
+  {
+    id: "elastic-beanstalk",
+    name: "Beanstalk",
+    fullName: "AWS Elastic Beanstalk",
+    abbreviation: "EB",
+    category: "compute",
+    description: "Deploys and manages web applications with automated provisioning.",
+    icon: "🌱",
+    scope: "region",
+    cfnType: "AWS::ElasticBeanstalk::Environment",
+    keywords: ["beanstalk", "paas", "deploy", "web app", "environment"],
+    configFields: [
+      {
+        key: "platform",
+        label: "Platform",
+        type: "select",
+        default: "node",
+        required: true,
+        options: [
+          { value: "node", label: "Node.js" },
+          { value: "python", label: "Python" },
+          { value: "java", label: "Java" },
+          { value: "docker", label: "Docker" },
+        ],
+      },
+      {
+        key: "environmentType",
+        label: "Environment Type",
+        type: "select",
+        default: "LoadBalanced",
+        options: [
+          { value: "LoadBalanced", label: "Load Balanced" },
+          { value: "SingleInstance", label: "Single Instance" },
+        ],
+      },
+      {
+        key: "tier",
+        label: "Tier",
+        type: "select",
+        default: "WebServer",
+        options: [
+          { value: "WebServer", label: "Web Server" },
+          { value: "Worker", label: "Worker" },
+        ],
+      },
+    ],
+    commonConnections: [
+      {
+        to: "auto-scaling-group",
+        relationship: "contains",
+        description: "Manages the instance fleet",
+      },
+      {
+        to: "elastic-load-balancer",
+        relationship: "contains",
+        description: "Provisions and manages the environment load balancer",
+      },
+      {
+        to: "rds",
+        relationship: "connects_to",
+        description: "Backing database for the application",
+      },
+    ],
+  },
+];
+
+export default compute;

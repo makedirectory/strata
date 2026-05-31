@@ -1,0 +1,102 @@
+---
+title: Visual Mapping
+---
+
+# Visual Mapping Architecture
+
+The UI is **registry-driven**: nothing about a service's appearance or its form is
+hardcoded in components. On top of that data foundation sits a canvas engine split
+into pure geometry/layout modules and a reconciling renderer.
+
+## Registry-driven UI
+
+- **Palette** (`src/components/Palette.tsx`) renders sections from `CATEGORY_ORDER`
+  and the services in each category, using `serviceIcon()` / `serviceColor()` and
+  `searchServices()` for filtering.
+- **Colours & icons** come from `serviceColor(id)` (per-service override → category
+  colour fallback) and `serviceIcon(id)`.
+- **Inspector** (`src/components/Inspector.tsx`) renders a dynamic form straight
+  from the selected service's `configFields` — each `ConfigField.type` maps to an
+  input widget. Adding a field to a catalog entry adds it to the form.
+
+## Geometry & layout: pure, testable modules
+
+The math and structure of the canvas live in framework-free modules under
+`src/canvas/`, so they're unit-tested in isolation (`geometry.test.ts`,
+`layout.test.ts`):
+
+- **`geometry.ts`** — the transform plane and its operations: `screenToWorld()`,
+  cursor-anchored `zoomAbout()`, `computeSnap()` (snap-to-grid + alignment guides),
+  `gridPack()` (the "Tidy" auto-layout), minimap transforms, viewport rects for
+  culling, and `lodTier(scale)` for semantic level-of-detail.
+- **`layout.ts`** — a **pure containment layout engine**. `computeLayout()` walks
+  the `parentId` tree (VPC ▸ subnet ▸ instance, ECS cluster ▸ tasks, …) post-order
+  and returns the effective rect, depth, and visible-ancestor for every node.
+  Containers auto-pack their children into rows; collapsed containers shrink to a
+  header; and **leaf summarization** collapses ≥ N same-type children into a single
+  synthetic `N×` summary node. Containment is **visual nesting, not an edge**.
+
+A live drag passes an `override` into `computeLayout()` so the dragged node follows
+the cursor while its former parent repacks without it — the same pure function
+drives both static layout and interactive feedback.
+
+## Typed edges & relationship classes
+
+Edges are never anonymous lines. Each `Relationship` carries a `RelationshipKind`,
+and every kind belongs to a **relationship class** that owns its visual encoding
+(`src/aws/relationshipClasses.ts`):
+
+| Class         | Colour | Line   | Example kinds                                  |
+| ------------- | ------ | ------ | ---------------------------------------------- |
+| network       | blue   | solid  | `routes_to`, `peers_with`, `connects_to`       |
+| data          | green  | solid  | `reads_from`, `writes_to`, `publishes_to`      |
+| dependency    | purple | dashed | `depends_on`, `invokes`                        |
+| permission    | amber  | dashed | `allows`, `assumes`, `grants`                  |
+| observability | cyan   | dashed | `monitors`                                     |
+| containment   | slate  | dotted | `contains` (legacy; nesting is now `parentId`) |
+
+`relationshipClassOf(kind)` maps a kind to its class with a `satisfies` check, so
+adding a new `RelationshipKind` without classifying it is a **compile error**. The
+class drives edge colour/dash, the legend, and the per-class layer toggles. Edges
+route as curved beziers or orthogonal elbows, and reroute to a visible ancestor
+when an endpoint is hidden inside a collapsed/summarized container.
+
+## Rendering: reconciling, culled, LOD-aware
+
+`useCanvasRenderer` is a **reconciling** renderer: nodes are DOM elements and edges
+are SVG paths, each keyed by id and held in a record map. Per draw it diffs current
+props against the previous snapshot and patches only what changed, removing stale
+elements by set difference — it no longer rebuilds the DOM from scratch.
+
+Two scaling features matter for large/imported graphs:
+
+- **Viewport culling** — beyond a size threshold, off-screen nodes and edges are
+  skipped (the viewport rect is expanded slightly to keep edge routing correct).
+- **Semantic level-of-detail** — `lodTier(scale)` yields `far` / `mid` / `near`;
+  CSS classes show or hide the icon, label, and config pills accordingly. The
+  focused (hovered/selected) node always renders at full detail.
+
+A viewport-only change (pan/zoom) takes a fast path that just re-applies the CSS
+transform, coalesced via `requestAnimationFrame`, with no structural diff.
+
+## Interaction, overlays & state
+
+Behaviour is split across hooks, and the React context is deliberately split for
+performance:
+
+- **`useFlowStore`** holds the model (resources, relationships, accounts) plus view
+  state (mode, density, collapsed set, focused container, layer filters, selection)
+  and exposes the mutating actions.
+- **`useHistory`** provides cheap undo/redo: because the store mutates immutably
+  (map/filter/spread, never in place), each snapshot reuses unchanged array and
+  element references via structural sharing, capped at 100 entries.
+- **`useCanvasInteraction`** handles pointer/drag/pan, marquee select, and reparenting.
+- **`useFlow`** exposes two contexts — a stable **panel** context (model + filters +
+  selection) and a separate **canvas** context (viewport, guides, marquee). Panels
+  consume only the former, so **panning or hovering does not re-render the
+  Inspector, palette, or legend**.
+- **Overlays** (`src/aws/overlays.ts`) are pure functions over the relationship
+  graph: `iamTrustOverlay()` and `securityPathOverlay()` BFS the permission /
+  network subgraphs (from the selected node, if any), and `heatByDegree()` ranks
+  nodes by connection count. The renderer dims everything not lit by the active
+  overlay. Overlays are view-only and never touch history.

@@ -1,32 +1,40 @@
-export type NodeType =
-  | "VPC"
-  | "Subnet (Public)"
-  | "Subnet (Private)"
-  | "Route Table"
-  | "NACL"
-  | "Internet Gateway"
-  | "NAT Gateway"
-  | "ECS Cluster"
-  | "ECS Service"
-  | "EC2"
-  | "ALB"
-  | "Target Group"
-  | "Security Group"
-  | "RDS"
-  | "S3"
-  | "ECR"
-  | "CloudWatch"
-  | "IAM Role";
+/**
+ * UI-facing types for the canvas.
+ *
+ * The canvas operates DIRECTLY on the domain model (`ResourceInstance` /
+ * `Relationship` from `aws/model`) — there is no separate "flow node" shape.
+ * A resource's canvas geometry lives in `ResourceInstance.position`. Visuals
+ * (label, colour, icon, config fields) are derived from the service registry
+ * via the resource's `serviceId`.
+ */
+import type { ResourceInstance, Relationship, Viewport } from "./aws/model";
+import type { ServiceCategoryId } from "./aws/types";
 
-export interface FlowNode {
-  id: string;
-  type: NodeType;
-  x: number; y: number; w: number; h: number;
-  props: { name: string; cidr?: string; public?: boolean; az?: string; notes?: string };
+export type { ResourceInstance, Relationship, Viewport } from "./aws/model";
+
+/** Interaction mode for the canvas. */
+export type CanvasMode = "move" | "connect";
+
+/** Node information-density preset (Comfortable shows full cards, Compact trims). */
+export type CanvasDensity = "comfortable" | "compact";
+
+/** Semantic level-of-detail tier, derived from the effective zoom scale. */
+export type LodTier = "far" | "mid" | "near";
+
+/** An entry in the service palette, derived from a ServiceDefinition. */
+export interface PaletteItem {
+  readonly serviceId: string;
+  readonly name: string;
+  readonly icon: string;
+  readonly color: string;
+  readonly category: ServiceCategoryId;
 }
 
-export interface FlowEdge { id: string; from: string; to: string; rel: "depends_on"|"attached_to"|"routes_to"|"allows"|"targets"; }
+/** Current selection on the canvas. */
+export type Selection =
+  | { type: "node"; id: string; resource: ResourceInstance }
+  | { type: "edge"; id: string; relationship: Relationship; fromName: string; toName: string }
+  | null;
 
-export interface Pan { x: number; y: number; scale: number; }
-
-export interface PaletteItem { type: NodeType; color: string; defaults?: Partial<FlowNode["props"]>; }
+/** Pan/zoom alias kept for readability in interaction code. */
+export type Pan = Viewport;

@@ -37,3 +37,17 @@ next-env.d.ts
 
 # Mac OS files
 .DS_Store
+
+# Local persistence store
+.data/
+
+# Docusaurus
+website/node_modules/
+website/build/
+website/.docusaurus/
+
+# Coverage
+coverage/
+
+# Specs (local planning notes, not tracked)
+specs/
