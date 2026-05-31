@@ -1,191 +1,173 @@
 ---
-title: Connecting to AWS
+title: Connecting to a Cloud
 ---
 
-# Connecting to AWS
+# Connecting to a Cloud
 
-Map a **live** AWS account onto the canvas. Strata discovers resources through the
-**Cloud Control API** and renders them as a typed diagram — the same nodes and
-containment you'd get from an import, but sourced from what's actually running.
+Map a **live** cloud account onto the canvas. Strata discovers running resources
+and renders them as a typed diagram — the same nodes and containment you'd get
+from an import, but sourced from what's actually deployed. Three providers are
+supported:
+
+| Provider  | Discovery source      | Join key (resource type)                         |
+| --------- | --------------------- | ------------------------------------------------ |
+| **AWS**   | Cloud Control API     | CloudFormation type (`AWS::S3::Bucket`)          |
+| **GCP**   | Cloud Asset Inventory | CAI asset type (`storage.googleapis.com/Bucket`) |
+| **Azure** | Azure Resource Graph  | ARM type (`Microsoft.Storage/storageAccounts`)   |
 
 ## Opening the dialog
 
-Open **Connect to AWS** any of these ways:
+Open **Connect to cloud** any of these ways:
 
-- **Start hub** — click **+ New** in the top bar, then the **Connect to AWS** card.
-- **Data menu** — click **Data ▾** in the top bar, then **Connect to AWS…**.
-- **Command palette** — press **⌘K** (macOS) or **Ctrl K**, type `connect`, and
-  choose **Connect to AWS (discover live resources)**.
+- **Start hub** — click **+ New** in the top bar, then the **Connect to cloud** card.
+- **Data menu** — click **Data ▾** in the top bar, then **Connect to cloud…**.
+- **Command palette** — press **⌘K** (macOS) or **Ctrl K**, type `connect`.
 
-A modal titled **Connect to AWS** opens. Close it any time with the **✕** in its
+A modal titled **Connect to cloud** opens. Close it any time with the **✕** in its
 top-right corner or the **Esc** key.
+
+## Choosing a provider
+
+The first row of the dialog is a provider selector:
+
+```
+[ AWS ] [ GCP ] [ Azure ]
+```
+
+Pick the cloud you want to scan. Switching providers resets the resource-type
+selection to that provider's common defaults and returns you to the setup step
+(so a review from one cloud can't be imported under another). A single Strata
+diagram can hold resources from **all three** providers — connect to each in turn
+and **Merge** the results.
 
 ## The two tabs
 
-At the top of the dialog is a two-button tab strip:
+Below the provider selector is a two-button tab strip:
 
 ```
 [ Live scan ] [ Paste export ]
 ```
 
-- **Live scan** — Strata calls AWS for you (server-side) and returns the resources.
-- **Paste export** — you run the AWS CLI yourself and paste the JSON; nothing is
-  sent anywhere.
-
-**Live scan** is selected by default. Click a tab to switch.
+- **Live scan** — Strata calls the cloud for you (server-side) and returns the
+  resources.
+- **Paste export** — you run the provider's CLI yourself and paste the JSON;
+  nothing is sent anywhere.
 
 ## Live scan tab
 
-The Live-scan body is, top to bottom:
+Every Live-scan tab opens with a **privacy note** (🔒) and then a provider-specific
+scope, the resource-type selector, and the **Discover** button.
 
-1. A **privacy note** (🔒) reminding you that credentials are never stored.
-2. **Access key ID** — labelled **Access key ID (optional)** on a local install,
-   or just **Access key ID** on a hosted install (see
-   [When are credentials required?](#when-are-credentials-required) below).
-   Placeholder `AKIA… / ASIA…`.
-3. **Secret access key** — a password field (masked).
-4. **Session token (recommended)** — a password field for temporary STS
-   credentials. Leave it blank when using permanent keys.
-5. **Region** — a text field, defaulting to `us-east-1`. Type any region code
-   (e.g. `eu-west-1`).
-6. The **resource-type selector** (described next).
-7. A note about temporary read-only credentials.
-8. The **Discover** button.
+### Scope and credentials per provider
+
+- **AWS** — **Access key ID**, **Secret access key**, **Session token
+  (recommended)**, and **Region** (defaults to `us-east-1`). On a local install the
+  keys are **optional** (the server's ambient chain is used); on a hosted install
+  they're required. See [When are credentials required?](#when-are-credentials-required).
+- **GCP** — a single **Scope** field:
+  `projects/my-project`, `folders/123`, or `organizations/456`. No credentials are
+  entered — the scan uses the server's **Application Default Credentials**.
+- **Azure** — a **Subscription id(s)** field (one or more GUIDs, comma-separated).
+  No credentials are entered — the scan uses the server's
+  **DefaultAzureCredential**.
+
+GCP and Azure live scans run with the _server machine's_ ambient credentials, so
+they're only available on a **local** install. On a hosted install they're
+disabled — use **Paste export** instead.
 
 ### Choosing resource types
 
-Below the Region field is the resource-type picker:
+Below the scope is the resource-type picker (identical across providers):
 
-- A header reading **Resource types (N selected)** — the **N** is a live count of
-  how many types are currently ticked. A common starter set (VPC, Subnet,
-  Instance, SecurityGroup, S3 Bucket, Lambda Function, RDS DBInstance, DynamoDB
-  Table) is pre-selected when the dialog opens.
-- A **Select all** / **Clear** button. It toggles: when every visible type is
-  ticked it reads **Clear**, otherwise **Select all**. It acts on the _currently
-  visible_ (filtered) list — if you've typed in the filter, it adds or removes
-  just those matches and the label shows the count, e.g. **Select all (4)**.
-- A **Filter…** text box. Type part of a service name or CloudFormation type (e.g.
-  `s3`, `AWS::EC2`) to narrow the list below.
-- A scrollable list of checkboxes, one per discoverable type. Each row shows the
-  friendly **label** and, dimmed beside it, the **CloudFormation type name**
-  (e.g. `AWS::S3::Bucket`). Tick or untick rows individually.
+- A header reading **Resource types (N selected)** with a live count. A common
+  starter set for the chosen provider is pre-selected.
+- A **Select all** / **Clear** button that acts on the _currently visible_
+  (filtered) list.
+- A **Filter…** box — type part of a service name or the native type.
+- A scrollable checkbox list. Each row shows the friendly **label** and, dimmed
+  beside it, the **provider-native type** (e.g. `AWS::S3::Bucket`,
+  `storage.googleapis.com/Bucket`, `Microsoft.Storage/storageAccounts`).
 
 ### Running the scan
 
 Click **Discover**. While it runs the button reads **Scanning…** and is disabled.
-
-The **Discover** button is **disabled** when:
-
-- no resource types are selected (**0 selected**), or
-- a scan is already running, or
-- you're on a **hosted** install and haven't entered both an Access key ID and a
-  Secret access key.
-
-When the scan finishes, the dialog switches to the **review** phase (see
-[Reviewing and importing](#reviewing-and-importing)). If it fails, an error banner
-appears at the top of the dialog and you stay on the setup form — see
-[Troubleshooting](/docs/guide/troubleshooting).
+It's also disabled when no types are selected, the required scope is empty, or (on
+a hosted install) live scanning isn't available for the provider.
 
 ## Paste export tab
 
-No credentials on the machine running Strata, or you'd rather not hand them over?
-Run the scan yourself and paste the result. Click the **Paste export** tab, then:
+No credentials on the machine running Strata, or you'd rather not use the live
+path? Run the scan yourself and paste the result:
 
-1. Generate the export with the AWS CLI:
+- **AWS** — `aws cloudcontrol list-resources --type-name AWS::S3::Bucket`
+  (accepts the raw response or a plain JSON array).
+- **GCP** — `gcloud asset list --format=json` (accepts the array or `{ assets: […] }`).
+- **Azure** — `az graph query -q "Resources" -o json` (accepts the array or the
+  `{ data: […] }` envelope).
 
-   ```bash
-   aws cloudcontrol list-resources --type-name AWS::S3::Bucket > buckets.json
-   ```
-
-2. Paste the output into the large text box. Strata accepts either the raw
-   `list-resources` response (`{ "TypeName": "…", "ResourceDescriptions": [ … ] }`)
-   or a plain JSON array of resources.
-3. Click **Parse**. (The button is disabled until the box is non-empty.)
-
-Parsing happens entirely in your browser — nothing is sent anywhere. On success
-you move to the review phase; on a parse error an error banner appears and you stay
-on this tab.
+Paste into the box and click **Parse**. Parsing happens entirely in your browser —
+nothing is sent anywhere.
 
 ## When are credentials required?
 
-Live scans run **on the server** — the Next.js process that serves the app — at the
-`/api/discover` route. Where that process gets AWS credentials depends on how Strata
-is deployed:
+Live scans run **on the server** at `/api/discover` (AWS), `/api/discover/gcp`, or
+`/api/discover/azure`. Where the server gets credentials depends on the provider
+and deployment:
 
-- **Local install (default).** The credential fields are **optional**. Leave them
-  blank and the scan uses the server's **ambient credential chain** — your SSO
-  session, shared `~/.aws` profile, environment variables, or instance role. Fill
-  them in only to scan a _different_ account than the box is configured for.
-- **Hosted install** (the operator set `NEXT_PUBLIC_STRATA_HOSTED=1`). You **must**
-  bring your own keys. The ambient chain is disabled so visitors can't enumerate
-  the operator's account. The Access-key-ID label drops the "(optional)" suffix,
-  and **Discover** stays disabled until you've entered both an access key ID and a
-  secret access key. A scan submitted without credentials is rejected by the server
-  with a **422** and the message _"Enter AWS credentials to run a live scan, or use
-  the Paste export tab."_
+- **AWS, local install (default).** Credential fields are **optional** — the
+  server's ambient chain (SSO / `~/.aws` profile / env / instance role) is used.
+  Fill them in to scan a different account.
+- **AWS, hosted install** (`NEXT_PUBLIC_STRATA_HOSTED=1`). You **must** bring your
+  own keys; the ambient chain is disabled and a scan without credentials is rejected
+  with a **422**.
+- **GCP / Azure.** No credentials are ever entered in Strata. The server uses its
+  ambient **ADC** (`gcloud auth application-default login`) or
+  **DefaultAzureCredential** (`az login`). On a hosted install these live scans are
+  disabled entirely.
 
-Either way, supplied credentials are sent over HTTPS, used in-memory for the single
-scan, then discarded — never written to disk, logged, returned to the browser, or
-saved into the diagram.
+Supplied AWS credentials are sent over HTTPS, used in-memory for the single scan,
+then discarded — never written to disk, logged, returned to the browser, or saved
+into the diagram.
 
 ## IAM permissions
 
-The scan uses the Cloud Control API's list/describe operations. The credentials you
-provide (or the server's ambient identity) need, at minimum:
+- **AWS** — `cloudcontrol:ListResources` + `cloudcontrol:GetResource`, plus read
+  access to the services you scan. The managed **`ReadOnlyAccess`** policy is the
+  simplest safe choice. Prefer **temporary, read-only** credentials
+  (`aws sts get-session-token` or a read-only role).
+- **GCP** — the ADC identity needs **`cloudasset.assets.listResource`** (e.g. the
+  **Cloud Asset Viewer** role) on the project/folder/org.
+- **Azure** — the signed-in identity needs at least **Reader** on the target
+  subscriptions (Resource Graph honours RBAC).
 
-- `cloudcontrol:ListResources`
-- `cloudcontrol:GetResource`
-
-For each resource type, Cloud Control in turn calls that service's own read APIs
-(for example `s3:ListAllMyBuckets`, `ec2:DescribeVpcs`), so the identity also needs
-read access to the services you scan. The simplest safe choice is AWS's managed
-**`ReadOnlyAccess`** policy.
-
-> **Security note.** Prefer **temporary, read-only** credentials. Run
-> `aws sts get-session-token` (or assume a read-only role) and paste the resulting
-> access key ID, secret, and **session token** into the three fields. Avoid pasting
-> long-lived root or admin keys. Discovery is list/describe only — Strata never
-> mutates your account.
+Discovery is list/describe only — Strata never mutates your account.
 
 ## Reviewing and importing
 
-After a successful **Discover** (or **Parse**), a **review** panel appears at the
-bottom of the dialog before anything touches your canvas. It shows:
+After a successful **Discover** (or **Parse**), a **review** panel appears before
+anything touches your canvas:
 
-- **N resource(s) ready to import** — how many discovered resources map to a known
-  service in Strata's catalog.
-- **· N unmapped type(s)** (only if any) — types Strata doesn't model yet, which
-  will be skipped. The exact list is shown below as _"Not yet modelled (skipped):
-  …"_.
-- **· scanned N type(s) in `<region>`** (live scans only) — confirms the scope.
-- Any per-type **warnings** from the scan, each on its own line.
+- **N resource(s) ready to import** — how many map to a known service.
+- **· N unmapped type(s)** (if any) — types Strata doesn't model yet (skipped;
+  listed below).
+- **· scanned …** — the scope that was covered.
+- For **GCP/Azure**, a note that resources import as typed nodes with **sparse
+  properties** (the provider's field names differ from Strata's config model), and
+  that relationships aren't inferred — wire them up on the canvas.
+- Any per-scan **warnings**.
 
-Then choose how to apply the resources with one of two buttons:
-
-- **Merge into canvas** — add the discovered resources to your current diagram,
-  keeping everything you already have.
-- **Replace canvas** — swap in the discovered set. If you have unsaved changes,
-  Strata first shows the **"Replace the current diagram?"** confirmation with
-  **Save & continue**, **Discard & continue**, and **Cancel**.
-
-Both buttons are disabled if there's nothing mappable to import (**0 ready to
-import**). After importing, the status line reads _"Imported N discovered
-resource(s) (merge|replace)."_ The discovered nodes (named **"Discovered
-(`<region>`)"** as a group) can be edited, connected, and rearranged like any other
-node.
+Then choose **Merge into canvas** (add to the current diagram) or **Replace
+canvas** (swap in the discovered set, with an unsaved-changes guard).
 
 ## What discovery does and doesn't do
 
-- **Read-only modeling.** Discovery only lists and describes resources — Strata
-  never mutates your account.
-- **Credentials never leave the server or reach the diagram.** They stay in the
-  server process for the duration of a scan; they're never returned to the browser,
-  written to disk, or stored in a graph. Because the model keeps only the
-  configuration fields Strata recognizes, stray properties (let alone secrets)
-  can't end up in a node either.
-- **Relationships aren't inferred from Cloud Control.** Discovered resources land as
-  nodes; wire up the connections you care about on the canvas. (Containment and
-  edges from a CloudFormation/Terraform [import](/docs/guide/importing-iac) are
+- **Read-only modeling.** Discovery only lists and describes resources.
+- **Credentials never leave the server or reach the diagram**, for any provider —
+  the discovery layer only receives already-fetched descriptions, and the model
+  keeps only the configuration fields Strata recognizes, so stray properties (let
+  alone secrets) can't end up in a node.
+- **Relationships aren't inferred** from a live scan — discovered resources land as
+  nodes. (A CloudFormation / Terraform / ARM [import](/docs/guide/importing-iac) is
   richer if you have the source.)
-- **Nothing is scanned outside the types and region you chose** — the review makes
+- **Nothing is scanned outside the types and scope you chose** — the review makes
   the scope explicit.

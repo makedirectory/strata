@@ -4,7 +4,7 @@ const meta = {
   canvas: "Navigating the Canvas",
   views: "Views, Layers & Overlays",
   "importing-iac": "Importing & Exporting IaC",
-  "connecting-aws": "Connecting to AWS",
+  "connecting-aws": "Connecting to a Cloud",
   validation: "Validation & Rules",
   saving: "Saving & Loading",
   shortcuts: "Keyboard & Commands",
