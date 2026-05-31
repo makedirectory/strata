@@ -67,3 +67,62 @@ describe("useFlowStore — reparent / group move / multi-delete (one undo step e
     expect(result.current.relationships).toHaveLength(1);
   });
 });
+
+describe("useFlowStore — dirty tracking (the unsaved-work flag the guard reads)", () => {
+  it("starts clean and becomes dirty on the first committed edit", () => {
+    const { result } = setup();
+    expect(result.current.dirty).toBe(false);
+    act(() => result.current.addResource("lambda", 0, 0));
+    expect(result.current.dirty).toBe(true);
+  });
+
+  it("markSaved clears the flag and a later edit re-dirties it", () => {
+    const { result } = setup();
+    act(() => result.current.addResource("lambda", 0, 0));
+    expect(result.current.dirty).toBe(true);
+
+    act(() => result.current.markSaved());
+    expect(result.current.dirty).toBe(false);
+
+    act(() => result.current.addResource("s3-bucket", 200, 0));
+    expect(result.current.dirty).toBe(true);
+  });
+
+  it("replaceAll (import / preset / server load) marks unsaved work", () => {
+    const { result } = setup();
+    act(() => result.current.markSaved()); // clean baseline
+    expect(result.current.dirty).toBe(false);
+
+    act(() =>
+      result.current.replaceAll({
+        resources: [{ id: "r1", serviceId: "lambda", name: "fn", config: {}, source: "imported" }],
+        relationships: [],
+      }),
+    );
+    expect(result.current.dirty).toBe(true);
+  });
+
+  it("clear is treated as unsaved work (it mutates the model)", () => {
+    const { result } = setup();
+    act(() => result.current.addResource("lambda", 0, 0));
+    act(() => result.current.markSaved());
+    expect(result.current.dirty).toBe(false);
+
+    act(() => result.current.clear());
+    expect(result.current.dirty).toBe(true);
+  });
+
+  it("undo/redo restores do not flip the flag (only committed changes do)", () => {
+    const { result } = setup();
+    act(() => result.current.addResource("lambda", 0, 0));
+    act(() => result.current.markSaved());
+    expect(result.current.dirty).toBe(false);
+
+    // Restores go through the isRestoring guard, which bypasses `record`, so
+    // the dirty flag is intentionally left untouched by undo/redo.
+    act(() => result.current.undo());
+    expect(result.current.dirty).toBe(false);
+    act(() => result.current.redo());
+    expect(result.current.dirty).toBe(false);
+  });
+});
