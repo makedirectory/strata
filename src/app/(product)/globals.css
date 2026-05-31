@@ -1329,6 +1329,26 @@ svg.guides {
 .connect-warn {
   color: var(--yellow);
 }
+.connect-privacy {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--sub);
+  background: #0c1f1a;
+  border: 1px solid #1d4d40;
+  border-radius: 10px;
+  padding: 9px 11px;
+}
+.connect-privacy strong {
+  color: var(--text);
+}
+.connect-privacy-icon {
+  flex: none;
+  font-size: 13px;
+  line-height: 1.45;
+}
 .connect-error {
   font-size: 13px;
   color: var(--danger);

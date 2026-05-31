@@ -218,7 +218,7 @@ interface MenuProps {
 }
 
 /** Generalized dropdown menu: trigger button + panel, with click-outside and
- *  Esc to close. Extracted from the old LoadMenu so the toolbar's File / Analyze
+ *  Esc to close. Extracted from the old LoadMenu so the toolbar's Data / Analyze
  *  menus and LoadMenu all share one accessible implementation. */
 function Menu({
   label,
@@ -382,6 +382,7 @@ function TopBar() {
     setPresentation,
     openStartHub,
     openExportIaC,
+    openConnect,
   } = useFlow();
   return (
     <div className="topbar">
@@ -445,8 +446,12 @@ function TopBar() {
 
         <span className="toolbar-divider" aria-hidden="true" />
 
-        {/* File: local import/export + clear. (⌘K palette remains the full index.) */}
-        <Menu label="File ▾" title="Import, export, and clear" align="right">
+        {/* Data: bring infrastructure in (connect / import), send it out (export),
+            or clear. (⌘K palette remains the full index.) */}
+        <Menu label="Data ▾" title="Connect, import, export, and clear" align="right">
+          <MenuItem onClick={openConnect} title="Discover live AWS resources or paste an export">
+            Connect to AWS…
+          </MenuItem>
           <MenuItem onClick={importJSONDialog}>Import JSON…</MenuItem>
           <MenuItem onClick={importIaCDialog} title="Import Terraform or CloudFormation">
             Import IaC (Terraform / CloudFormation)…
@@ -1048,6 +1053,16 @@ function ConnectDialog() {
 
         {source === "live" ? (
           <div className="connect-body">
+            <div className="connect-privacy" role="note">
+              <span className="connect-privacy-icon" aria-hidden="true">
+                🔒
+              </span>
+              <span>
+                Your credentials are <strong>never stored</strong>. They&apos;re sent over HTTPS,
+                used in-memory for this one scan, then discarded — never written to disk, logged, or
+                saved into the diagram. Prefer <strong>temporary, read-only</strong> keys.
+              </span>
+            </div>
             <label className="export-field">
               <span>Access key ID{STRATA_HOSTED ? "" : " (optional)"}</span>
               <input
