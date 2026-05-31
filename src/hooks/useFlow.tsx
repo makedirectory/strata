@@ -74,11 +74,29 @@ function readSavedViews(): SavedView[] {
   }
 }
 
+/**
+ * Canvas-only, high-churn slice — viewport + transient drag visuals + the
+ * imperative draw / pointer handlers. Lives in its own context so panning,
+ * zooming and hovering re-render ONLY the canvas, never the side panels.
+ */
+interface FlowCanvasContextValue {
+  viewport: ReturnType<typeof useFlowStore>["viewport"];
+  guides: GuideLine[];
+  marquee: Rect | null;
+  draw: () => void;
+  drawMinimap: () => void;
+  onCanvasMouseDown: (e: React.MouseEvent) => void;
+  onMouseMove: (e: MouseEvent) => void;
+  onMouseUp: () => void;
+  onWheelZoom: (e: WheelEvent) => void;
+  addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
+  minimapNavigate: (clientX: number, clientY: number) => void;
+}
+
 interface FlowContextValue {
   state: {
     resources: ResourceInstance[];
     relationships: Relationship[];
-    viewport: ReturnType<typeof useFlowStore>["viewport"];
     mode: CanvasMode;
     density: CanvasDensity;
   };
@@ -88,10 +106,6 @@ interface FlowContextValue {
   selection: Selection;
   /** Ids of all selected nodes (single or marquee/group multi-selection). */
   selectedIds: string[];
-  /** Transient alignment guides (world coords) to draw while dragging. */
-  guides: GuideLine[];
-  /** Transient marquee selection rectangle (world coords), or null. */
-  marquee: Rect | null;
 
   // Actions
   setMode: (m: CanvasMode) => void;
@@ -103,8 +117,7 @@ interface FlowContextValue {
   onNodeDoubleClick: (id: string) => void;
   /** Select + centre on a node (⌘K jump / search). */
   goToResource: (id: string) => void;
-  /** Highlighted search-match node ids + setter (live search). */
-  searchMatches: ReadonlySet<string>;
+  /** Setter for the live search-match highlight (read by the renderer only). */
   setSearchMatches: (ids: ReadonlySet<string>) => void;
   /** Ancestor path of the focus target, root → leaf (clickable crumbs). */
   breadcrumb: Array<{ id: string; name: string }>;
@@ -135,7 +148,6 @@ interface FlowContextValue {
   deleteSavedView: (name: string) => void;
 
   select: (sel: Selection) => void;
-  addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
   removeSelection: () => void;
   duplicateSelection: () => void;
   groupIntoVPC: () => void;
@@ -146,17 +158,10 @@ interface FlowContextValue {
   }) => void;
   updateRelationshipKind: (kind: RelationshipKind) => void;
 
-  // Canvas interaction
-  onCanvasMouseDown: (e: React.MouseEvent) => void;
+  // Canvas interaction / view controls (the high-frequency draw + pointer
+  // handlers live in FlowCanvasContext, not here).
   onCanvasClick: () => void;
-  onMouseMove: (e: MouseEvent) => void;
-  onMouseUp: () => void;
-  onWheelZoom: (e: WheelEvent) => void;
   setSpacePressed: (pressed: boolean) => void;
-
-  // Canvas rendering
-  draw: () => void;
-  drawMinimap: () => void;
   fitToView: () => void;
   center: () => void;
   /** Auto-arrange top-level nodes into a tidy grid. */
@@ -165,8 +170,6 @@ interface FlowContextValue {
   zoomOut: () => void;
   zoomReset: () => void;
   zoomToSelection: () => void;
-  /** Centre the viewport on the world point under a minimap client pixel. */
-  minimapNavigate: (clientX: number, clientY: number) => void;
 
   // History
   undo: () => void;
@@ -201,12 +204,22 @@ interface FlowContextValue {
 }
 
 const FlowContext = createContext<FlowContextValue | null>(null);
+const FlowCanvasContext = createContext<FlowCanvasContextValue | null>(null);
 
 /** Access the Flow context. Throws if used outside a {@link FlowProvider}. */
 export const useFlow = (): FlowContextValue => {
   const ctx = useContext(FlowContext);
   if (ctx === null) {
     throw new Error("useFlow must be used within a <FlowProvider>.");
+  }
+  return ctx;
+};
+
+/** Access the Canvas-only context (viewport + draw/pointer handlers). */
+export const useFlowCanvas = (): FlowCanvasContextValue => {
+  const ctx = useContext(FlowCanvasContext);
+  if (ctx === null) {
+    throw new Error("useFlowCanvas must be used within a <FlowProvider>.");
   }
   return ctx;
 };
@@ -219,6 +232,20 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const store = useFlowStore();
   const interaction = useCanvasInteraction();
   const renderer = useCanvasRenderer(worldRef, svgRef, minimapRef);
+
+  // Stable store methods pulled out as locals. Callbacks that *call* these must
+  // depend on the local (not `store.x`) — otherwise eslint demands the whole
+  // `store` object, which changes every render and would defeat the memoized
+  // context (re-rendering panels on every pan/hover).
+  const {
+    getViewport,
+    replaceAll: storeReplaceAll,
+    setGraphId: storeSetGraphId,
+    uid: storeUid,
+    setCollapsedIds,
+    expandGroup,
+    setFocusedContainerId,
+  } = store;
 
   // Destructure the stable (useCallback) members so handler deps below stay
   // referentially stable across renders.
@@ -242,15 +269,16 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Transient alignment guides shown while dragging a node (world coordinates).
   const [guides, setGuides] = React.useState<GuideLine[]>([]);
 
+  // `viewport` is intentionally NOT here — it lives in the Canvas-only context
+  // so panels don't re-render on pan/zoom.
   const state = React.useMemo(
     () => ({
       resources: store.resources,
       relationships: store.relationships,
-      viewport: store.viewport,
       mode: store.mode,
       density: store.density,
     }),
-    [store.resources, store.relationships, store.viewport, store.mode, store.density],
+    [store.resources, store.relationships, store.mode, store.density],
   );
 
   // ---- containment layout -------------------------------------------------
@@ -386,9 +414,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       accounts: store.accounts,
       resources: store.resources,
       relationships: store.relationships,
-      viewport: store.viewport,
+      // Read the live viewport so buildGraph (export/save) stays referentially
+      // stable across pans — keeps the panel context from re-rendering.
+      viewport: getViewport(),
     };
-  }, [store.graphId, store.accounts, store.resources, store.relationships, store.viewport]);
+  }, [store.graphId, store.accounts, store.resources, store.relationships, getViewport]);
 
   const { setMode: storeSetMode, addResource: storeAddResource } = store;
 
@@ -445,7 +475,6 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateResourcePosition,
     updateResourcePositions,
     setViewport: storeSetViewport,
-    getViewport,
     commitCurrentState,
     setSelection: storeSetSelection,
     setSelectedIds: storeSetSelectedIds,
@@ -701,8 +730,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storeSetViewport(fitView(bounds, viewSize()));
   }, [layout, storeSetViewport, viewSize]);
   const center = useCallback(
-    () => iCenter(store.viewport, storeSetViewport),
-    [iCenter, store.viewport, storeSetViewport],
+    () => iCenter(getViewport(), storeSetViewport),
+    [iCenter, getViewport, storeSetViewport],
   );
 
   /** Auto-arrange top-level nodes into a tidy grid (one undo step). Containers
@@ -762,12 +791,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   const focusContainer = useCallback(
     (id: string | null) => {
-      store.setFocusedContainerId(id);
+      setFocusedContainerId(id);
       if (!id) return;
       const bounds = layout.rects.get(id);
       if (bounds) storeSetViewport(fitView(bounds, viewSize(), { maxScale: 1.2 }));
     },
-    [store, layout, storeSetViewport, viewSize],
+    [setFocusedContainerId, layout, storeSetViewport, viewSize],
   );
 
   /**
@@ -796,8 +825,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const nextExpanded = new Set(store.expandedGroups);
       if (target.parentId) nextExpanded.add(summaryKey(target.parentId, target.serviceId));
 
-      if (nextCollapsed.size !== store.collapsed.size) store.setCollapsedIds(nextCollapsed);
-      nextExpanded.forEach((k) => store.expandGroup(k));
+      if (nextCollapsed.size !== store.collapsed.size) setCollapsedIds(nextCollapsed);
+      nextExpanded.forEach((k) => expandGroup(k));
 
       // Centre using a layout that reflects the revealed state.
       const revealed = computeLayout(store.resources, {
@@ -817,7 +846,19 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     },
-    [selectSingle, store, isContainerPred, storeSetViewport, viewSize, getViewport],
+    [
+      selectSingle,
+      store.resources,
+      store.collapsed,
+      store.expandedGroups,
+      setCollapsedIds,
+      expandGroup,
+      store.density,
+      isContainerPred,
+      storeSetViewport,
+      viewSize,
+      getViewport,
+    ],
   );
 
   /** Double-clicking a container toggles focus on it (zoom-to-fit + dim others). */
@@ -848,7 +889,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [store.focusedContainerId, store.selection, store.resources]);
 
   // ---- view presets + saved views ----------------------------------------
-  const { setLayers: storeSetLayers, setCollapsedIds } = store;
+  const { setLayers: storeSetLayers } = store;
 
   const applyViewPreset = useCallback(
     (name: ViewPreset) => {
@@ -980,16 +1021,16 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [buildGraph]);
 
   // ---- Export / Import ----------------------------------------------------
-  const exportJSON = () => {
+  const exportJSON = useCallback(() => {
     const graph = buildGraph();
     const blob = new Blob([JSON.stringify(graph, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "aws-architecture.json";
     a.click();
-  };
+  }, [buildGraph]);
 
-  const importJSONDialog = () => {
+  const importJSONDialog = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "application/json";
@@ -1008,7 +1049,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!Array.isArray(g.resources)) {
             throw new Error("missing resources array");
           }
-          store.replaceAll({
+          storeReplaceAll({
             resources: g.resources ?? [],
             relationships: g.relationships ?? [],
             viewport: g.viewport,
@@ -1025,9 +1066,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reader.readAsText(file);
     };
     input.click();
-  };
+  }, [storeReplaceAll]);
 
-  const importIaCDialog = () => {
+  const importIaCDialog = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".json,.yaml,.yml,.tf,.tfstate,.template";
@@ -1041,14 +1082,14 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const text = String(reader.result);
           const result = importIaC(text, { name: file.name });
           const { graph, format, unmappedTypes, warnings } = result;
-          store.replaceAll({
+          storeReplaceAll({
             resources: graph.resources ?? [],
             relationships: graph.relationships ?? [],
             viewport: graph.viewport,
             accounts: graph.accounts ?? [],
             graphId: graph.id ?? "",
           });
-          store.setSelection(null);
+          storeSetSelection(null);
           const parts = [`Imported ${graph.resources.length} resource(s) from ${format}.`];
           if (unmappedTypes.length > 0) {
             parts.push(`Unmapped types: ${unmappedTypes.join(", ")}.`);
@@ -1065,7 +1106,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reader.readAsText(file);
     };
     input.click();
-  };
+  }, [storeReplaceAll, storeSetSelection]);
 
   // ---- Server save / load -------------------------------------------------
   const saveToServer = useCallback(async () => {
@@ -1075,12 +1116,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const saved = store.graphId
         ? await updateGraph(store.graphId, graph)
         : await createGraph(graph);
-      store.setGraphId(saved.id);
+      storeSetGraphId(saved.id);
       setStatus(`Saved "${saved.name}" (${saved.id}).`);
     } catch {
       setStatus("Save failed: API unavailable.");
     }
-  }, [buildGraph, store]);
+  }, [buildGraph, store.graphId, storeSetGraphId]);
 
   /** List saved graphs for the Load menu (returns [] and reports on failure). */
   const listSavedGraphs = useCallback(async (): Promise<GraphSummary[]> => {
@@ -1098,7 +1139,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         setStatus("Loading from server…");
         const g = await getGraph(id);
-        store.replaceAll({
+        storeReplaceAll({
           resources: g.resources ?? [],
           relationships: g.relationships ?? [],
           viewport: g.viewport,
@@ -1110,7 +1151,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setStatus("Load failed: API unavailable.");
       }
     },
-    [store],
+    [storeReplaceAll],
   );
 
   /** Delete a saved graph by id (clears graphId if it was the open one). */
@@ -1118,194 +1159,291 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (id: string) => {
       try {
         await deleteGraph(id);
-        if (store.graphId === id) store.setGraphId("");
+        if (store.graphId === id) storeSetGraphId("");
         setStatus("Deleted saved graph.");
       } catch {
         setStatus("Delete failed: API unavailable.");
       }
     },
-    [store],
+    [store.graphId, storeSetGraphId],
   );
 
   // ---- Presets ------------------------------------------------------------
-  const loadPreset = (presetName: string) => {
-    const resources: ResourceInstance[] = [];
-    const relationships: Relationship[] = [];
-    const seed = (
-      serviceId: string,
-      x: number,
-      y: number,
-      name: string,
-      config: Record<string, unknown> = {},
-      parentId?: string,
-    ) => {
-      const id = store.uid();
-      const svc = getService(serviceId);
-      resources.push({
-        id,
-        serviceId,
-        name: name || svc?.name || serviceId,
-        config: { ...defaultConfig(serviceId), ...config },
-        source: "manual",
-        position: { x, y, ...DEFAULT_NODE_SIZE },
-        parentId,
+  const loadPreset = useCallback(
+    (presetName: string) => {
+      const resources: ResourceInstance[] = [];
+      const relationships: Relationship[] = [];
+      const seed = (
+        serviceId: string,
+        x: number,
+        y: number,
+        name: string,
+        config: Record<string, unknown> = {},
+        parentId?: string,
+      ) => {
+        const id = storeUid();
+        const svc = getService(serviceId);
+        resources.push({
+          id,
+          serviceId,
+          name: name || svc?.name || serviceId,
+          config: { ...defaultConfig(serviceId), ...config },
+          source: "manual",
+          position: { x, y, ...DEFAULT_NODE_SIZE },
+          parentId,
+        });
+        return id;
+      };
+      const link = (from: string, to: string, kind: RelationshipKind) => {
+        relationships.push({ id: storeUid(), from, to, kind, source: "manual" });
+      };
+
+      if (presetName === "aws-basic") {
+        const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
+        // Subnets nest inside the VPC (containment is nesting, not an edge).
+        seed("subnet-public", 140, 220, "Public A", { cidr: "10.0.1.0/24", az: "us-east-1a" }, vpc);
+        seed(
+          "subnet-private",
+          140,
+          360,
+          "Private A",
+          { cidr: "10.0.2.0/24", az: "us-east-1a" },
+          vpc,
+        );
+        const igw = seed("internet-gateway", 560, 140, "IGW");
+        link(igw, vpc, "attached_to");
+      } else if (presetName === "ecs-alb") {
+        const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
+        const pubA = seed(
+          "subnet-public",
+          140,
+          220,
+          "Public A",
+          { cidr: "10.0.1.0/24", az: "us-east-1a" },
+          vpc,
+        );
+        const priA = seed(
+          "subnet-private",
+          140,
+          360,
+          "Private A",
+          { cidr: "10.0.2.0/24", az: "us-east-1a" },
+          vpc,
+        );
+        const igw = seed("internet-gateway", 760, 140, "IGW");
+        const nat = seed("nat-gateway", 760, 260, "NAT GW");
+        const rtPub = seed("route-table", 760, 380, "RT Public");
+        const rtPri = seed("route-table", 760, 500, "RT Private");
+        const nacl = seed("nacl", 760, 620, "App NACL");
+        const alb = seed("elastic-load-balancer", 1000, 200, "ALB");
+        const sgAlb = seed("security-group", 1000, 80, "SG-ALB");
+        const ecs = seed("ecs-service", 1000, 460, "App Service", { port: 3000 });
+        const sgApp = seed("security-group", 1000, 340, "SG-App");
+        const tg = seed("target-group", 1000, 320, "TG-App", { port: 3000 });
+
+        link(igw, vpc, "attached_to");
+        link(nat, pubA, "attached_to");
+        link(rtPub, pubA, "attached_to");
+        link(rtPri, priA, "attached_to");
+        link(rtPub, igw, "routes_to");
+        link(rtPri, nat, "routes_to");
+        link(nacl, priA, "attached_to");
+        link(alb, pubA, "attached_to");
+        link(sgAlb, alb, "attached_to");
+        link(alb, tg, "targets");
+        link(tg, ecs, "targets");
+        link(sgApp, ecs, "attached_to");
+      } else {
+        return;
+      }
+
+      storeReplaceAll({
+        resources,
+        relationships,
+        viewport: { x: 200, y: 120, scale: 1 },
+        accounts: [],
+        graphId: "",
       });
-      return id;
-    };
-    const link = (from: string, to: string, kind: RelationshipKind) => {
-      relationships.push({ id: store.uid(), from, to, kind, source: "manual" });
-    };
+    },
+    [storeUid, storeReplaceAll],
+  );
 
-    if (presetName === "aws-basic") {
-      const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
-      // Subnets nest inside the VPC (containment is nesting, not an edge).
-      seed("subnet-public", 140, 220, "Public A", { cidr: "10.0.1.0/24", az: "us-east-1a" }, vpc);
-      seed("subnet-private", 140, 360, "Private A", { cidr: "10.0.2.0/24", az: "us-east-1a" }, vpc);
-      const igw = seed("internet-gateway", 560, 140, "IGW");
-      link(igw, vpc, "attached_to");
-    } else if (presetName === "ecs-alb") {
-      const vpc = seed("vpc", 80, 120, "VPC", { cidr: "10.0.0.0/16" });
-      const pubA = seed(
-        "subnet-public",
-        140,
-        220,
-        "Public A",
-        { cidr: "10.0.1.0/24", az: "us-east-1a" },
-        vpc,
-      );
-      const priA = seed(
-        "subnet-private",
-        140,
-        360,
-        "Private A",
-        { cidr: "10.0.2.0/24", az: "us-east-1a" },
-        vpc,
-      );
-      const igw = seed("internet-gateway", 760, 140, "IGW");
-      const nat = seed("nat-gateway", 760, 260, "NAT GW");
-      const rtPub = seed("route-table", 760, 380, "RT Public");
-      const rtPri = seed("route-table", 760, 500, "RT Private");
-      const nacl = seed("nacl", 760, 620, "App NACL");
-      const alb = seed("elastic-load-balancer", 1000, 200, "ALB");
-      const sgAlb = seed("security-group", 1000, 80, "SG-ALB");
-      const ecs = seed("ecs-service", 1000, 460, "App Service", { port: 3000 });
-      const sgApp = seed("security-group", 1000, 340, "SG-App");
-      const tg = seed("target-group", 1000, 320, "TG-App", { port: 3000 });
+  // Locals so the memoized panel value re-computes when history depth changes
+  // (the booleans, not the stable canUndo/canRedo functions, are the deps).
+  const canUndo = store.canUndo();
+  const canRedo = store.canRedo();
 
-      link(igw, vpc, "attached_to");
-      link(nat, pubA, "attached_to");
-      link(rtPub, pubA, "attached_to");
-      link(rtPri, priA, "attached_to");
-      link(rtPub, igw, "routes_to");
-      link(rtPri, nat, "routes_to");
-      link(nacl, priA, "attached_to");
-      link(alb, pubA, "attached_to");
-      link(sgAlb, alb, "attached_to");
-      link(alb, tg, "targets");
-      link(tg, ecs, "targets");
-      link(sgApp, ecs, "attached_to");
-    } else {
-      return;
-    }
-
-    store.replaceAll({
-      resources,
-      relationships,
-      viewport: { x: 200, y: 120, scale: 1 },
-      accounts: [],
-      graphId: "",
-    });
-  };
-
-  const value: FlowContextValue = {
-    state,
-    worldRef,
-    svgRef,
-    minimapRef,
-    selection: store.selection,
-    selectedIds: store.selectedIds,
+  // The Canvas-only, high-churn slice (viewport, transient drag visuals, and the
+  // imperative draw/pointer handlers). Plain object: the Canvas re-renders on
+  // pan anyway, and no panel consumes this context — so panels are insulated.
+  const canvasValue: FlowCanvasContextValue = {
+    viewport: store.viewport,
     guides,
     marquee,
-
-    setMode: store.setMode,
-    toggleMode,
-    setDensity: store.setDensity,
-    focusContainer,
-    onNodeDoubleClick,
-    goToResource,
-    searchMatches: store.searchMatches,
-    setSearchMatches: store.setSearchMatches,
-    breadcrumb,
-    focusedContainerId: store.focusedContainerId,
-
-    hiddenCategories: store.hiddenCategories,
-    hiddenRelClasses: store.hiddenRelClasses,
-    filterMode: store.filterMode,
-    environmentTint: store.environmentTint,
-    edgeStyle: store.edgeStyle,
-    setEdgeStyle: store.setEdgeStyle,
-    presentation: store.presentation,
-    setPresentation: store.setPresentation,
-    activeOverlay: store.activeOverlay,
-    setActiveOverlay: store.setActiveOverlay,
-    toggleCategory: store.toggleCategory,
-    toggleRelClass: store.toggleRelClass,
-    setFilterMode: store.setFilterMode,
-    setEnvironmentTint: store.setEnvironmentTint,
-    applyViewPreset,
-    savedViews,
-    saveView,
-    applySavedView,
-    deleteSavedView,
-
-    select: store.setSelection,
-    addResourceFromPalette,
-    removeSelection: store.removeSelection,
-    duplicateSelection: store.duplicateSelection,
-    groupIntoVPC: store.groupIntoVPC,
-    updateResourceField,
-    updateRelationshipKind,
-
+    draw,
+    drawMinimap,
     onCanvasMouseDown,
-    onCanvasClick: clearSelection,
     onMouseMove,
     onMouseUp,
     onWheelZoom,
-    setSpacePressed: interaction.setSpacePressed,
-
-    draw,
-    drawMinimap,
-    fitToView,
-    center,
-    tidy,
-    zoomIn,
-    zoomOut,
-    zoomReset,
-    zoomToSelection,
+    addResourceFromPalette,
     minimapNavigate,
-
-    undo: store.undo,
-    redo: store.redo,
-    canUndo: store.canUndo(),
-    canRedo: store.canRedo(),
-
-    validate: runValidate,
-    suggestRules: runSuggest,
-    exportJSON,
-    importJSONDialog,
-    importIaCDialog,
-    clear: store.clear,
-    loadPreset,
-    runValidateUI: runValidate,
-    runRulesUI: runSuggest,
-    saveToServer,
-    listSavedGraphs,
-    loadGraph,
-    deleteSavedGraph,
-    validationResults,
-    ruleSuggestions,
-    status,
   };
 
-  return <FlowContext.Provider value={value}>{children}</FlowContext.Provider>;
+  // Memoized so panels only re-render when something they read actually changes
+  // — NOT on every pan/zoom/hover (those live in FlowCanvasContext).
+  const value: FlowContextValue = React.useMemo(
+    () => ({
+      state,
+      worldRef,
+      svgRef,
+      minimapRef,
+      selection: store.selection,
+      selectedIds: store.selectedIds,
+
+      setMode: store.setMode,
+      toggleMode,
+      setDensity: store.setDensity,
+      focusContainer,
+      onNodeDoubleClick,
+      goToResource,
+      setSearchMatches: store.setSearchMatches,
+      breadcrumb,
+      focusedContainerId: store.focusedContainerId,
+
+      hiddenCategories: store.hiddenCategories,
+      hiddenRelClasses: store.hiddenRelClasses,
+      filterMode: store.filterMode,
+      environmentTint: store.environmentTint,
+      edgeStyle: store.edgeStyle,
+      setEdgeStyle: store.setEdgeStyle,
+      presentation: store.presentation,
+      setPresentation: store.setPresentation,
+      activeOverlay: store.activeOverlay,
+      setActiveOverlay: store.setActiveOverlay,
+      toggleCategory: store.toggleCategory,
+      toggleRelClass: store.toggleRelClass,
+      setFilterMode: store.setFilterMode,
+      setEnvironmentTint: store.setEnvironmentTint,
+      applyViewPreset,
+      savedViews,
+      saveView,
+      applySavedView,
+      deleteSavedView,
+
+      select: store.setSelection,
+      removeSelection: store.removeSelection,
+      duplicateSelection: store.duplicateSelection,
+      groupIntoVPC: store.groupIntoVPC,
+      updateResourceField,
+      updateRelationshipKind,
+
+      onCanvasClick: clearSelection,
+      setSpacePressed: interaction.setSpacePressed,
+      fitToView,
+      center,
+      tidy,
+      zoomIn,
+      zoomOut,
+      zoomReset,
+      zoomToSelection,
+
+      undo: store.undo,
+      redo: store.redo,
+      canUndo,
+      canRedo,
+
+      validate: runValidate,
+      suggestRules: runSuggest,
+      exportJSON,
+      importJSONDialog,
+      importIaCDialog,
+      clear: store.clear,
+      loadPreset,
+      runValidateUI: runValidate,
+      runRulesUI: runSuggest,
+      saveToServer,
+      listSavedGraphs,
+      loadGraph,
+      deleteSavedGraph,
+      validationResults,
+      ruleSuggestions,
+      status,
+    }),
+    [
+      state,
+      worldRef,
+      svgRef,
+      minimapRef,
+      store.selection,
+      store.selectedIds,
+      store.setMode,
+      toggleMode,
+      store.setDensity,
+      focusContainer,
+      onNodeDoubleClick,
+      goToResource,
+      store.setSearchMatches,
+      breadcrumb,
+      store.focusedContainerId,
+      store.hiddenCategories,
+      store.hiddenRelClasses,
+      store.filterMode,
+      store.environmentTint,
+      store.edgeStyle,
+      store.setEdgeStyle,
+      store.presentation,
+      store.setPresentation,
+      store.activeOverlay,
+      store.setActiveOverlay,
+      store.toggleCategory,
+      store.toggleRelClass,
+      store.setFilterMode,
+      store.setEnvironmentTint,
+      applyViewPreset,
+      savedViews,
+      saveView,
+      applySavedView,
+      deleteSavedView,
+      store.setSelection,
+      store.removeSelection,
+      store.duplicateSelection,
+      store.groupIntoVPC,
+      updateResourceField,
+      updateRelationshipKind,
+      clearSelection,
+      interaction.setSpacePressed,
+      fitToView,
+      center,
+      tidy,
+      zoomIn,
+      zoomOut,
+      zoomReset,
+      zoomToSelection,
+      store.undo,
+      store.redo,
+      canUndo,
+      canRedo,
+      runValidate,
+      runSuggest,
+      exportJSON,
+      importJSONDialog,
+      importIaCDialog,
+      store.clear,
+      loadPreset,
+      saveToServer,
+      listSavedGraphs,
+      loadGraph,
+      deleteSavedGraph,
+      validationResults,
+      ruleSuggestions,
+      status,
+    ],
+  );
+
+  return (
+    <FlowContext.Provider value={value}>
+      <FlowCanvasContext.Provider value={canvasValue}>{children}</FlowCanvasContext.Provider>
+    </FlowContext.Provider>
+  );
 };

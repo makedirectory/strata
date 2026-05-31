@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useRef } from "react";
-import { useFlow } from "../hooks/useFlow";
+import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { PALETTE_ADD_EVENT } from "./Palette";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
@@ -9,17 +9,24 @@ const GRID_MINOR = 16;
 
 export const Canvas: React.FC = () => {
   const gridRef = useRef<HTMLDivElement>(null);
+  // High-churn canvas slice (re-renders on pan/zoom/drag) — isolated from panels.
+  const {
+    viewport,
+    guides,
+    marquee,
+    draw,
+    drawMinimap,
+    onCanvasMouseDown,
+    onMouseMove,
+    onMouseUp,
+    onWheelZoom,
+    addResourceFromPalette,
+    minimapNavigate,
+  } = useFlowCanvas();
   const {
     worldRef,
     svgRef,
     minimapRef,
-    addResourceFromPalette,
-    onWheelZoom,
-    onMouseMove,
-    onMouseUp,
-    onCanvasMouseDown,
-    draw,
-    drawMinimap,
     state,
     toggleMode,
     removeSelection,
@@ -31,9 +38,6 @@ export const Canvas: React.FC = () => {
     zoomReset,
     zoomToSelection,
     fitToView,
-    guides,
-    marquee,
-    minimapNavigate,
     onNodeDoubleClick,
     focusContainer,
     breadcrumb,
@@ -108,7 +112,7 @@ export const Canvas: React.FC = () => {
   useEffect(() => {
     draw();
     drawMinimap();
-  }, [state.resources, state.relationships, state.viewport, state.mode, draw, drawMinimap]);
+  }, [state.resources, state.relationships, viewport, state.mode, draw, drawMinimap]);
 
   // Make the visible grid track the viewport so "snap to the visible grid" is
   // honest at any pan/zoom: background-position follows pan, size scales with
@@ -117,7 +121,7 @@ export const Canvas: React.FC = () => {
   useEffect(() => {
     const el = gridRef.current;
     if (!el) return;
-    const { x, y, scale } = state.viewport;
+    const { x, y, scale } = viewport;
     const major = GRID_MAJOR * scale;
     const minor = GRID_MINOR * scale;
     const images = [
@@ -135,7 +139,7 @@ export const Canvas: React.FC = () => {
     el.style.backgroundImage = images.join(", ");
     el.style.backgroundSize = sizes.join(", ");
     el.style.backgroundPosition = images.map(() => `${x}px ${y}px`).join(", ");
-  }, [state.viewport]);
+  }, [viewport]);
 
   // Mouse events
   useEffect(() => {
@@ -241,7 +245,7 @@ export const Canvas: React.FC = () => {
           className="guides"
           aria-hidden="true"
           style={{
-            transform: `translate(${state.viewport.x}px, ${state.viewport.y}px) scale(${state.viewport.scale})`,
+            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
           }}
         >
           {guides.map((g, i) =>
@@ -316,7 +320,7 @@ export const Canvas: React.FC = () => {
           −
         </button>
         <button type="button" className="zoom-level" onClick={zoomReset} title="Reset to 100%">
-          {Math.round(state.viewport.scale * 100)}%
+          {Math.round(viewport.scale * 100)}%
         </button>
         <button type="button" onClick={fitToView} title="Fit all to view">
           Fit

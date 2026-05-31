@@ -1,5 +1,5 @@
 /**
- * AWS Flow Builder — MCP / Real-Infrastructure Discovery Readiness Layer
+ * Strata — MCP / Real-Infrastructure Discovery Readiness Layer
  * ----------------------------------------------------------------------
  * This module is the bridge between *real* AWS infrastructure and the in-app
  * `InfrastructureGraph` domain model. It is intentionally a pure, dependency-
