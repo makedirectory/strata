@@ -251,4 +251,41 @@ describe("validateGraph", () => {
     expect(errors).toContain("Resource sn references missing parent nope");
     expect(errors).toContain("Relationship e1 references missing from ghost");
   });
+
+  it("flags a resource referencing an unknown service", () => {
+    const g = graph({ resources: [resource({ id: "x", serviceId: "not-a-real-service" })] });
+    expect(validateGraph(g)).toEqual(["Resource x references unknown service not-a-real-service"]);
+  });
+
+  it("flags a self-referential relationship (from === to)", () => {
+    const g = graph({
+      resources: [resource({ id: "a" })],
+      relationships: [relationship({ id: "e1", from: "a", to: "a" })],
+    });
+    expect(validateGraph(g)).toEqual(["Relationship e1 connects a to itself"]);
+  });
+
+  it("flags a duplicate relationship id", () => {
+    const g = graph({
+      resources: [resource({ id: "a" }), resource({ id: "b" }), resource({ id: "c" })],
+      relationships: [
+        relationship({ id: "e1", from: "a", to: "b" }),
+        relationship({ id: "e1", from: "b", to: "c" }),
+      ],
+    });
+    expect(validateGraph(g)).toEqual(["Duplicate relationship id e1"]);
+  });
+
+  it("rejects a non-object resource element (untrusted-body garbage)", () => {
+    const g = graph({ resources: [42 as unknown as ResourceInstance] });
+    expect(validateGraph(g)).toEqual(["Resource entry #0 is not a valid resource object"]);
+  });
+
+  it("rejects a non-object relationship element (untrusted-body garbage)", () => {
+    const g = graph({
+      resources: [resource({ id: "a" })],
+      relationships: ["nope" as unknown as Relationship],
+    });
+    expect(validateGraph(g)).toEqual(["Relationship entry #0 is not a valid relationship object"]);
+  });
 });

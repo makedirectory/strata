@@ -90,6 +90,17 @@ describe("mapDiscoveredToGraph", () => {
     expect(graph.resources[0].parentId).toBeUndefined();
   });
 
+  it("does not set a self-parent when parentArn equals the resource's own arn", () => {
+    // A resource whose parentArn points at itself would resolve to its own id —
+    // a self-parent cycle that infinite-loops tree-walking layout/UI.
+    const graph = mapDiscoveredToGraph([
+      { arn: "arn:vpc-1", resourceType: "AWS::EC2::VPC", parentArn: "arn:vpc-1" },
+    ]);
+
+    expect(graph.resources[0].parentId).toBeUndefined();
+    expect(validateGraph(graph)).toEqual([]);
+  });
+
   it("builds relationships and resolves target ARNs to graph ids", () => {
     const resources: DiscoveredResource[] = [
       {

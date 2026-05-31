@@ -174,7 +174,11 @@ export function mapDiscoveredToGraph(
     };
     if (res.region !== undefined) instance.region = res.region;
     if (res.accountId !== undefined) instance.accountId = res.accountId;
-    if (parentId !== undefined) instance.parentId = parentId;
+    // Skip a parent that resolves to the resource itself (a resource whose
+    // parentArn equals its own arn) — a self-parent passes validateGraph's
+    // existence check but infinite-loops tree-walking layout/UI code. The CFN
+    // importer has the equivalent guard (ref !== logicalId).
+    if (parentId !== undefined && parentId !== id) instance.parentId = parentId;
     if (res.arn !== undefined) instance.arn = res.arn;
 
     return instance;
