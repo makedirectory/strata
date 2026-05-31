@@ -1,0 +1,2654 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Palette DOM snapshots > renders the empty state when nothing matches 1`] = `
+<DocumentFragment>
+  <div
+    class="palette-root"
+  >
+    <input
+      aria-label="Search services"
+      class="palette-search"
+      placeholder="Search services…"
+      type="text"
+      value="zzzz-no-such-service"
+    />
+    <div
+      class="help"
+    >
+      No services match “zzzz-no-such-service”.
+    </div>
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1`] = `
+<DocumentFragment>
+  <div
+    class="palette-root"
+  >
+    <input
+      aria-label="Search services"
+      class="palette-search"
+      placeholder="Search services…"
+      type="text"
+      value="serverless"
+    />
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🖥️
+        </span>
+        <span>
+          Compute
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add AWS Lambda"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="AWS Lambda"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            λ
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Lambda
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          📦
+        </span>
+        <span>
+          Containers
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add AWS Fargate"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="AWS Fargate"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            ☁️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Fargate
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🛢️
+        </span>
+        <span>
+          Database
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Aurora"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon Aurora"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🌌
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Aurora
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon DynamoDB"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon DynamoDB"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            ⚡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            DynamoDB
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🔀
+        </span>
+        <span>
+          Application Integration
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon EventBridge"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Amazon EventBridge"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🔀
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            EventBridge
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Step Functions"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="AWS Step Functions"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🪜
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Step Functions
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          📈
+        </span>
+        <span>
+          Analytics
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Athena"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon Athena"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🧮
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Athena
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Glue"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="AWS Glue"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🧪
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Glue
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          📡
+        </span>
+        <span>
+          Edge & Front-End
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon CloudFront Lambda@Edge"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(45, 212, 191);"
+          title="Amazon CloudFront Lambda@Edge"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(45, 212, 191);"
+          >
+            🌩️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Lambda@Edge
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = `
+<DocumentFragment>
+  <div
+    class="palette-root"
+  >
+    <input
+      aria-label="Search services"
+      class="palette-search"
+      placeholder="Search services…"
+      type="text"
+      value=""
+    />
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🌐
+        </span>
+        <span>
+          Networking & Content Delivery
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Virtual Private Cloud"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon Virtual Private Cloud"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🏛️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            VPC
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC Subnet (Public)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC Subnet (Public)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🟩
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Public Subnet
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC Subnet (Private)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC Subnet (Private)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🟥
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Private Subnet
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC Route Table"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC Route Table"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧭
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Route Table
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC Network ACL"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC Network ACL"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🚧
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Network ACL
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC Internet Gateway"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC Internet Gateway"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🌍
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Internet Gateway
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC NAT Gateway"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC NAT Gateway"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            ↗️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            NAT Gateway
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC Security Group"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC Security Group"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧱
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Security Group
+          </span>
+        </button>
+        <button
+          aria-label="Add Elastic Load Balancing"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Elastic Load Balancing"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            ⚖️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            ALB / ELB
+          </span>
+        </button>
+        <button
+          aria-label="Add Elastic Load Balancing Target Group"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Elastic Load Balancing Target Group"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🎯
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Target Group
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Route 53"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon Route 53"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🧬
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Route 53
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC Peering Connection"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC Peering Connection"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🔗
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            VPC Peering
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Transit Gateway"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="AWS Transit Gateway"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🛰️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Transit Gateway
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon VPC Endpoint (PrivateLink)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon VPC Endpoint (PrivateLink)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🔌
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            VPC Endpoint
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🖥️
+        </span>
+        <span>
+          Compute
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Elastic Compute Cloud"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Amazon Elastic Compute Cloud"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🖥️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            EC2
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Lambda"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="AWS Lambda"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            λ
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Lambda
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon EC2 Auto Scaling Group"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Amazon EC2 Auto Scaling Group"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            📈
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Auto Scaling
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Batch"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="AWS Batch"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🧰
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Batch
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Lightsail"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Amazon Lightsail"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            💡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Lightsail
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Elastic Beanstalk"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="AWS Elastic Beanstalk"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            🌱
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Beanstalk
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          📦
+        </span>
+        <span>
+          Containers
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Elastic Container Service Cluster"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Amazon Elastic Container Service Cluster"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            📚
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            ECS Cluster
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Elastic Container Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Amazon Elastic Container Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            📦
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            ECS Service
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Elastic Kubernetes Service Cluster"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Amazon Elastic Kubernetes Service Cluster"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            ☸️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            EKS Cluster
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Elastic Container Registry"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Amazon Elastic Container Registry"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            🐳
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            ECR
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Fargate"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="AWS Fargate"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            ☁️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Fargate
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS App Runner"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="AWS App Runner"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            🏃
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            App Runner
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🗄️
+        </span>
+        <span>
+          Storage
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Simple Storage Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Amazon Simple Storage Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            🪣
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            S3
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Elastic Block Store"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Amazon Elastic Block Store"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            💽
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            EBS
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Elastic File System"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Amazon Elastic File System"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            🗄️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            EFS
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon FSx"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Amazon FSx"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            📁
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            FSx
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Storage Gateway"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="AWS Storage Gateway"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            🌉
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Storage Gateway
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Backup"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="AWS Backup"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            🛟
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Backup
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon S3 Glacier"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(52, 211, 153);"
+          title="Amazon S3 Glacier"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(52, 211, 153);"
+          >
+            ❄️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            S3 Glacier
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🛢️
+        </span>
+        <span>
+          Database
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Relational Database Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon Relational Database Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🛢️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            RDS
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Aurora"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon Aurora"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🌌
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Aurora
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon DynamoDB"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon DynamoDB"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            ⚡
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            DynamoDB
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon ElastiCache"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon ElastiCache"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🧊
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            ElastiCache
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon DocumentDB (with MongoDB compatibility)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon DocumentDB (with MongoDB compatibility)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🍃
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            DocumentDB
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Neptune"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon Neptune"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🔱
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Neptune
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon MemoryDB for Redis"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Amazon MemoryDB for Redis"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            💾
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            MemoryDB
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🔀
+        </span>
+        <span>
+          Application Integration
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Simple Queue Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Amazon Simple Queue Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            📨
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            SQS
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Simple Notification Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Amazon Simple Notification Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            📣
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            SNS
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon EventBridge"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Amazon EventBridge"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🔀
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            EventBridge
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Kinesis Data Streams"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Amazon Kinesis Data Streams"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🌊
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Kinesis Streams
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Step Functions"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="AWS Step Functions"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🪜
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Step Functions
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon API Gateway"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Amazon API Gateway"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🚪
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            API Gateway
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon MQ"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="Amazon MQ"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🐰
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Amazon MQ
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS AppSync"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(167, 139, 250);"
+          title="AWS AppSync"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(167, 139, 250);"
+          >
+            🔺
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            AppSync
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🛡️
+        </span>
+        <span>
+          Security & Compliance
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add AWS Secrets Manager"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="AWS Secrets Manager"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🔑
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Secrets Manager
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Key Management Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="AWS Key Management Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🔐
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            KMS
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS WAF"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="AWS WAF"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🛡️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            WAF
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Shield"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="AWS Shield"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🪖
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Shield
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon GuardDuty"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="Amazon GuardDuty"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🐶
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            GuardDuty
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Certificate Manager"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="AWS Certificate Manager"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🔏
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Certificate Manager
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Cognito"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="Amazon Cognito"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🧑
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cognito
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Security Hub"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="AWS Security Hub"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🏥
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Security Hub
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Inspector"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(248, 113, 113);"
+          title="Amazon Inspector"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(248, 113, 113);"
+          >
+            🕵️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Inspector
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🔑
+        </span>
+        <span>
+          Identity & Access
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add AWS Identity and Access Management Role"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 191, 36);"
+          title="AWS Identity and Access Management Role"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 191, 36);"
+          >
+            🎭
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            IAM Role
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Identity and Access Management User"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 191, 36);"
+          title="AWS Identity and Access Management User"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 191, 36);"
+          >
+            👤
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            IAM User
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Identity and Access Management Policy"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 191, 36);"
+          title="AWS Identity and Access Management Policy"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 191, 36);"
+          >
+            📜
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            IAM Policy
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Identity and Access Management Group"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 191, 36);"
+          title="AWS Identity and Access Management Group"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 191, 36);"
+          >
+            👥
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            IAM Group
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS IAM Identity Center"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 191, 36);"
+          title="AWS IAM Identity Center"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 191, 36);"
+          >
+            🪪
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Identity Center
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          📊
+        </span>
+        <span>
+          Monitoring & Observability
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon CloudWatch"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(96, 165, 250);"
+          title="Amazon CloudWatch"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(96, 165, 250);"
+          >
+            📊
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CloudWatch
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon CloudWatch Logs"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(96, 165, 250);"
+          title="Amazon CloudWatch Logs"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(96, 165, 250);"
+          >
+            🗒️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CloudWatch Logs
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon CloudWatch Alarm"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(96, 165, 250);"
+          title="Amazon CloudWatch Alarm"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(96, 165, 250);"
+          >
+            🚨
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CloudWatch Alarm
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS X-Ray"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(96, 165, 250);"
+          title="AWS X-Ray"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(96, 165, 250);"
+          >
+            🔬
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            X-Ray
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS CloudTrail"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(96, 165, 250);"
+          title="AWS CloudTrail"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(96, 165, 250);"
+          >
+            🧾
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CloudTrail
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          📈
+        </span>
+        <span>
+          Analytics
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon Athena"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon Athena"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🧮
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Athena
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Glue"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="AWS Glue"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🧪
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Glue
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Redshift"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon Redshift"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🏬
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Redshift
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon EMR"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon EMR"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🐘
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            EMR
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Data Firehose"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon Data Firehose"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🚒
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Firehose
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon QuickSight"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon QuickSight"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            📺
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            QuickSight
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon OpenSearch Service"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon OpenSearch Service"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🔭
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            OpenSearch
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Lake Formation"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="AWS Lake Formation"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🏞️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Lake Formation
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Managed Streaming for Apache Kafka"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon Managed Streaming for Apache Kafka"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            📩
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            MSK
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🤖
+        </span>
+        <span>
+          Machine Learning & AI
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon SageMaker"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon SageMaker"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🧠
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            SageMaker
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Bedrock"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Bedrock"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🪨
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Bedrock
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Rekognition"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Rekognition"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            👁️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Rekognition
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Comprehend"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Comprehend"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            💬
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Comprehend
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Textract"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Textract"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            📄
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Textract
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Transcribe"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Transcribe"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🎙️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Transcribe
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Polly"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Polly"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🗣️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Polly
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Translate"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Translate"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🈯
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Translate
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Lex"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Lex"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🤖
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Lex
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Kendra"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Kendra"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            🔎
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Kendra
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          🚀
+        </span>
+        <span>
+          Developer Tools & Deployment
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add AWS CodePipeline"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(129, 140, 248);"
+          title="AWS CodePipeline"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(129, 140, 248);"
+          >
+            🚦
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CodePipeline
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS CodeBuild"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(129, 140, 248);"
+          title="AWS CodeBuild"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(129, 140, 248);"
+          >
+            🔨
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CodeBuild
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS CodeDeploy"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(129, 140, 248);"
+          title="AWS CodeDeploy"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(129, 140, 248);"
+          >
+            🚢
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CodeDeploy
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS CodeCommit"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(129, 140, 248);"
+          title="AWS CodeCommit"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(129, 140, 248);"
+          >
+            🔖
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CodeCommit
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS CloudFormation"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(129, 140, 248);"
+          title="AWS CloudFormation"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(129, 140, 248);"
+          >
+            📐
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CloudFormation
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Amplify"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(129, 140, 248);"
+          title="AWS Amplify"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(129, 140, 248);"
+          >
+            🟧
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Amplify
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          ⚙️
+        </span>
+        <span>
+          Management & Governance
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add AWS Organizations"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(148, 163, 184);"
+          title="AWS Organizations"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(148, 163, 184);"
+          >
+            🏢
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Organizations
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Config"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(148, 163, 184);"
+          title="AWS Config"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(148, 163, 184);"
+          >
+            📋
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Config
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Systems Manager"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(148, 163, 184);"
+          title="AWS Systems Manager"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(148, 163, 184);"
+          >
+            🛠️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Systems Manager
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Cost Explorer"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(148, 163, 184);"
+          title="AWS Cost Explorer"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(148, 163, 184);"
+          >
+            💰
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cost Explorer
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Control Tower"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(148, 163, 184);"
+          title="AWS Control Tower"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(148, 163, 184);"
+          >
+            🗼
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Control Tower
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Trusted Advisor"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(148, 163, 184);"
+          title="AWS Trusted Advisor"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(148, 163, 184);"
+          >
+            ✅
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Trusted Advisor
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="palette-section"
+    >
+      <div
+        class="palette-section-header"
+      >
+        <span
+          class="palette-section-icon"
+        >
+          📡
+        </span>
+        <span>
+          Edge & Front-End
+        </span>
+      </div>
+      <div
+        class="palette-items"
+      >
+        <button
+          aria-label="Add Amazon CloudFront"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(45, 212, 191);"
+          title="Amazon CloudFront"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(45, 212, 191);"
+          >
+            🌐
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            CloudFront
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Global Accelerator"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(45, 212, 191);"
+          title="AWS Global Accelerator"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(45, 212, 191);"
+          >
+            🚄
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Global Accelerator
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon CloudFront Lambda@Edge"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(45, 212, 191);"
+          title="Amazon CloudFront Lambda@Edge"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(45, 212, 191);"
+          >
+            🌩️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Lambda@Edge
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+</DocumentFragment>
+`;

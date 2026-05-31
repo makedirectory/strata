@@ -1,0 +1,42 @@
+---
+title: User Guide — Overview
+---
+
+# User Guide
+
+**Strata** is a design-first canvas for modeling AWS infrastructure as a typed,
+visual diagram. Drag services from a palette onto a canvas, configure them with
+auto-generated forms, connect them with typed relationships, validate the design,
+and import existing CloudFormation or Terraform to see it rendered.
+
+This guide is for everyone using the app — no engineering background required. If
+you want to know how Strata works internally, see the
+[Architecture & Engineering](/docs/architecture) docs.
+
+## What you can do
+
+- **[Build a diagram](/docs/guide/getting-started)** — start from the hub (blank, a
+  template, or an import), drag services from the palette, and connect them with
+  typed relationships, configuring each resource in the inspector.
+- **[Navigate the canvas](/docs/guide/canvas)** — zoom, pan, the minimap,
+  multi-select, nesting and container focus, and the **⌘K** command palette.
+- **[Filter, theme & analyze](/docs/guide/views)** — layer filters and view
+  presets, environment tint, presentation mode, and IAM / network / heat overlays.
+- **[Import infrastructure](/docs/guide/importing-iac)** — load a CloudFormation
+  template (JSON or YAML) or Terraform `show -json` output and see it rendered
+  automatically.
+- **[Validate](/docs/guide/validation)** — run architecture checks and get
+  best-practice rule suggestions for security groups, route tables, and more.
+- **[Save & load](/docs/guide/saving)** — persist diagrams to the server, reopen
+  them later, or export/import the diagram as portable JSON.
+
+## Launch the app
+
+```bash
+npm install
+npm run dev
+```
+
+The product opens at `http://localhost:3000/` and these docs at
+`http://localhost:3000/docs`. Diagrams persist to a local file store under
+`.data/graphs/` by default — no external infrastructure required.

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & discussions
+    url: https://github.com/makedirectory/aws-flow-builder/discussions
+    about: Ask a question, share an idea, or discuss usage. Issues are for bugs and concrete feature requests.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/makedirectory/aws-flow-builder/security/advisories/new
+    about: Please report security issues privately via a draft advisory — do not open a public issue.

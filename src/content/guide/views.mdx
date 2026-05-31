@@ -1,0 +1,77 @@
+---
+title: Views, Layers & Overlays
+---
+
+# Views, Layers & Overlays
+
+As a diagram grows, the value isn't in seeing _everything_ at once — it's in being
+able to ask focused questions of it. Strata's **Layers & Views** and **Overlays**
+controls (in the left panel) let you filter, re-style, and analyze the graph
+without changing the underlying model.
+
+## Layers & filters
+
+Filter what's on screen by:
+
+- **Relationship class** — toggle **Network**, **Data flow**, **Dependency**,
+  **Permission**, and **Observability** edges on or off. Each class has its own
+  colour and line style.
+- **Service category** — show or hide whole categories (compute, storage,
+  database, …).
+
+The **filter mode** decides what happens to filtered-out elements:
+
+- **Dim** — keep them visible but greyed back, so they stay as context.
+- **Hide** — remove them from the view entirely.
+
+## Edge style
+
+Switch edges between **Curved** (smooth bezier) and **Orthogonal** (right-angle
+routing) under **Edges** — orthogonal often reads better for dense, grid-like
+layouts.
+
+## View presets
+
+One click applies a curated combination of the filters above:
+
+- **All** — everything visible.
+- **Network** — emphasize network connectivity.
+- **Security** — emphasize permission relationships.
+- **Data flow** — emphasize data movement.
+- **High-level** — collapse containers for an at-a-glance overview.
+
+### Saved views
+
+Set up the filters you like, type a name under **Save current as…**, and save it.
+Saved views are stored in your browser and can be re-applied or deleted later.
+
+## Environment tint
+
+Toggle **Environment tint** to colour nodes by their account/environment — prod,
+staging, dev, and so on — so multi-account or multi-environment diagrams are easy
+to read at a glance.
+
+## Analytical overlays
+
+Overlays trace the relationship graph to answer a specific question, lighting the
+relevant resources and dimming the rest. They're **selection-aware** — select a
+node first to trace _from_ it; with nothing selected they show the whole picture.
+
+- **IAM trust** — follows permission edges (`allows`, `assumes`, `grants`) to show
+  the trust chain.
+- **Network paths** — follows network edges (`routes_to`, `connects_to`, …) to show
+  reachability.
+- **Heat (degree)** — tints each node by how many connections it has, surfacing the
+  busiest hubs in the architecture.
+- **None** — clears the overlay.
+
+> Overlays are a **topology** view derived from the diagram's relationships — they
+> trace the edges you've drawn or imported, not live security-group rules or real
+> traffic.
+
+## Presentation mode
+
+Click **▶** in the toolbar (or run _Presentation mode_ from the command palette) to
+enter a clean, **read-only** view for sharing or demos: the palette is hidden and
+editing is disabled, but you can still pan, zoom, and click nodes to inspect them.
+Click **Exit presentation** to return to editing.

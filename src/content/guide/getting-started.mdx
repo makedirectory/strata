@@ -1,0 +1,96 @@
+---
+title: Getting Started
+---
+
+# Build Your First Diagram
+
+This walkthrough takes you from an empty canvas to a small, connected AWS
+architecture. Start the app with `npm run dev` and open `http://localhost:3000/`.
+
+## The layout
+
+The screen has three regions:
+
+- **Palette & controls** (left) — every AWS service, grouped by category
+  (networking, compute, storage, database, …) with a search box, plus the
+  **Density**, **Layers & Views**, and **Overlays** controls described in
+  [Views, Layers & Overlays](/docs/guide/views).
+- **Canvas** (center) — where your diagram lives. Pan, zoom, nest, and arrange
+  resources here. See [Navigating the Canvas](/docs/guide/canvas).
+- **Inspector** (right) — the configuration form for the selected node, plus the
+  **Validate** and **Suggest rules** actions.
+
+A toolbar runs across the top: **+ New** (the Start hub), **Undo / Redo**,
+**Save**, **Open ▾** (your saved diagrams), a **File** menu (Import/Export JSON,
+Import IaC, Clear canvas), an **Analyze** menu (Validate, Suggest rules), and
+**▶** to enter [presentation mode](/docs/guide/views#presentation-mode).
+
+## 1. Choose a starting point
+
+Click **+ New** (or **Start here** on an empty canvas) to open the **Start hub**,
+which offers a few ways to begin:
+
+- **Start blank** — an empty canvas.
+- **Start from a template** — a ready-made example such as a basic AWS layout.
+- **Import IaC** — bring in a Terraform or CloudFormation file (see
+  [Importing IaC](/docs/guide/importing-iac)).
+- **Import Strata JSON** — reopen a diagram you previously exported.
+
+Pick **Start blank** to follow along.
+
+## 2. Add a service
+
+You have three ways to place a service:
+
+- **Drag & drop** — drag a service from the palette and drop it on the canvas. A
+  node appears where you dropped it, coloured and iconed by its category.
+- **Click** a palette item to drop it near the center of the view.
+- **Command palette** — press **⌘K** (macOS) or **Ctrl K**, type a service name,
+  and choose **Add …**.
+
+Type in the palette's search box (e.g. `vpc`, `lambda`, `s3`) to filter the list —
+it matches names _and_ keywords, so searching `object` finds S3.
+
+## 3. Configure it (the inspector)
+
+Click a node to select it. The inspector on the right shows a form built
+automatically from that service's fields — a VPC has a CIDR block, an EC2 instance
+has an instance type, and so on. Edits are stored on the resource immediately.
+Every service gets the right form with no special-casing, because the form is
+generated from the service definition.
+
+## 4. Connect resources (typed relationships)
+
+Connections in Strata are **typed** — never anonymous lines. An edge means
+something specific (`routes_to`, `invokes`, `reads_from`, `allows`, …) and is
+drawn in the colour and dash pattern of its **relationship class** (network, data,
+dependency, permission, observability).
+
+1. Switch the canvas to **Connect** mode — click **Connect** or press `C`.
+2. Click the source node, then the target node, to create an edge. The
+   relationship type is inferred from the two services involved.
+3. Press `C` again (or click **Move**) to go back to moving nodes.
+
+Select an edge to change its relationship kind in the inspector.
+
+## 5. Group into containers
+
+Drag a node **onto a VPC, subnet, or other container** to nest it inside —
+containment is real nesting, not just a line. Containers auto-pack their children,
+and you can **double-click a container to focus** it (zoom in and dim everything
+else). Select nodes and press `G` to wrap them in a new VPC.
+
+## 6. Undo / redo
+
+Every change is tracked. Use the **Undo** / **Redo** toolbar buttons, or
+`⌘Z` / `⇧⌘Z` (`Ctrl Z` / `Ctrl Y`).
+
+## Next steps
+
+- [Navigate the canvas](/docs/guide/canvas) — zoom, pan, the minimap, multi-select,
+  the ⌘K command palette, and keyboard shortcuts.
+- [Views, layers & overlays](/docs/guide/views) — filter by relationship or
+  category, apply view presets, and trace IAM / network / heat overlays.
+- Already have infrastructure? [Import CloudFormation or Terraform](/docs/guide/importing-iac).
+- [Validate your design](/docs/guide/validation) and get rule suggestions.
+- [Save your diagram](/docs/guide/saving) so you can reopen it later.

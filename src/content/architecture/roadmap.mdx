@@ -1,0 +1,72 @@
+---
+title: Roadmap
+---
+
+# Roadmap — Shipped & Still Open
+
+A candid assessment of what has landed recently and what remains incomplete or will
+break at scale.
+
+## Recently shipped
+
+The canvas work (Phases 1–6) closed several of the largest gaps this doc used to
+list:
+
+- **Nested rendering.** Containment (`parentId`, `isContainer`) now renders
+  visually — children are packed inside their parent's bounds, with collapse,
+  drag-to-reparent, and double-click container focus. The layout lives in a pure,
+  tested engine (`src/canvas/layout.ts`). See [Visual Mapping](/docs/architecture/visual-mapping).
+- **A renderer that scales.** `useCanvasRenderer` is now a **reconciling**
+  renderer (diff-and-patch keyed records, no `innerHTML` wipe) with **viewport
+  culling** and **semantic level-of-detail**, plus **auto-layout** ("Tidy" via
+  `gridPack`). Hand-built and imported graphs both stay responsive.
+- **IAM / network / heat as overlays.** Instead of drawing every IAM role or
+  security relationship as a peer node, these are **toggleable overlays**
+  (`src/aws/overlays.ts`) that trace the relationship graph and highlight the
+  resources involved.
+- **Cheap history.** Undo/redo (`src/hooks/useHistory.tsx`) now relies on
+  structural sharing — the store mutates immutably, so snapshots reuse unchanged
+  references instead of deep-cloning the whole graph each action.
+- **CI guardrails.** `validateRegistry()` runs in tests, and the test/lint/build
+  suite (including registry and rendered-UI snapshots) runs in GitHub Actions. See
+  [Testing](/docs/architecture/testing).
+
+## Still open
+
+### 1. Id strategy: UUID vs ARN coexistence
+
+Manually-created resources get server-assigned UUIDs (`randomUUID()`); imported
+resources have real ARNs. `ResourceInstance` carries both (`id` + optional `arn`),
+but there is no defined policy for de-duplication, re-import/merge, or stable
+identity across imports.
+
+**Next:** define ARN as the stable external key, keep UUID as the internal id, and
+build a merge/upsert path so re-importing an AWS account updates existing resources
+instead of duplicating them.
+
+### 2. Overlays are topology, not policy
+
+The IAM and network overlays trace the **modeled relationship graph** — the edges
+you drew or imported — not real security-group rules, NACLs, or IAM policy
+evaluation. They're a legibility aid, not a reachability or trust analysis.
+
+**Next:** evaluate actual SG/NACL/route and IAM policy semantics (from imported
+config) to back the overlays with real reachability, clearly distinguished from the
+hand-drawn topology.
+
+### 3. Auth and multi-tenancy are absent on the server
+
+The Route Handlers and `Repository` have no concept of a user, tenant, or
+authorization — any caller can list/read/write/delete any graph. This is acceptable
+for local/demo use only.
+
+**Next:** add authentication, per-tenant scoping on every `Repository` method, and
+authorization checks in the Route Handlers before any multi-user deployment.
+
+### 4. Round-trip IaC export
+
+Import (Terraform / CloudFormation → diagram) works; the reverse — generating IaC
+from a diagram — is stubbed in the UI as "coming soon".
+
+**Next:** emit CloudFormation/Terraform from the graph using each service's
+`cfnType` and config schema, closing the design → code loop.
