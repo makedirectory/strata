@@ -29,7 +29,12 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        # Resolve fresh from package.json (ignore the committed, macOS-generated
+        # lockfile): both `npm ci` and a lockfile-respecting `npm install` skip
+        # the Linux native bindings it doesn't pin (rolldown, simple-git,
+        # lightningcss…). --no-package-lock makes npm fetch each runner's correct
+        # platform binaries. See npm/cli#4828.
+        run: npm install --no-package-lock --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck
@@ -60,7 +65,12 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        # Resolve fresh from package.json (ignore the committed, macOS-generated
+        # lockfile): both `npm ci` and a lockfile-respecting `npm install` skip
+        # the Linux native bindings it doesn't pin (rolldown, simple-git,
+        # lightningcss…). --no-package-lock makes npm fetch each runner's correct
+        # platform binaries. See npm/cli#4828.
+        run: npm install --no-package-lock --no-audit --no-fund
 
       - name: Test with coverage
         run: npm run test:coverage
@@ -88,7 +98,12 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        # Resolve fresh from package.json (ignore the committed, macOS-generated
+        # lockfile): both `npm ci` and a lockfile-respecting `npm install` skip
+        # the Linux native bindings it doesn't pin (rolldown, simple-git,
+        # lightningcss…). --no-package-lock makes npm fetch each runner's correct
+        # platform binaries. See npm/cli#4828.
+        run: npm install --no-package-lock --no-audit --no-fund
 
       - name: Build
         run: npm run build
