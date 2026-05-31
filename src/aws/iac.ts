@@ -29,7 +29,7 @@ import { emptyGraph, DEFAULT_NODE_SIZE } from "./model";
 import type { RelationshipKind } from "./types";
 import { getService, getServiceByCfnType } from "./registry";
 
-export type IacFormat = "cloudformation" | "terraform";
+export type IacFormat = "cloudformation" | "terraform" | "arm";
 
 export interface IacImportResult {
   graph: InfrastructureGraph;
@@ -475,12 +475,23 @@ export function importTerraform(
     );
   }
 
-  // Map a concrete resource `id` attribute -> address, so containment links
-  // (vpc_id/subnet_id holding a resolved id) can resolve to a parent address.
-  const idToAddress = new Map<string, string>();
+  // Map a containment reference -> the parent's address. A child points at its
+  // parent by different attributes per provider/resource: AWS uses the resolved
+  // `id` (vpc_id/subnet_id), while GCP uses the `name` or a `self_link`
+  // (".../networks/main"). Index id, name and self_link, and also key by the
+  // last path segment so a self_link reference resolves to a parent named after
+  // that segment.
+  const refToAddress = new Map<string, string>();
+  const lastSegment = (s: string): string => s.split("/").filter(Boolean).pop() ?? s;
   for (const r of collected) {
-    const rid = r.values?.id;
-    if (typeof rid === "string") idToAddress.set(rid, r.address);
+    for (const key of ["id", "name", "self_link", "self_link_unique"]) {
+      const v = r.values?.[key];
+      if (typeof v === "string" && v) {
+        if (!refToAddress.has(v)) refToAddress.set(v, r.address);
+        const seg = lastSegment(v);
+        if (!refToAddress.has(seg)) refToAddress.set(seg, r.address);
+      }
+    }
   }
 
   const items: ResolvedItem[] = [];
@@ -495,12 +506,15 @@ export function importTerraform(
     }
     const values = r.values ?? {};
     // Containment from a resolved reference (vpc_id/subnet_id for AWS,
-    // network/subnetwork for GCP, …) pointing at a known resource.
+    // network/subnetwork for GCP, …) pointing at a known resource — matched
+    // exactly or by the reference's last path segment (GCP self_links).
     let parentId: string | undefined;
     for (const key of containmentKeys) {
       const v = values[key];
-      if (typeof v === "string" && idToAddress.has(v)) {
-        parentId = idToAddress.get(v);
+      if (typeof v !== "string" || !v) continue;
+      const hit = refToAddress.get(v) ?? refToAddress.get(lastSegment(v));
+      if (hit && hit !== r.address) {
+        parentId = hit;
         break;
       }
     }

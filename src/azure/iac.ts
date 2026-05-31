@@ -89,26 +89,47 @@ export function importArm(template: unknown, name = "ARM Import"): IacImportResu
   const flat: { res: ArmResource; parentName?: string }[] = [];
   flattenArm(template.resources as ArmResource[], undefined, flat);
 
-  const names = new Set(flat.map((f) => f.res.name));
+  // Assign a UNIQUE graph id to every resource. ARM names are unique only within
+  // a type, so two resources of different types can share a name; suffix dupes so
+  // the graph never gets duplicate ids. `nameToId` resolves dependsOn/parent name
+  // references to the canonical (first) id for that name.
+  const usedIds = new Set<string>();
+  const nameToId = new Map<string, string>();
+  const idByIndex: string[] = flat.map(({ res }) => {
+    let id = res.name;
+    if (usedIds.has(id)) {
+      let n = 2;
+      while (usedIds.has(`${res.name}#${n}`)) n++;
+      id = `${res.name}#${n}`;
+      warnings.push(`Duplicate ARM resource name "${res.name}" — distinct nodes created.`);
+    }
+    usedIds.add(id);
+    if (!nameToId.has(res.name)) nameToId.set(res.name, id);
+    return id;
+  });
+
   const items: ResolvedItem[] = [];
   const unmapped = new Set<string>();
 
-  for (const { res, parentName } of flat) {
+  flat.forEach(({ res, parentName }, i) => {
     const svc = getServiceByNativeType("azure", res.type);
     if (!svc) {
       unmapped.add(res.type);
-      continue;
+      return;
     }
     const props = isRecord(res.properties) ? res.properties : {};
+    const id = idByIndex[i];
 
-    // Relationships from dependsOn (resourceId expressions resolved to names).
+    // Resolve the containment parent name → its canonical id.
+    const parentId = parentName && parentName !== res.name ? nameToId.get(parentName) : undefined;
+
+    // Relationships from dependsOn (resourceId expressions resolved to ids).
     const rels: { to: string; kind: RelationshipKind }[] = [];
-    const parent =
-      parentName && names.has(parentName) && parentName !== res.name ? parentName : undefined;
     for (const dep of res.dependsOn ?? []) {
-      const target = armDependsOnTarget(dep);
-      if (target && names.has(target) && target !== res.name && target !== parent) {
-        rels.push({ to: target, kind: "depends_on" });
+      const targetName = armDependsOnTarget(dep);
+      const targetId = targetName ? nameToId.get(targetName) : undefined;
+      if (targetId && targetId !== id && targetId !== parentId) {
+        rels.push({ to: targetId, kind: "depends_on" });
       }
     }
 
@@ -119,15 +140,15 @@ export function importArm(template: unknown, name = "ARM Import"): IacImportResu
     }
 
     items.push({
-      id: res.name,
+      id,
       serviceId: svc.id,
       name: res.name.includes("/") ? res.name.split("/").slice(-1)[0] : res.name,
-      parentId: parent,
+      parentId,
       properties: props,
       relationships: rels,
       raw,
     });
-  }
+  });
 
   if (items.length === 0)
     warnings.push("No resources matched the service registry — nothing to render.");
@@ -139,7 +160,7 @@ export function importArm(template: unknown, name = "ARM Import"): IacImportResu
 
   return {
     graph: buildGraph(items, name, captureArmSections(template)),
-    format: "cloudformation", // shared IacImportResult format union; ARM rides the CFN-like path
+    format: "arm",
     unmappedTypes: [...unmapped],
     warnings,
   };

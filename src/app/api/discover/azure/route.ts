@@ -38,7 +38,14 @@ function parseBody(body: unknown): ScanSpec | null {
   return { subscriptions, types };
 }
 
-/** Adapt `ResourceGraphClient` to our small `ResourceGraphClientLike` surface. */
+/**
+ * Adapt `ResourceGraphClient` to our small `ResourceGraphClientLike` surface.
+ *
+ * NOTE: the `client.resources(...)` response shape (`.data` rows + `.skipToken`)
+ * is UNVERIFIED against a live Azure tenant; `.data` is read defensively and a
+ * missing field just ends pagination. Smoke-test once with `az login` before
+ * relying on it.
+ */
 async function makeClient(): Promise<ResourceGraphClientLike> {
   const { ResourceGraphClient } = await import("@azure/arm-resourcegraph");
   const { DefaultAzureCredential } = await import("@azure/identity");

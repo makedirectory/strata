@@ -46,13 +46,28 @@ describe("ARM detection + import", () => {
     expect(isArmTemplate({ Resources: {} })).toBe(false);
   });
 
-  it("maps ARM types to Azure services", () => {
-    const { graph, unmappedTypes } = importArm(armTemplate);
-    expect(unmappedTypes).toEqual([]);
-    expect(graph.resources).toHaveLength(3);
-    for (const r of graph.resources) {
+  it("maps ARM types to Azure services and reports format 'arm'", () => {
+    const result = importArm(armTemplate);
+    expect(result.format).toBe("arm");
+    expect(result.unmappedTypes).toEqual([]);
+    expect(result.graph.resources).toHaveLength(3);
+    for (const r of result.graph.resources) {
       expect(getService(r.serviceId)?.provider).toBe("azure");
     }
+  });
+
+  it("gives cross-type duplicate names distinct ids (valid graph) and warns", () => {
+    // A VNet and a Storage Account that happen to share the name "shared".
+    const dupes = {
+      resources: [
+        { type: "Microsoft.Network/virtualNetworks", name: "shared", properties: {} },
+        { type: "Microsoft.Storage/storageAccounts", name: "shared", properties: {} },
+      ],
+    };
+    const { graph, warnings } = importArm(dupes);
+    expect(graph.resources).toHaveLength(2);
+    expect(new Set(graph.resources.map((r) => r.id)).size).toBe(2);
+    expect(warnings.some((w) => w.includes("Duplicate ARM resource name"))).toBe(true);
   });
 
   it("nests a child resource (server/database) under its parent", () => {

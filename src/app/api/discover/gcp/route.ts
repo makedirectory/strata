@@ -70,28 +70,48 @@ function structToPlain(value: unknown): unknown {
   return value;
 }
 
-/** Adapt the `AssetServiceClient` to our small `CloudAssetClientLike` surface. */
+/**
+ * Adapt the `AssetServiceClient` to our small `CloudAssetClientLike` surface.
+ *
+ * NOTE: the exact gax return shape (tuple vs async-iterable) and whether
+ * `resource.data` arrives as a protobuf Struct or pre-decoded JSON is UNVERIFIED
+ * against a live GCP project — both shapes are handled defensively below, and
+ * the normalising layer keeps only registry-known config, so an unexpected
+ * shape degrades to sparse nodes rather than crashing. Smoke-test once with real
+ * Application Default Credentials before relying on it.
+ */
 async function makeClient(): Promise<CloudAssetClientLike> {
   const { AssetServiceClient } = await import("@google-cloud/asset");
   const client = new AssetServiceClient();
+  const toCloudAsset = (a: {
+    name?: string | null;
+    assetType?: string | null;
+    resource?: { data?: unknown; parent?: string | null; location?: string | null } | null;
+  }): CloudAsset => ({
+    name: a.name ?? undefined,
+    assetType: a.assetType ?? undefined,
+    resource: {
+      data: structToPlain(a.resource?.data) as Record<string, unknown> | undefined,
+      parent: a.resource?.parent ?? undefined,
+      location: a.resource?.location ?? undefined,
+    },
+  });
   return {
     async listAssets(scope: string, assetTypes: string[]): Promise<CloudAsset[]> {
-      // Auto-paginates; the first tuple element is the full asset list.
-      const [assets] = await client.listAssets({
+      const request = {
         parent: scope,
-        contentType: "RESOURCE",
+        contentType: "RESOURCE" as const,
         assetTypes,
         pageSize: 500,
-      });
-      return (assets ?? []).map((a) => ({
-        name: a.name ?? undefined,
-        assetType: a.assetType ?? undefined,
-        resource: {
-          data: structToPlain(a.resource?.data) as Record<string, unknown> | undefined,
-          parent: a.resource?.parent ?? undefined,
-          location: a.resource?.location ?? undefined,
-        },
-      }));
+      };
+      const result: unknown = await client.listAssets(request);
+      // Auto-paginate form returns `[assets, ...]`; tolerate a bare array too.
+      const assets = Array.isArray(result)
+        ? Array.isArray(result[0])
+          ? (result[0] as unknown[])
+          : (result as unknown[])
+        : [];
+      return assets.map((a) => toCloudAsset(a as Parameters<typeof toCloudAsset>[0]));
     },
   };
 }

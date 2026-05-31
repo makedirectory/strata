@@ -21,7 +21,19 @@ vi.mock("@google-cloud/asset", () => {
           {
             name: "//compute.googleapis.com/projects/p/global/networks/main",
             assetType: "compute.googleapis.com/Network",
-            resource: { data: { fields: { name: { stringValue: "main" } } } },
+            resource: {
+              data: {
+                fields: {
+                  name: { stringValue: "main" },
+                  autoCreate: { boolValue: false },
+                  mtu: { numberValue: 1460 },
+                  peerings: {
+                    listValue: { values: [{ stringValue: "p1" }, { stringValue: "p2" }] },
+                  },
+                  routingConfig: { structValue: { fields: { mode: { stringValue: "REGIONAL" } } } },
+                },
+              },
+            },
           },
         ],
       ];
@@ -61,8 +73,14 @@ describe("POST /api/discover/gcp", () => {
     const body = await res.json();
     expect(body.resources).toHaveLength(1);
     expect(body.resources[0].provider).toBe("gcp");
-    // The protobuf Struct (`fields`) was decoded to a plain object.
-    expect(body.resources[0].properties.name).toBe("main");
+    // The protobuf Struct (`fields`) was decoded to plain JSON, including nested
+    // list / struct / scalar Value wrappers.
+    const props = body.resources[0].properties;
+    expect(props.name).toBe("main");
+    expect(props.autoCreate).toBe(false);
+    expect(props.mtu).toBe(1460);
+    expect(props.peerings).toEqual(["p1", "p2"]);
+    expect(props.routingConfig).toEqual({ mode: "REGIONAL" });
   });
 
   it("rejects a hosted scan (422) and never constructs the SDK client", async () => {
