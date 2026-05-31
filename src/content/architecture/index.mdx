@@ -47,32 +47,38 @@ MCP-native** tool:
   read-only picture of what already exists.
 - **Local-first, zero infrastructure** — runs from a single Next.js process with a
   file store; no multi-service stack to deploy.
-- **MCP-native** — the registry (typed relationships, `cfnType` join keys, config
-  schemas) is built as a substrate an LLM/agent can reason over. MCP discovery is
-  used to **import a slice of reality to reconcile/annotate a design** (see
-  [MCP Integration](/docs/architecture/mcp-integration)), not to be a discovery
-  platform.
+- **MCP-native (as a design substrate, not a running server)** — the registry
+  (typed relationships, `cfnType` join keys, config schemas) is built so an
+  LLM/agent could reason over it. **There is no MCP server in the codebase today**:
+  `src/aws/mcp.ts` is a pure transform and live discovery is a Cloud Control SDK
+  call (see [Live Discovery & MCP](/docs/architecture/mcp-integration)). The intent
+  is to **import a slice of reality to reconcile/annotate a design**, not to be a
+  discovery platform — and to keep the ingestion shape ready for an MCP producer
+  later.
 - **Portable diagram-as-code** — the `InfrastructureGraph` JSON is
   version-controllable and not locked in a proprietary datastore.
 
 ## Layer map
 
-| Layer                     | Location                                                                                             | Responsibility                                             |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Service registry / schema | `src/aws/types.ts`, `src/aws/registry.ts`, `src/aws/categories.ts`, `src/aws/services/*.ts`          | The canonical AWS vocabulary                               |
-| Domain model              | `src/aws/model.ts`, `src/aws/regions.ts`                                                             | Persisted environment representation                       |
-| Canvas engine             | `src/canvas/*` (`geometry.ts`, `layout.ts`), `src/aws/relationshipClasses.ts`, `src/aws/overlays.ts` | Pure geometry, containment layout, edge encoding, overlays |
-| Visual / UI               | `src/components/*`, `src/hooks/*`                                                                    | Palette, canvas, inspector                                 |
-| Server / persistence      | `src/server/*`, `src/app/api/graphs/*`                                                               | Repository + Route Handlers                                |
-| Import readiness          | `src/aws/mcp.ts`, `src/aws/iac.ts`                                                                   | MCP / Cloud Control + IaC ingestion                        |
+| Layer                     | Location                                                                                                            | Responsibility                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Service registry / schema | `src/aws/types.ts`, `src/aws/registry.ts`, `src/aws/categories.ts`, `src/aws/services/*.ts`                         | The canonical AWS vocabulary                               |
+| Domain model              | `src/aws/model.ts`, `src/aws/regions.ts`                                                                            | Persisted environment representation                       |
+| Canvas engine             | `src/canvas/*` (`geometry.ts`, `layout.ts`), `src/aws/relationshipClasses.ts`, `src/aws/overlays.ts`                | Pure geometry, containment layout, edge encoding, overlays |
+| Visual / UI               | `src/components/*`, `src/hooks/*`                                                                                   | Palette, canvas, inspector                                 |
+| Server / persistence      | `src/server/*`, `src/app/api/graphs/*`                                                                              | Repository + Route Handlers                                |
+| Import / export           | `src/aws/mcp.ts`, `src/aws/discovery.ts`, `src/app/api/discover/route.ts`, `src/aws/iac.ts`, `src/aws/iacExport.ts` | Cloud Control discovery transform + IaC import/export      |
+| Rules engine              | `src/aws/rules.ts`                                                                                                  | Architecture validation + security-rule suggestions        |
 
 ## Section contents
 
 - [Service Registry & Schema](/docs/architecture/service-registry)
 - [Domain Data Model](/docs/architecture/data-model)
 - [Visual Mapping](/docs/architecture/visual-mapping)
+- [Rules & Validation Engine](/docs/architecture/rules-engine)
 - [Persistence & the Server](/docs/architecture/persistence)
-- [MCP Integration](/docs/architecture/mcp-integration)
-- [IaC Import](/docs/architecture/iac-import)
+- [Live Discovery & MCP](/docs/architecture/mcp-integration)
+- [IaC Import & Export](/docs/architecture/iac-import)
 - [Testing](/docs/architecture/testing)
+- [Docs Site (Authoring)](/docs/architecture/docs-site)
 - [Roadmap](/docs/architecture/roadmap)

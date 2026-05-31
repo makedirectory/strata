@@ -5,8 +5,15 @@ Drag services onto a canvas, configure them with auto-generated forms, and conne
 them with typed relationships (`contains`, `routes_to`, `invokes`, `peers_with`, …)
 — with the whole vocabulary spanning 14 AWS service categories. It can also import
 existing Infrastructure-as-Code — CloudFormation (JSON/YAML) and Terraform
-`show -json` — into the same graph, and is built to eventually ingest live AWS
-state via MCP / Cloud Control.
+`show -json` — into the same graph, export the graph back out as IaC, and ingest
+live AWS state via the Cloud Control API.
+
+> **On "MCP-native":** Strata is designed so an LLM/agent can reason over the
+> registry, and MCP is the intended future ingestion path — but **there is no MCP
+> server in this repo today.** `src/aws/mcp.ts` is a pure transform, and live
+> discovery currently runs through a Cloud Control SDK route
+> (`src/app/api/discover/route.ts`). See [CONTRIBUTING.md](./CONTRIBUTING.md) for
+> details.
 
 The core idea: **everything visual is derived from a data registry, not hardcoded.**
 Adding a new AWS service is a single catalog entry — no UI changes.
@@ -87,18 +94,28 @@ src/
     model.ts            InfrastructureGraph / ResourceInstance / Relationship, validateGraph()
     regions.ts          AWS region reference list
     rules.ts            Architecture validation + best-practice rule suggestions
+    relationshipClasses.ts  Edge visual encoding (colour/dash/arrowhead per class)
+    overlays.ts         Topology overlays (IAM-trust, network path, heat) — pure
+    iac.ts              IaC import (CloudFormation + Terraform → InfrastructureGraph)
+    iacExport.ts        IaC export (InfrastructureGraph → CloudFormation / Terraform scaffold)
+    mcp.ts              Pure transform: DiscoveredResource[] → graph (mapDiscoveredToGraph)
+    discovery.ts        Cloud Control descriptions → DiscoveredResource[] (no AWS SDK here)
     services/*.ts       Per-category service catalogs (networking.ts is the template)
-    mcp.ts              MCP / Cloud Control import mapper (mapDiscoveredToGraph)
-    iac.ts              Infrastructure-as-Code import (CloudFormation + Terraform → InfrastructureGraph)
+  canvas/               Pure geometry + containment layout (geometry.ts, layout.ts)
   server/               Persistence (the Route Handlers are the server tier)
     repository.ts       Repository interface
     fileRepository.ts   Default file-backed store
+    graphSchema.ts      Zod schema for graph validation
+    auth.ts             Optional bearer-token guard (AWS_FLOW_API_TOKEN)
     index.ts            getRepository() — backend selection via env
+  lib/
+    api.ts              Browser fetch client for the graph + discover APIs
   app/
     (product)/          The Strata canvas app, served at /
     (docs)/             Nextra docs, served at /docs
-    api/graphs/         REST Route Handlers (GET/POST, GET/PUT/DELETE by id)
-  components/           UI: Palette, Canvas, Inspector
+    api/graphs/         Graph REST Route Handlers (GET/POST, GET/PUT/DELETE by id)
+    api/discover/       Live discovery Route Handler (Cloud Control SDK, server-only)
+  components/           UI: Palette, Canvas, Inspector, CommandPalette
   hooks/                Canvas state, rendering, interaction, undo/redo
   content/              Nextra MDX docs (User Guide + Architecture), served at /docs
 ```

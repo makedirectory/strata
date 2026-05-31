@@ -11,20 +11,36 @@ architecture. Start the app with `npm run dev` and open `http://localhost:3000/`
 
 The screen has three regions:
 
-- **Palette & controls** (left) — every AWS service, grouped by category
-  (networking, compute, storage, database, …) with a search box, plus the
-  **Density**, **Layers & Views**, and **Overlays** controls described in
-  [Views, Layers & Overlays](/docs/guide/views).
+- **Palette & controls** (left) — under the **Palette** heading, every AWS service
+  grouped by category (networking, compute, storage, database, …) with a search
+  box. Below it are the **Presets**, **Modes** (Move / Connect), **Density**,
+  **Shortcuts**, and **Layers & Views** sections (the last described in
+  [Views, Layers & Overlays](/docs/guide/views)).
 - **Canvas** (center) — where your diagram lives. Pan, zoom, nest, and arrange
   resources here. See [Navigating the Canvas](/docs/guide/canvas).
-- **Inspector** (right) — the configuration form for the selected node, plus the
-  **Validate** and **Suggest rules** actions.
+- **Inspector** (right) — under the **Inspector** heading, the configuration form
+  for the selected node or edge, then the **Validation** and **Rule Suggestions**
+  panels (each with its own **Run** / **Generate** button), and the footer controls
+  (**Fit to View**, **Center**, **Tidy**).
 
-A toolbar runs across the top: **+ New** (the Start hub), **Undo / Redo**,
-**Save**, **Open ▾** (your saved diagrams), a **File** menu (Import/Export JSON,
-Import IaC, Export to IaC, Clear canvas), an **Analyze** menu (Validate, Suggest
-rules), and
-**▶** to enter [presentation mode](/docs/guide/views#presentation-mode).
+A top bar runs across the top. From left to right:
+
+```
+🔶 Strata   Docs ↗   <status line>   [ + New | ↶ ↷ | 💾 Open ▾ | Data ▾ Analyze ▾ | ▶ ]
+```
+
+- **+ New** — opens the Start hub.
+- **↶ / ↷** — Undo / Redo (icon buttons).
+- **💾** — Save (icon button, no text label).
+- **Open ▾** — your saved diagrams.
+- **Data ▾** — Connect to AWS…, Import JSON…, Import IaC…, Export JSON, Export to
+  IaC…, Clear canvas.
+- **Analyze ▾** — Validate architecture, Suggest rules.
+- **▶** — enter [presentation mode](/docs/guide/views#presentation-mode).
+- **Docs ↗** — opens these docs in a new tab.
+
+There is **no "File" menu** — the import/export and clear actions live under
+**Data ▾**.
 
 ## 1. Choose a starting point
 
@@ -32,15 +48,18 @@ Click **+ New** (or **Start here** on an empty canvas) to open the **Start hub**
 which offers a few ways to begin:
 
 - **Start blank** — an empty canvas.
-- **Start from a template** — a ready-made example such as a basic AWS layout.
 - **Import IaC** — bring in a Terraform or CloudFormation file (see
   [Importing & Exporting IaC](/docs/guide/importing-iac)).
 - **Import Strata JSON** — reopen a diagram you previously exported.
+- **Start from a template** — begin with the ready-made **Basic AWS** layout.
 - **Connect to AWS** — discover a live account via Cloud Control (see
   [Connecting to AWS](/docs/guide/connecting-aws)).
 
-Once you have a diagram, the hub also offers **Export to IaC** — generate
-Terraform / CloudFormation from it.
+Once you have a diagram on the canvas, the hub also shows an **Export to IaC** card
+— generate Terraform / CloudFormation from it. (A second built-in template, **ECS +
+ALB**, isn't a hub card but is available from the **Presets** section in the left
+panel and from the command palette.) If you have saved diagrams, the hub lists them
+at the bottom under **Open a saved diagram**.
 
 Pick **Start blank** to follow along.
 
@@ -65,6 +84,20 @@ has an instance type, and so on. Edits are stored on the resource immediately.
 Every service gets the right form with no special-casing, because the form is
 generated from the service definition.
 
+Every node form starts with three common rows:
+
+- **Service** — the service's full name (read-only).
+- **Name** — a text field; commits when you press **Enter** or click away.
+- **Region** — a dropdown of AWS regions, or **(none)**.
+
+Then come the service-specific fields. A few field types are worth knowing:
+
+- **Multiselect** and **tag** fields are entered as a **comma-separated** list (the
+  placeholder shows `a, b, c`) — type `web, db, cache` and Strata splits it into
+  separate values.
+- **Boolean** fields are a **No / Yes** dropdown; **select** fields are a dropdown
+  of allowed options (with **(none)** when the field is optional).
+
 ## 4. Connect resources (typed relationships)
 
 Connections in Strata are **typed** — never anonymous lines. An edge means
@@ -72,12 +105,17 @@ something specific (`routes_to`, `invokes`, `reads_from`, `allows`, …) and is
 drawn in the colour and dash pattern of its **relationship class** (network, data,
 dependency, permission, observability).
 
-1. Switch the canvas to **Connect** mode — click **Connect** or press `C`.
-2. Click the source node, then the target node, to create an edge. The
-   relationship type is inferred from the two services involved.
-3. Press `C` again (or click **Move**) to go back to moving nodes.
+There are **two ways** to draw an edge:
 
-Select an edge to change its relationship kind in the inspector.
+- **Connect mode** — click **Connect** under **Modes** in the left panel, or press
+  `C`. Click the source node, then the target node, to create an edge. Press `C`
+  again (or click **Move**) to go back to moving nodes.
+- **Port drag** — without changing mode, click a small **dot (port)** on the edge
+  of a node to start a wire, then click the target node.
+
+Either way, the relationship type is inferred from the two services involved.
+Select an edge to change its relationship kind in the inspector's **Relationship**
+dropdown.
 
 ## 5. Group into containers
 
@@ -88,13 +126,15 @@ else). Select nodes and press `G` to wrap them in a new VPC.
 
 ## 6. Undo / redo
 
-Every change is tracked. Use the **Undo** / **Redo** toolbar buttons, or
-`⌘Z` / `⇧⌘Z` (`Ctrl Z` / `Ctrl Y`).
+Every change is tracked. Use the **↶** / **↷** (Undo / Redo) icon buttons in the
+top bar, or `⌘Z` / `⇧⌘Z` (`Ctrl Z` / `Ctrl Y`).
 
 ## Next steps
 
 - [Navigate the canvas](/docs/guide/canvas) — zoom, pan, the minimap, multi-select,
   the ⌘K command palette, and keyboard shortcuts.
+- [Keyboard & commands](/docs/guide/shortcuts) — every shortcut and every command
+  palette entry in one place.
 - [Views, layers & overlays](/docs/guide/views) — filter by relationship or
   category, apply view presets, and trace IAM / network / heat overlays.
 - Already have infrastructure? [Import CloudFormation or Terraform](/docs/guide/importing-iac).

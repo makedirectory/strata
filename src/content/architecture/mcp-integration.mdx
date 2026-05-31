@@ -4,6 +4,15 @@ title: MCP Integration
 
 # Live Discovery & MCP Integration
 
+> **There is no MCP server in this codebase.** "MCP-native" describes a _design
+> substrate_ and a _future ingestion path_, not a running Model Context Protocol
+> server you can connect to. Don't go hunting for one. What exists today is:
+> (1) `src/aws/mcp.ts`, a **pure transform** (`mapDiscoveredToGraph`) whose name
+> reflects its intended upstream, and (2) live discovery implemented as a **Cloud
+> Control SDK call** in `src/app/api/discover/route.ts`. The transform is shaped
+> so that an MCP server's output could feed it unchanged once such an ingestion
+> path is built — that is the whole sense in which the project is "MCP-native".
+
 The system ingests **live AWS state**, not only hand-drawn diagrams. Two layers
 cooperate:
 
@@ -93,9 +102,38 @@ browser-safe and unit-testable with fixtures:
 
 The AWS SDK lives **only** in `src/app/api/discover/route.ts`, a server-only Route
 Handler that lazily imports `@aws-sdk/client-cloudcontrol`, adapts the real
-`CloudControlClient` (paginated `ListResources`) to `CloudControlLike`, and runs
-with the server process's ambient credential chain. Errors are sanitised so SDK
-internals never leak.
+`CloudControlClient` (paginated `ListResources`, capped at 20 pages per type) to
+`CloudControlLike`, and runs `discoverWithClient`. Errors are sanitised so SDK
+internals never leak (credential/permission failures collapse to one generic
+message, everything else to another, both `502`).
+
+### Two credential paths + hosted-mode gating
+
+`POST /api/discover` accepts `{ region, types[], accountId?, creds? }` and chooses
+its credentials per request:
+
+- **Bring-your-own (`creds`).** The body may carry
+  `{ accessKeyId, secretAccessKey, sessionToken? }`. These build the
+  `CloudControlClient` for this one scan and are then discarded — never written to
+  `.data/`, never logged, never returned. `parseCreds()` rejects a malformed
+  `creds` object with a `422` ("bad-creds") rather than silently falling through
+  to the ambient chain.
+- **Ambient chain (no `creds`).** With `creds` omitted, the SDK's default chain
+  (env / shared profile / SSO / instance role) is used. This is appropriate for a
+  **single-user local** deployment where the operator's own credentials live on the
+  box.
+
+The ambient fallback is **gated by deployment mode**. When
+`NEXT_PUBLIC_STRATA_HOSTED` is `1` or `true` (`isHosted()`), a scan with no `creds`
+is rejected with a `422` — on a shared/hosted instance the ambient chain would be
+the _operator's_ account, so every visitor must bring their own credentials (or use
+the client-side paste path). Locally, with the flag unset, the ambient chain works
+as the zero-config default.
+
+The route is also behind the optional bearer-token guard (`requireAuth()`, see
+[Persistence](/docs/architecture/persistence#auth-guard)) — when
+`AWS_FLOW_API_TOKEN` is set, an unauthenticated discover request is `401` before any
+of the above runs.
 
 ## Credential boundary (non-negotiable)
 
