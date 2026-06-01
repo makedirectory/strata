@@ -55,6 +55,29 @@ describe("computeLayout", () => {
     expect(isContainerNode("c1")).toBe(false);
   });
 
+  it("honors a container's stored size as a minimum (manual resize)", () => {
+    // A container the user resized large stays large even with one small child.
+    const vpc = res("vpc", { serviceId: "vpc", position: { x: 0, y: 0, w: 800, h: 600 } });
+    const c1 = res("c1", { parentId: "vpc" });
+    const { rects } = computeLayout([vpc, c1], { isContainer });
+    const box = rects.get("vpc")!;
+    expect(box.w).toBe(800);
+    expect(box.h).toBe(600);
+    // The child still sits inside the (enlarged) content area.
+    const child = rects.get("c1")!;
+    expect(child.x).toBeGreaterThanOrEqual(box.x + PAD);
+  });
+
+  it("grows a container beyond its stored minimum when children need more room", () => {
+    const vpc = res("vpc", { serviceId: "vpc", position: { x: 0, y: 0, w: 100, h: 80 } });
+    const kids = ["c1", "c2", "c3", "c4"].map((id) => res(id, { parentId: "vpc" }));
+    const { rects } = computeLayout([vpc, ...kids], { isContainer });
+    const box = rects.get("vpc")!;
+    // Default-size children (240×100) packed in a grid exceed the tiny minimum.
+    expect(box.w).toBeGreaterThan(100);
+    expect(box.h).toBeGreaterThan(80);
+  });
+
   it("nests recursively (VPC ▸ subnet ▸ instance) with increasing depth", () => {
     const vpc = res("vpc", { serviceId: "vpc" }, 0, 0);
     const sub = res("sub", { serviceId: "subnet-public", parentId: "vpc" });

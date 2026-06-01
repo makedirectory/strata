@@ -126,3 +126,38 @@ describe("useFlowStore — dirty tracking (the unsaved-work flag the guard reads
     expect(result.current.dirty).toBe(false);
   });
 });
+
+describe("useFlowStore — diagram name", () => {
+  it("defaults to a placeholder, renames, and resets on clear", () => {
+    const { result } = setup();
+    expect(result.current.graphName).toBe("Untitled diagram");
+
+    act(() => result.current.setGraphName("My Architecture"));
+    expect(result.current.graphName).toBe("My Architecture");
+    expect(result.current.dirty).toBe(true);
+
+    act(() => result.current.clear());
+    expect(result.current.graphName).toBe("Untitled diagram");
+    expect(result.current.graphId).toBe("");
+  });
+
+  it("replaceAll applies the loaded graph's name; updateResourceSize sets w/h", () => {
+    const { result } = setup();
+    act(() =>
+      result.current.replaceAll({
+        resources: [],
+        relationships: [],
+        graphId: "g1",
+        graphName: "Loaded Graph",
+      }),
+    );
+    expect(result.current.graphName).toBe("Loaded Graph");
+
+    act(() => result.current.addResource("vpc", 0, 0));
+    const id = result.current.resources[0].id;
+    act(() => result.current.updateResourceSize(id, { w: 480, h: 320 }));
+    const pos = result.current.resources[0].position!;
+    expect(pos.w).toBe(480);
+    expect(pos.h).toBe(320);
+  });
+});

@@ -51,6 +51,7 @@ describe("useCanvasInteraction — presentation / read-only gating", () => {
       rects,
       pan,
       updatePositions,
+      updateSize: vi.fn(),
       updatePan: vi.fn(),
       setGuides: vi.fn(),
       setMarquee: vi.fn(),
@@ -78,6 +79,7 @@ describe("useCanvasInteraction — presentation / read-only gating", () => {
       rects,
       pan,
       updatePositions,
+      updateSize: vi.fn(),
       updatePan: vi.fn(),
       setGuides: vi.fn(),
       setMarquee: vi.fn(),
@@ -85,5 +87,84 @@ describe("useCanvasInteraction — presentation / read-only gating", () => {
     });
     expect(updatePositions).toHaveBeenCalledTimes(1);
     expect(updatePositions.mock.calls[0][0][0].id).toBe("a");
+  });
+});
+
+describe("useCanvasInteraction — resize", () => {
+  it("resizes a node from its corner, flooring at the minimum and committing once", () => {
+    const { result } = renderHook(() => useCanvasInteraction());
+    const updateSize = vi.fn();
+    const commitState = vi.fn();
+    const selectSingle = vi.fn();
+
+    // Grab the bottom-right corner at the node's far edge (240×100).
+    result.current.onResizeStart(mouseEvent({ clientX: 240, clientY: 100 }), node, {
+      rects,
+      readOnly: false,
+      selectSingle,
+    });
+    expect(selectSingle).toHaveBeenCalledWith("a");
+
+    // Drag out by +120/+60 → 360×160.
+    result.current.onMouseMove(mouseEvent({ clientX: 360, clientY: 160 }), {
+      rects,
+      pan,
+      updatePositions: vi.fn(),
+      updateSize,
+      updatePan: vi.fn(),
+      setGuides: vi.fn(),
+      setMarquee: vi.fn(),
+      setOverride: vi.fn(),
+    });
+    expect(updateSize).toHaveBeenLastCalledWith("a", { w: 360, h: 160 });
+
+    // Drag far past the top-left → clamps to the minimum (120×60).
+    result.current.onMouseMove(mouseEvent({ clientX: -500, clientY: -500 }), {
+      rects,
+      pan,
+      updatePositions: vi.fn(),
+      updateSize,
+      updatePan: vi.fn(),
+      setGuides: vi.fn(),
+      setMarquee: vi.fn(),
+      setOverride: vi.fn(),
+    });
+    expect(updateSize).toHaveBeenLastCalledWith("a", { w: 120, h: 60 });
+
+    // Release commits a single history entry.
+    result.current.onMouseUp({
+      rects,
+      commitState,
+      selectSingle: vi.fn(),
+      applyMarquee: vi.fn(),
+      clearSelection: vi.fn(),
+      setGuides: vi.fn(),
+      setMarquee: vi.fn(),
+      setOverride: vi.fn(),
+      containerAt: () => null,
+      setParent: vi.fn(),
+    });
+    expect(commitState).toHaveBeenCalledTimes(1);
+  });
+
+  it("read-only: a resize gesture is ignored", () => {
+    const { result } = renderHook(() => useCanvasInteraction());
+    const updateSize = vi.fn();
+    result.current.onResizeStart(mouseEvent({ clientX: 240, clientY: 100 }), node, {
+      rects,
+      readOnly: true,
+      selectSingle: vi.fn(),
+    });
+    result.current.onMouseMove(mouseEvent({ clientX: 360, clientY: 160 }), {
+      rects,
+      pan,
+      updatePositions: vi.fn(),
+      updateSize,
+      updatePan: vi.fn(),
+      setGuides: vi.fn(),
+      setMarquee: vi.fn(),
+      setOverride: vi.fn(),
+    });
+    expect(updateSize).not.toHaveBeenCalled();
   });
 });
