@@ -264,6 +264,77 @@ const networking: ServiceDefinition[] = [
       { to: "azure-public-ip", relationship: "routes_to" },
     ],
   },
+  {
+    id: "azure-network-interface",
+    name: "Network Interface",
+    fullName: "Azure Network Interface",
+    abbreviation: "NIC",
+    provider: "azure",
+    category: "networking",
+    description: "A virtual NIC that connects a VM to a subnet, NSG and public IP.",
+    icon: "🔌",
+    scope: "resource-group",
+    nativeType: "Microsoft.Network/networkInterfaces",
+    keywords: ["network interface", "nic", "ip configuration", "vnic"],
+    configFields: [
+      {
+        key: "privateIpAllocation",
+        label: "Private IP Allocation",
+        type: "select",
+        default: "Dynamic",
+        options: [
+          { value: "Dynamic", label: "Dynamic" },
+          { value: "Static", label: "Static" },
+        ],
+      },
+      {
+        key: "enableAcceleratedNetworking",
+        label: "Accelerated Networking",
+        type: "boolean",
+        default: false,
+      },
+      { key: "enableIpForwarding", label: "IP Forwarding", type: "boolean", default: false },
+    ],
+    commonConnections: [
+      { to: "azure-subnet", relationship: "attached_to" },
+      { to: "azure-nsg", relationship: "attached_to" },
+      { to: "azure-public-ip", relationship: "attached_to" },
+      { to: "azure-vm", relationship: "attached_to" },
+    ],
+  },
+  {
+    id: "azure-private-endpoint",
+    name: "Private Endpoint",
+    fullName: "Azure Private Endpoint",
+    abbreviation: "PE",
+    provider: "azure",
+    category: "networking",
+    description: "A private IP in a subnet that connects privately to a PaaS service.",
+    icon: "🔒",
+    scope: "resource-group",
+    nativeType: "Microsoft.Network/privateEndpoints",
+    keywords: ["private endpoint", "private link", "private ip", "paas"],
+    configFields: [
+      {
+        key: "groupIds",
+        label: "Subresource (Group ID)",
+        type: "string",
+        placeholder: "blob",
+      },
+      {
+        key: "manualConnection",
+        label: "Manual Connection Approval",
+        type: "boolean",
+        default: false,
+      },
+    ],
+    commonConnections: [
+      { to: "azure-subnet", relationship: "attached_to" },
+      { to: "azure-storage-account", relationship: "connects_to" },
+      { to: "azure-sql-server", relationship: "connects_to" },
+      { to: "azure-key-vault", relationship: "connects_to" },
+    ],
+  },
 ];
 
 export default networking;

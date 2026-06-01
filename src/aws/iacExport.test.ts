@@ -119,6 +119,32 @@ describe("iacExport — ExportReport (honesty surface)", () => {
   });
 });
 
+describe("iacExport — cfnPropertyNames rename (scaffold path)", () => {
+  it("renames modeled keys to provider-native CFN property names", () => {
+    // A manually-built rds resource with NO raw/iacSource takes the scaffold
+    // path, where applyPropertyNames maps storageEncrypted/publiclyAccessible.
+    const g = emptyGraph("Rename");
+    g.resources = [
+      res("r-db", "rds", {
+        name: "primary",
+        config: { storageEncrypted: true, publiclyAccessible: false },
+      }),
+    ];
+    const { json, report } = exportCloudFormation(g);
+    const parsed = JSON.parse(json) as Record<string, any>;
+    const entry = Object.values(parsed.Resources)[0] as any;
+
+    // Scaffold (not faithful) — confirms we exercised the rename path.
+    expect(report.faithful).toBe(0);
+    expect(entry.Type).toBe("AWS::RDS::DBInstance");
+    // Emitted under the renamed keys, NOT the modeled keys.
+    expect(entry.Properties.StorageEncrypted).toBe(true);
+    expect(entry.Properties.PubliclyAccessible).toBe(false);
+    expect(entry.Properties).not.toHaveProperty("storageEncrypted");
+    expect(entry.Properties).not.toHaveProperty("publiclyAccessible");
+  });
+});
+
 describe("iacExport — inverse Terraform type map", () => {
   it("every imported serviceId has a single canonical TF type that maps back", () => {
     for (const serviceId of new Set(Object.values(TF_TYPE_TO_SERVICE_ID))) {
@@ -165,5 +191,124 @@ describe("iacExport — exportIaC convenience", () => {
     const tf = exportIaC(g, "terraform");
     expect(tf.filename).toBe("strata.tf");
     expect(tf.report.exported).toBe(4);
+  });
+});
+
+describe("iacExport — S3 scaffold transform", () => {
+  it("emits nested versioning/encryption and a separate BucketPublicAccessBlock", () => {
+    const g = emptyGraph("S3");
+    g.resources = [
+      res("r-s3", "s3-bucket", {
+        name: "assets",
+        config: {
+          bucketName: "my-bucket",
+          versioning: true,
+          encryption: "SSE-KMS",
+          blockPublicAccess: true,
+        },
+      }),
+    ];
+    const { json } = exportCloudFormation(g);
+    const parsed = JSON.parse(json) as Record<string, any>;
+    const byType: Record<string, any> = {};
+    for (const entry of Object.values(parsed.Resources)) byType[(entry as any).Type] = entry;
+
+    const bucket = byType["AWS::S3::Bucket"];
+    expect(bucket.Properties.BucketName).toBe("my-bucket");
+    expect(bucket.Properties.VersioningConfiguration).toEqual({ Status: "Enabled" });
+    expect(
+      bucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0]
+        .ServerSideEncryptionByDefault.SSEAlgorithm,
+    ).toBe("aws:kms");
+    // Strata's raw config keys must NOT leak into the template.
+    expect(bucket.Properties.versioning).toBeUndefined();
+    expect(bucket.Properties.blockPublicAccess).toBeUndefined();
+
+    // Block Public Access is a separate resource that Refs + DependsOn the bucket.
+    const bucketLogicalId = Object.keys(parsed.Resources).find(
+      (k) => parsed.Resources[k].Type === "AWS::S3::Bucket",
+    );
+    const pab = byType["AWS::S3::BucketPublicAccessBlock"];
+    expect(pab).toBeDefined();
+    expect(pab.Properties.Bucket).toEqual({ Ref: bucketLogicalId });
+    expect(pab.Properties.PublicAccessBlockConfiguration).toEqual({
+      BlockPublicAcls: true,
+      BlockPublicPolicy: true,
+      IgnorePublicAcls: true,
+      RestrictPublicBuckets: true,
+    });
+    expect(pab.DependsOn).toEqual([bucketLogicalId]);
+  });
+
+  it("does not emit a PublicAccessBlock when blockPublicAccess is unset", () => {
+    const g = emptyGraph("S3");
+    g.resources = [res("r-s3", "s3-bucket", { name: "assets", config: { versioning: false } })];
+    const { json } = exportCloudFormation(g);
+    const parsed = JSON.parse(json) as Record<string, any>;
+    const types = Object.values(parsed.Resources).map((e) => (e as any).Type);
+    expect(types).not.toContain("AWS::S3::BucketPublicAccessBlock");
+    const byType: Record<string, any> = {};
+    for (const entry of Object.values(parsed.Resources)) byType[(entry as any).Type] = entry;
+    expect(byType["AWS::S3::Bucket"].Properties.VersioningConfiguration).toEqual({
+      Status: "Suspended",
+    });
+  });
+});
+
+describe("iacExport — route53 record/zone round-trip", () => {
+  it("keeps hosted zones and records as distinct Terraform types", () => {
+    expect(SERVICE_ID_TO_TF_TYPE["route53"]).toBe("aws_route53_zone");
+    expect(SERVICE_ID_TO_TF_TYPE["route53-record"]).toBe("aws_route53_record");
+  });
+});
+
+describe("iacExport — S3 Terraform transform", () => {
+  it("splits versioning/encryption/public-access into separate resources", () => {
+    const g = emptyGraph("S3");
+    g.resources = [
+      res("r-s3", "s3-bucket", {
+        name: "assets",
+        config: {
+          bucketName: "my-bucket",
+          versioning: true,
+          encryption: "SSE-KMS",
+          blockPublicAccess: true,
+        },
+      }),
+    ];
+    const { hcl, report } = exportTerraform(g);
+
+    expect(hcl).toContain('resource "aws_s3_bucket" "assets"');
+    expect(hcl).toContain('bucket = "my-bucket"');
+    expect(hcl).toContain('resource "aws_s3_bucket_versioning" "assets_versioning"');
+    expect(hcl).toContain('status = "Enabled"');
+    expect(hcl).toContain(
+      'resource "aws_s3_bucket_server_side_encryption_configuration" "assets_encryption"',
+    );
+    expect(hcl).toContain('sse_algorithm = "aws:kms"');
+    expect(hcl).toContain(
+      'resource "aws_s3_bucket_public_access_block" "assets_public_access_block"',
+    );
+    expect(hcl).toContain("restrict_public_buckets = true");
+    // Aux resources reference the bucket as an unquoted HCL expression (implicit
+    // dependency), not a quoted string.
+    expect(hcl).toContain("bucket = aws_s3_bucket.assets.id");
+    // Strata's raw config keys must not leak into the HCL.
+    expect(hcl).not.toContain("versioning = true");
+    expect(hcl).not.toContain("blockPublicAccess");
+    // Primary bucket + 3 auxiliary resources.
+    expect(report.exported).toBe(4);
+    // Balanced braces — cheap structural sanity check.
+    expect((hcl.match(/{/g) ?? []).length).toBe((hcl.match(/}/g) ?? []).length);
+  });
+
+  it("emits no auxiliary resources when secure config is unset", () => {
+    const g = emptyGraph("S3");
+    g.resources = [res("r-s3", "s3-bucket", { name: "assets", config: {} })];
+    const { hcl, report } = exportTerraform(g);
+    expect(hcl).toContain('resource "aws_s3_bucket" "assets"');
+    expect(hcl).not.toContain("aws_s3_bucket_versioning");
+    expect(hcl).not.toContain("aws_s3_bucket_public_access_block");
+    expect(report.exported).toBe(1);
   });
 });

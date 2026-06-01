@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { importGcpTerraform, exportGcpTerraform, GCP_TF_TYPE_TO_SERVICE_ID } from "./iac";
+import {
+  importGcpTerraform,
+  exportGcpTerraform,
+  GCP_TF_TYPE_TO_SERVICE_ID,
+  GCP_SERVICE_ID_TO_TF_TYPE,
+} from "./iac";
 import { getService } from "../aws/registry";
 
 const tfState = {
@@ -101,5 +106,39 @@ describe("GCP type map", () => {
     for (const serviceId of Object.values(GCP_TF_TYPE_TO_SERVICE_ID)) {
       expect(getService(serviceId), `missing service ${serviceId}`).toBeDefined();
     }
+  });
+
+  it("inverse export prefers current GCP types", () => {
+    // Many-to-one import collapses to current (non-deprecated) export targets.
+    expect(GCP_SERVICE_ID_TO_TF_TYPE["gcp-cloud-run"]).toBe("google_cloud_run_v2_service");
+    expect(GCP_SERVICE_ID_TO_TF_TYPE["gcp-cloud-functions"]).toBe(
+      "google_cloudfunctions2_function",
+    );
+  });
+
+  it("maps google_container_node_pool", () => {
+    expect(GCP_TF_TYPE_TO_SERVICE_ID["google_container_node_pool"]).toBe("gcp-gke-cluster");
+  });
+});
+
+describe("GCP Terraform planned_values import", () => {
+  it("imports a GCP terraform planned_values shape", () => {
+    const { graph, unmappedTypes } = importGcpTerraform({
+      planned_values: {
+        root_module: {
+          resources: [
+            {
+              address: "google_storage_bucket.b",
+              type: "google_storage_bucket",
+              name: "b",
+              values: { id: "b" },
+            },
+          ],
+        },
+      },
+    });
+    expect(unmappedTypes).toEqual([]);
+    expect(graph.resources).toHaveLength(1);
+    expect(graph.resources[0].serviceId).toBe("gcp-cloud-storage");
   });
 });

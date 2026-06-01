@@ -259,6 +259,93 @@ const compute: ServiceDefinition[] = [
       { to: "azure-storage-account", relationship: "writes_to" },
     ],
   },
+  {
+    id: "azure-app-service-plan",
+    name: "App Service Plan",
+    fullName: "Azure App Service Plan",
+    abbreviation: "ASP",
+    provider: "azure",
+    category: "compute",
+    description: "Defines the compute resources (SKU and scale) that host App Service apps.",
+    icon: "📐",
+    scope: "resource-group",
+    nativeType: "Microsoft.Web/serverfarms",
+    keywords: ["app service plan", "serverfarm", "plan", "sku", "compute"],
+    configFields: [
+      {
+        key: "sku",
+        label: "SKU",
+        type: "select",
+        default: "P1v3",
+        options: [
+          { value: "B1", label: "Basic B1" },
+          { value: "S1", label: "Standard S1" },
+          { value: "P1v3", label: "Premium P1v3" },
+          { value: "P2v3", label: "Premium P2v3" },
+        ],
+      },
+      {
+        key: "osType",
+        label: "OS Type",
+        type: "select",
+        default: "Linux",
+        options: [
+          { value: "Linux", label: "Linux" },
+          { value: "Windows", label: "Windows" },
+        ],
+      },
+      { key: "capacity", label: "Worker Count", type: "number", default: 1 },
+      { key: "tags", label: "Tags", type: "tags" },
+    ],
+    commonConnections: [
+      { to: "azure-app-service", relationship: "contains" },
+      { to: "azure-functions", relationship: "contains" },
+    ],
+  },
+  {
+    id: "azure-container-registry",
+    name: "Container Registry",
+    fullName: "Azure Container Registry",
+    abbreviation: "ACR",
+    provider: "azure",
+    category: "containers",
+    description:
+      "A managed, private Docker registry for storing and distributing container images.",
+    icon: "🗂️",
+    scope: "resource-group",
+    nativeType: "Microsoft.ContainerRegistry/registries",
+    keywords: ["container registry", "acr", "docker", "images", "registry"],
+    configFields: [
+      {
+        key: "sku",
+        label: "SKU",
+        type: "select",
+        default: "Standard",
+        options: [
+          { value: "Basic", label: "Basic" },
+          { value: "Standard", label: "Standard" },
+          { value: "Premium", label: "Premium" },
+        ],
+      },
+      { key: "adminUserEnabled", label: "Admin User Enabled", type: "boolean", default: false },
+      {
+        key: "publicNetworkAccess",
+        label: "Public Network Access",
+        type: "select",
+        default: "Disabled",
+        options: [
+          { value: "Enabled", label: "Enabled" },
+          { value: "Disabled", label: "Disabled" },
+        ],
+      },
+      { key: "tags", label: "Tags", type: "tags" },
+    ],
+    commonConnections: [
+      { to: "azure-aks", relationship: "reads_from" },
+      { to: "azure-container-instances", relationship: "reads_from" },
+      { to: "azure-managed-identity", relationship: "assumes" },
+    ],
+  },
 ];
 
 export default compute;

@@ -78,6 +78,18 @@ function cidrContains(parent: string, child: string): boolean {
   return c.net >= p.net && c.broadcast <= p.broadcast;
 }
 
+/**
+ * A `routes_to` edge is a *default* route when its destination is the
+ * all-addresses CIDR — or unspecified, which we treat as a default route for
+ * back-compat with manually-drawn edges that omit `destinationCidr`. A
+ * prefix-specific route (e.g. 10.1.0.0/16) does not by itself provide general
+ * internet egress, so it must NOT satisfy the IGW/NAT default-route checks.
+ */
+function isDefaultRoute(e: Relationship): boolean {
+  const d = e.destinationCidr;
+  return d === undefined || d === "" || d === "0.0.0.0/0" || d === "::/0";
+}
+
 export function validateArchitecture(graph: InfrastructureGraph): ValidationResult[] {
   const out: ValidationResult[] = [];
   const resources = graph.resources;
@@ -189,10 +201,13 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
     }
   });
 
-  // Route tables attached to at least one subnet.
+  // Route tables attached to at least one subnet. Accept the attachment edge in
+  // either direction, mirroring the direction-agnostic helpers above.
   ofService("route-table").forEach((rt) => {
-    const subs = outgoing(rt.id, "attached_to")
-      .map((e) => get(e.to))
+    const subs = [
+      ...incoming(rt.id, "attached_to").map((e) => get(e.from)),
+      ...outgoing(rt.id, "attached_to").map((e) => get(e.to)),
+    ]
       .filter(isDefined)
       .filter(isSubnet);
     if (subs.length === 0) {
@@ -203,10 +218,12 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
     }
   });
 
-  // NACLs attached to a subnet.
+  // NACLs attached to a subnet. Accept the attachment edge in either direction.
   ofService("nacl").forEach((nacl) => {
-    const subs = outgoing(nacl.id, "attached_to")
-      .map((e) => get(e.to))
+    const subs = [
+      ...incoming(nacl.id, "attached_to").map((e) => get(e.from)),
+      ...outgoing(nacl.id, "attached_to").map((e) => get(e.to)),
+    ]
       .filter(isDefined)
       .filter(isSubnet);
     if (subs.length === 0) {
@@ -214,11 +231,12 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
     }
   });
 
-  // Internet Gateway must be attached to a VPC.
+  // Internet Gateway must be attached to a VPC. Accept the edge in either direction.
   ofService("internet-gateway").forEach((igw) => {
-    const vpc = outgoing(igw.id, "attached_to")
-      .map((e) => get(e.to))
-      .find((n) => n && n.serviceId === "vpc");
+    const vpc = [
+      ...incoming(igw.id, "attached_to").map((e) => get(e.from)),
+      ...outgoing(igw.id, "attached_to").map((e) => get(e.to)),
+    ].find((n) => n && n.serviceId === "vpc");
     if (!vpc) {
       out.push({
         level: "error",
@@ -234,7 +252,10 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       !!rt &&
       rels.some(
         (e) =>
-          e.from === rt.id && e.kind === "routes_to" && get(e.to)?.serviceId === "internet-gateway",
+          e.from === rt.id &&
+          e.kind === "routes_to" &&
+          get(e.to)?.serviceId === "internet-gateway" &&
+          isDefaultRoute(e),
       );
     if (!rt || !hasIgw) {
       out.push({
@@ -265,7 +286,10 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         !!rt &&
         rels.some(
           (e) =>
-            e.from === rt.id && e.kind === "routes_to" && get(e.to)?.serviceId === "nat-gateway",
+            e.from === rt.id &&
+            e.kind === "routes_to" &&
+            get(e.to)?.serviceId === "nat-gateway" &&
+            isDefaultRoute(e),
         );
       if (!rt || !hasNat) {
         out.push({
@@ -366,7 +390,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
     subs.forEach((s) => {
       if (isPublicSubnet(s)) {
         out.push({
-          level: "warn",
+          level: "error",
           message: `RDS "${rds.name}" should not be in public Subnet "${s.name}".`,
         });
       }
@@ -384,16 +408,129 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         message: `RDS "${rds.name}" should be attached to a Security Group.`,
       });
     }
+    if (rds.config["publiclyAccessible"] === true) {
+      out.push({ level: "error", message: `RDS "${rds.name}" must not be publicly accessible.` });
+    }
+  });
+
+  // S3 buckets: Block Public Access must stay on. Unset defaults to on (`true`),
+  // so only an explicit `false` is a finding.
+  ofService("s3-bucket").forEach((b) => {
+    if (b.config["blockPublicAccess"] === false) {
+      out.push({
+        level: "warn",
+        message: `S3 bucket "${b.name}" has Block Public Access disabled; the bucket may be publicly accessible.`,
+      });
+    }
+  });
+
+  // Encryption at rest: services that store data unencrypted (explicit `false`)
+  // get a warning. RDS/DocumentDB/Neptune share the `storageEncrypted` key — the
+  // RDS finding is implemented here too, so it isn't duplicated above. Aurora and
+  // S3 are intentionally excluded.
+  const ENCRYPTION_AT_REST: Record<string, string> = {
+    "ebs-volume": "encrypted",
+    efs: "encrypted",
+    rds: "storageEncrypted",
+    documentdb: "storageEncrypted",
+    neptune: "storageEncrypted",
+  };
+  for (const [serviceId, key] of Object.entries(ENCRYPTION_AT_REST)) {
+    ofService(serviceId).forEach((r) => {
+      if (r.config[key] === false) {
+        out.push({
+          level: "warn",
+          message: `${r.name} stores data at rest unencrypted; enable encryption.`,
+        });
+      }
+    });
+  }
+
+  // Security Groups: flag sensitive ports exposed to the world. The `ingress`
+  // free-text is one rule per line, each `<proto> <port> <cidr>`. Ports 80/443
+  // are intentionally not sensitive (the tool itself suggests 0.0.0.0/0 there).
+  const SENSITIVE_PORTS: ReadonlySet<number> = new Set([22, 3389, 3306, 5432, 1433, 6379]);
+  const portTokenIsSensitive = (token: string): boolean => {
+    if (/^\d+$/.test(token)) return SENSITIVE_PORTS.has(Number(token));
+    if (/^\d+-\d+$/.test(token)) {
+      const [lo, hi] = token.split("-").map(Number);
+      for (const p of SENSITIVE_PORTS) if (p >= lo && p <= hi) return true;
+      return false;
+    }
+    if (token.includes(",")) {
+      return token.split(",").some((t) => /^\d+$/.test(t) && SENSITIVE_PORTS.has(Number(t)));
+    }
+    return false;
+  };
+  ofService("security-group").forEach((sg) => {
+    const ingress = cfgStr(sg, "ingress");
+    if (!ingress) return;
+    for (const line of ingress.split("\n")) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 3) continue; // skip malformed lines
+      const [, port, cidr] = parts;
+      if ((cidr === "0.0.0.0/0" || cidr === "::/0") && portTokenIsSensitive(port)) {
+        out.push({
+          level: "warn",
+          message: `Security Group "${sg.name}" exposes sensitive port ${port} to the world (${cidr}).`,
+        });
+      }
+    }
+  });
+
+  // GCP Cloud Storage: uniform bucket-level access should stay enabled.
+  ofService("gcp-cloud-storage").forEach((b) => {
+    if (b.config["uniformBucketLevelAccess"] === false) {
+      out.push({
+        level: "warn",
+        message: `Cloud Storage bucket "${b.name}" has uniform bucket-level access disabled; per-object ACLs allow public exposure.`,
+      });
+    }
+  });
+
+  // GCP Firewall rule: an ingress ALLOW from 0.0.0.0/0 to a sensitive port. The
+  // `allowed` text references tokens like `tcp:22`; direction/action default to
+  // INGRESS/ALLOW when unset.
+  ofService("gcp-firewall-rule").forEach((fw) => {
+    const direction = (cfgStr(fw, "direction") ?? "INGRESS").toUpperCase();
+    const action = (cfgStr(fw, "action") ?? "ALLOW").toUpperCase();
+    const sourceRanges = cfgStr(fw, "sourceRanges") ?? "";
+    const allowed = cfgStr(fw, "allowed") ?? "";
+    if (direction !== "INGRESS" || action !== "ALLOW" || !sourceRanges.includes("0.0.0.0/0")) {
+      return;
+    }
+    for (const token of allowed.split(/[\s,]+/)) {
+      const portStr = token.split(":")[1];
+      if (portStr && portTokenIsSensitive(portStr)) {
+        out.push({
+          level: "warn",
+          message: `Firewall rule "${fw.name}" exposes sensitive port ${portStr} to the world (0.0.0.0/0).`,
+        });
+      }
+    }
+  });
+
+  // Azure Storage Account: public blob access should stay disabled.
+  ofService("azure-storage-account").forEach((sa) => {
+    if (sa.config["allowPublicAccess"] === true) {
+      out.push({
+        level: "warn",
+        message: `Storage Account "${sa.name}" has public blob access enabled.`,
+      });
+    }
+  });
+
+  // Azure Redis: the non-SSL port should stay disabled.
+  ofService("azure-redis").forEach((redis) => {
+    if (redis.config["enableNonSslPort"] === true) {
+      out.push({
+        level: "warn",
+        message: `Redis "${redis.name}" has the non-SSL port enabled.`,
+      });
+    }
   });
 
   return out;
-}
-
-function guessServicePort(svc: ResourceInstance): string {
-  const port = svc.config["port"];
-  if (typeof port === "number") return String(port);
-  if (typeof port === "string" && port) return port;
-  return "80";
 }
 
 export function suggestRules(graph: InfrastructureGraph): RuleSuggestion[] {
@@ -425,16 +562,21 @@ export function suggestRules(graph: InfrastructureGraph): RuleSuggestion[] {
       const tg = outgoing(alb.id, "targets")
         .map((e) => get(e.to))
         .find((n) => n && n.serviceId === "target-group");
+      // Only EC2/ECS targets get an inbound SG rule; Lambda/ELB targets are
+      // reached without a security group, so they intentionally get none.
       const svc = tg
         ? outgoing(tg.id, "targets")
             .map((e) => get(e.to))
             .find((n) => n && (n.serviceId === "ecs-service" || n.serviceId === "ec2-instance"))
         : undefined;
-      if (svc) {
+      if (svc && tg) {
         const svcSg = incoming(svc.id, "attached_to")
           .map((e) => get(e.from))
           .find((n) => n && n.serviceId === "security-group");
         if (svcSg) {
+          // The listener port lives on the target group; fall back to the
+          // service's own port config, then 80.
+          const port = String(tg.config["port"] ?? svc.config["port"] ?? 80);
           out.push({
             scope: svcSg.name,
             type: "Security Group",
@@ -442,7 +584,7 @@ export function suggestRules(graph: InfrastructureGraph): RuleSuggestion[] {
               {
                 dir: "ingress",
                 proto: "tcp",
-                port: guessServicePort(svc),
+                port,
                 src: `sg:${alb.name}`,
                 comment: "ALB to Service",
               },
@@ -452,9 +594,82 @@ export function suggestRules(graph: InfrastructureGraph): RuleSuggestion[] {
       }
     });
 
+  // RDS ingress from the app tier: open the DB's engine port to the upstream
+  // app's Security Group (ALB → target group → service → SG, or any
+  // ecs-service/ec2-instance SG as a fallback).
+  const sgOf = (id: string): ResourceInstance | undefined =>
+    incoming(id, "attached_to")
+      .map((e) => get(e.from))
+      .find((n) => n && n.serviceId === "security-group") ??
+    outgoing(id, "attached_to")
+      .map((e) => get(e.to))
+      .find((n) => n && n.serviceId === "security-group");
+  const RDS_ENGINE_PORTS: Record<string, number> = {
+    postgres: 5432,
+    mysql: 3306,
+    mariadb: 3306,
+    "oracle-se2": 1521,
+    "sqlserver-se": 1433,
+  };
+  resources
+    .filter((n) => n.serviceId === "rds")
+    .forEach((rds) => {
+      const dbSg = sgOf(rds.id);
+      if (!dbSg) return;
+      // Walk ALB → target group → service → SG for an app tier source.
+      let appSg: ResourceInstance | undefined;
+      for (const alb of resources.filter((n) => n.serviceId === "elastic-load-balancer")) {
+        const tg = outgoing(alb.id, "targets")
+          .map((e) => get(e.to))
+          .find((n) => n && n.serviceId === "target-group");
+        const svc = tg
+          ? outgoing(tg.id, "targets")
+              .map((e) => get(e.to))
+              .find((n) => n && (n.serviceId === "ecs-service" || n.serviceId === "ec2-instance"))
+          : undefined;
+        if (svc) appSg = sgOf(svc.id);
+        if (appSg) break;
+      }
+      // Fall back to any compute resource's SG in the graph.
+      if (!appSg) {
+        for (const svc of resources.filter(
+          (n) => n.serviceId === "ecs-service" || n.serviceId === "ec2-instance",
+        )) {
+          appSg = sgOf(svc.id);
+          if (appSg) break;
+        }
+      }
+      if (!appSg || appSg.id === dbSg.id) return;
+      const engine = typeof rds.config["engine"] === "string" ? rds.config["engine"] : "";
+      const port = RDS_ENGINE_PORTS[engine] ?? 5432;
+      out.push({
+        scope: dbSg.name,
+        type: "Security Group",
+        rules: [
+          { dir: "ingress", proto: "tcp", port, src: `sg:${appSg.name}`, comment: "App to DB" },
+        ],
+      });
+    });
+
+  // Per-subnet egress route. Skip when a `routes_to` edge to the correct gateway
+  // already exists (mirrors validateArchitecture's resolution).
+  const routesTo = (subnetId: string, gatewayServiceId: string): boolean => {
+    const rt =
+      incoming(subnetId, "attached_to")
+        .map((e) => get(e.from))
+        .find((n) => n && n.serviceId === "route-table") ??
+      outgoing(subnetId, "attached_to")
+        .map((e) => get(e.to))
+        .find((n) => n && n.serviceId === "route-table");
+    if (!rt) return false;
+    return outgoing(rt.id, "routes_to").some(
+      (e) => get(e.to)?.serviceId === gatewayServiceId && isDefaultRoute(e),
+    );
+  };
   resources
     .filter((n) => n.serviceId === "subnet-private")
     .forEach((sn) => {
+      if (routesTo(sn.id, "nat-gateway")) return;
       out.push({
         scope: sn.name,
         type: "Route Table",
@@ -467,6 +682,7 @@ export function suggestRules(graph: InfrastructureGraph): RuleSuggestion[] {
   resources
     .filter((n) => n.serviceId === "subnet-public")
     .forEach((sn) => {
+      if (routesTo(sn.id, "internet-gateway")) return;
       out.push({
         scope: sn.name,
         type: "Route Table",

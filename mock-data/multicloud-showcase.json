@@ -1,0 +1,144 @@
+{
+  "id": "mock-multicloud-showcase",
+  "name": "Multi-Cloud Showcase",
+  "description": "One resource family per provider — exercises the AWS / GCP / Azure node badges.",
+  "schemaVersion": 1,
+  "createdAt": "2026-06-01T00:00:00.000Z",
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "accounts": [
+    {
+      "id": "acct-aws",
+      "provider": "aws",
+      "accountId": "123456789012",
+      "name": "AWS Sandbox",
+      "environment": "sandbox",
+      "color": "#ff9900"
+    },
+    {
+      "id": "acct-gcp",
+      "provider": "gcp",
+      "accountId": "strata-demo-project",
+      "name": "GCP Demo",
+      "environment": "sandbox",
+      "color": "#4285f4"
+    },
+    {
+      "id": "acct-azure",
+      "provider": "azure",
+      "accountId": "00000000-0000-0000-0000-000000000000",
+      "name": "Azure Demo",
+      "environment": "sandbox",
+      "color": "#0078d4"
+    }
+  ],
+  "resources": [
+    {
+      "id": "aws-vpc-1",
+      "serviceId": "vpc",
+      "name": "AWS VPC",
+      "accountId": "acct-aws",
+      "region": "us-east-1",
+      "config": { "cidr": "10.0.0.0/16", "enableDnsHostnames": true },
+      "source": "manual",
+      "position": { "x": 80, "y": 80, "w": 240, "h": 100 }
+    },
+    {
+      "id": "aws-ec2-1",
+      "serviceId": "ec2-instance",
+      "name": "Web Server",
+      "accountId": "acct-aws",
+      "region": "us-east-1",
+      "parentId": "aws-vpc-1",
+      "config": { "instanceType": "t3.micro", "ami": "ami-0abcd1234" },
+      "source": "manual",
+      "position": { "x": 80, "y": 240, "w": 240, "h": 100 }
+    },
+    {
+      "id": "aws-s3-1",
+      "serviceId": "s3-bucket",
+      "name": "Assets Bucket",
+      "accountId": "acct-aws",
+      "region": "us-east-1",
+      "config": { "bucketName": "strata-demo-assets", "versioning": true },
+      "source": "manual",
+      "position": { "x": 80, "y": 400, "w": 240, "h": 100 }
+    },
+    {
+      "id": "gcp-vpc-1",
+      "serviceId": "gcp-vpc-network",
+      "name": "GCP VPC",
+      "accountId": "acct-gcp",
+      "region": "us-central1",
+      "config": {},
+      "source": "manual",
+      "position": { "x": 460, "y": 80, "w": 240, "h": 100 }
+    },
+    {
+      "id": "gcp-vm-1",
+      "serviceId": "gcp-compute-engine",
+      "name": "Compute VM",
+      "accountId": "acct-gcp",
+      "region": "us-central1",
+      "parentId": "gcp-vpc-1",
+      "config": { "machineType": "e2-medium", "zone": "us-central1-a" },
+      "source": "manual",
+      "position": { "x": 460, "y": 240, "w": 240, "h": 100 }
+    },
+    {
+      "id": "gcp-gcs-1",
+      "serviceId": "gcp-cloud-storage",
+      "name": "GCS Bucket",
+      "accountId": "acct-gcp",
+      "region": "us-central1",
+      "config": { "storageClass": "STANDARD", "location": "US" },
+      "source": "manual",
+      "position": { "x": 460, "y": 400, "w": 240, "h": 100 }
+    },
+    {
+      "id": "az-vnet-1",
+      "serviceId": "azure-vnet",
+      "name": "Azure VNet",
+      "accountId": "acct-azure",
+      "region": "eastus",
+      "config": {},
+      "source": "manual",
+      "position": { "x": 840, "y": 80, "w": 240, "h": 100 }
+    },
+    {
+      "id": "az-vm-1",
+      "serviceId": "azure-vm",
+      "name": "Azure VM",
+      "accountId": "acct-azure",
+      "region": "eastus",
+      "parentId": "az-vnet-1",
+      "config": { "vmSize": "Standard_B2s", "osType": "Linux" },
+      "source": "manual",
+      "position": { "x": 840, "y": 240, "w": 240, "h": 100 }
+    },
+    {
+      "id": "az-sa-1",
+      "serviceId": "azure-storage-account",
+      "name": "Storage Account",
+      "accountId": "acct-azure",
+      "region": "eastus",
+      "config": { "sku": "Standard_LRS", "kind": "StorageV2" },
+      "source": "manual",
+      "position": { "x": 840, "y": 400, "w": 240, "h": 100 }
+    }
+  ],
+  "relationships": [
+    { "id": "r-aws-1", "from": "aws-vpc-1", "to": "aws-ec2-1", "kind": "contains" },
+    {
+      "id": "r-aws-2",
+      "from": "aws-ec2-1",
+      "to": "aws-s3-1",
+      "kind": "writes_to",
+      "label": "PUT objects"
+    },
+    { "id": "r-gcp-1", "from": "gcp-vpc-1", "to": "gcp-vm-1", "kind": "contains" },
+    { "id": "r-gcp-2", "from": "gcp-vm-1", "to": "gcp-gcs-1", "kind": "writes_to" },
+    { "id": "r-az-1", "from": "az-vnet-1", "to": "az-vm-1", "kind": "contains" },
+    { "id": "r-az-2", "from": "az-vm-1", "to": "az-sa-1", "kind": "writes_to" }
+  ],
+  "viewport": { "x": 0, "y": 0, "scale": 1 }
+}
