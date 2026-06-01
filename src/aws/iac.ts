@@ -321,7 +321,7 @@ export const TF_TYPE_TO_SERVICE_ID: Record<string, string> = {
   aws_lb_target_group: "target-group",
   aws_alb_target_group: "target-group",
   aws_route53_zone: "route53",
-  aws_route53_record: "route53",
+  aws_route53_record: "route53-record",
   aws_route53_health_check: "route53",
   aws_vpc_peering_connection: "vpc-peering",
   aws_ec2_transit_gateway: "transit-gateway",

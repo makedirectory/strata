@@ -106,6 +106,13 @@ export interface Relationship {
   kind: RelationshipKind;
   /** Optional human label / rule detail (e.g. "tcp 443"). */
   label?: string;
+  /**
+   * For `routes_to` edges: the route's destination CIDR (e.g. "0.0.0.0/0").
+   * Lets validation distinguish a default route (general egress) from a
+   * prefix-specific one. Absent means "unspecified" — treated as a default
+   * route for back-compat with manually-drawn edges that omit it.
+   */
+  destinationCidr?: string;
   source?: ResourceSource;
 }
 

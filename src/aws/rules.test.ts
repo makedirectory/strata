@@ -73,6 +73,41 @@ describe("validateArchitecture", () => {
     expect(out).toEqual([]);
   });
 
+  it("accepts an explicit default route (destinationCidr 0.0.0.0/0) to the IGW", () => {
+    const vpc = res("vpc", { id: "vpc", config: { cidr: "10.0.0.0/16" } });
+    const subnet = res("subnet-public", { id: "sn", config: { cidr: "10.0.1.0/24" } });
+    const igw = res("internet-gateway", { id: "igw" });
+    const rt = res("route-table", { id: "rt" });
+    const g = graph(
+      [vpc, subnet, igw, rt],
+      [
+        rel("vpc", "sn", "contains"),
+        rel("igw", "vpc", "attached_to"),
+        rel("rt", "sn", "attached_to"),
+        rel("rt", "igw", "routes_to", { destinationCidr: "0.0.0.0/0" }),
+      ],
+    );
+    expect(validateArchitecture(g)).toEqual([]);
+  });
+
+  it("flags a public subnet whose only IGW route is prefix-specific (not a default route)", () => {
+    const vpc = res("vpc", { id: "vpc", config: { cidr: "10.0.0.0/16" } });
+    const subnet = res("subnet-public", { id: "sn", config: { cidr: "10.0.1.0/24" } });
+    const igw = res("internet-gateway", { id: "igw" });
+    const rt = res("route-table", { id: "rt" });
+    const g = graph(
+      [vpc, subnet, igw, rt],
+      [
+        rel("vpc", "sn", "contains"),
+        rel("igw", "vpc", "attached_to"),
+        rel("rt", "sn", "attached_to"),
+        rel("rt", "igw", "routes_to", { destinationCidr: "192.168.0.0/16" }),
+      ],
+    );
+    const out = validateArchitecture(g);
+    expect(messages(out).some((m) => m.includes("routes to an Internet Gateway"))).toBe(true);
+  });
+
   it("accepts the same topology when containment is expressed via parentId (imported graph)", () => {
     // Mirrors the happy-path topology, but the subnet is contained by the VPC
     // through parentId (how MCP/imported graphs model it) — no `contains` edge.

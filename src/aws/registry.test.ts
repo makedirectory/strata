@@ -104,8 +104,8 @@ describe("getServiceByCfnType", () => {
 });
 
 describe("allServices", () => {
-  it("contains roughly 101 AWS services", () => {
-    expect(allServices("aws").length).toBe(101);
+  it("contains roughly 102 AWS services", () => {
+    expect(allServices("aws").length).toBe(102);
   });
 
   it("includes GCP and Azure catalogs in the multi-cloud registry", () => {

@@ -7,7 +7,7 @@ import {
   exportAzureTerraform,
   AZURE_TF_TYPE_TO_SERVICE_ID,
 } from "./iac";
-import { getService } from "../aws/registry";
+import { getService, getServiceByNativeType } from "../aws/registry";
 
 const armTemplate = {
   $schema: "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -143,6 +143,37 @@ describe("Azure Terraform (azurerm)", () => {
   it("type map only references real service ids", () => {
     for (const serviceId of Object.values(AZURE_TF_TYPE_TO_SERVICE_ID)) {
       expect(getService(serviceId), `missing service ${serviceId}`).toBeDefined();
+    }
+  });
+
+  it("maps the newly added azurerm_* types to the right service ids", () => {
+    const expected: Record<string, string> = {
+      azurerm_service_plan: "azure-app-service-plan",
+      azurerm_app_service_plan: "azure-app-service-plan",
+      azurerm_container_registry: "azure-container-registry",
+      azurerm_network_interface: "azure-network-interface",
+      azurerm_private_endpoint: "azure-private-endpoint",
+      azurerm_mysql_flexible_server: "azure-mysql",
+      azurerm_mssql_managed_instance: "azure-sql-managed-instance",
+    };
+    for (const [tfType, serviceId] of Object.entries(expected)) {
+      expect(AZURE_TF_TYPE_TO_SERVICE_ID[tfType], `${tfType} mapping`).toBe(serviceId);
+    }
+  });
+
+  it("resolves new services by their ARM nativeType", () => {
+    const expected: Record<string, string> = {
+      "Microsoft.Web/serverfarms": "azure-app-service-plan",
+      "Microsoft.ContainerRegistry/registries": "azure-container-registry",
+      "Microsoft.Network/networkInterfaces": "azure-network-interface",
+      "Microsoft.Network/privateEndpoints": "azure-private-endpoint",
+      "Microsoft.DBforMySQL/flexibleServers": "azure-mysql",
+      "Microsoft.Sql/managedInstances": "azure-sql-managed-instance",
+    };
+    for (const [nativeType, serviceId] of Object.entries(expected)) {
+      expect(getServiceByNativeType("azure", nativeType)?.id, `${nativeType} lookup`).toBe(
+        serviceId,
+      );
     }
   });
 
