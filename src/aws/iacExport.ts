@@ -378,13 +378,105 @@ export interface TerraformExport {
   report: ExportReport;
 }
 
+/** An extra Terraform resource a transform asks the exporter to emit. */
+interface TfAuxResource {
+  type: string;
+  /** Appended to the primary tf name to form the aux resource name. */
+  nameSuffix: string;
+  attributes: Record<string, unknown>;
+}
+
+/** Attributes for the primary resource, plus any auxiliary resources. */
+interface TfScaffold {
+  attributes: Record<string, unknown>;
+  auxiliary?: TfAuxResource[];
+}
+
+/**
+ * Per-service Terraform transformers (scaffold path), the HCL analogue of
+ * `CFN_TRANSFORMS`. The modern `aws` provider splits a bucket's versioning,
+ * encryption, and public-access settings into SEPARATE resources rather than
+ * inline blocks, so a flat rename can't model them. The transform receives the
+ * known config plus the primary's address (e.g. "aws_s3_bucket.assets") so the
+ * auxiliary resources can reference it.
+ */
+const TF_TRANSFORMS: Record<
+  string,
+  (config: Record<string, unknown>, primaryAddress: string) => TfScaffold
+> = {
+  "s3-bucket": (config, primary) => {
+    const attributes: Record<string, unknown> = {};
+    if (typeof config.bucketName === "string" && config.bucketName) {
+      attributes.bucket = config.bucketName;
+    }
+    const bucketRef = hclRaw(`${primary}.id`);
+    const auxiliary: TfAuxResource[] = [];
+    if (config.versioning !== undefined) {
+      auxiliary.push({
+        type: "aws_s3_bucket_versioning",
+        nameSuffix: "_versioning",
+        attributes: {
+          bucket: bucketRef,
+          versioning_configuration: { status: config.versioning ? "Enabled" : "Suspended" },
+        },
+      });
+    }
+    if (typeof config.encryption === "string" && config.encryption) {
+      const algo =
+        config.encryption === "SSE-KMS"
+          ? "aws:kms"
+          : config.encryption === "DSSE-KMS"
+            ? "aws:kms:dsse"
+            : "AES256";
+      auxiliary.push({
+        type: "aws_s3_bucket_server_side_encryption_configuration",
+        nameSuffix: "_encryption",
+        attributes: {
+          bucket: bucketRef,
+          rule: { apply_server_side_encryption_by_default: { sse_algorithm: algo } },
+        },
+      });
+    }
+    if (config.blockPublicAccess !== undefined) {
+      const on = config.blockPublicAccess === true;
+      auxiliary.push({
+        type: "aws_s3_bucket_public_access_block",
+        nameSuffix: "_public_access_block",
+        attributes: {
+          bucket: bucketRef,
+          block_public_acls: on,
+          block_public_policy: on,
+          ignore_public_acls: on,
+          restrict_public_buckets: on,
+        },
+      });
+    }
+    return { attributes, auxiliary };
+  },
+};
+
 /** True if `k` is a bare HCL identifier (else it must be quoted as a key). */
 function isBareKey(k: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(k);
 }
 
+/**
+ * Marker for a raw, unquoted HCL expression (e.g. a resource reference like
+ * `aws_s3_bucket.assets.id`). `hclValue` emits it verbatim instead of quoting.
+ */
+interface HclRaw {
+  __hclRaw: string;
+}
+function hclRaw(expr: string): HclRaw {
+  return { __hclRaw: expr };
+}
+function isHclRaw(v: unknown): v is HclRaw {
+  return typeof v === "object" && v !== null && "__hclRaw" in v;
+}
+
 /** Render a value as an HCL literal (strings quoted, nested lists/maps indented). */
 function hclValue(value: unknown, indent: string): string {
+  if (isHclRaw(value)) return value.__hclRaw;
   if (value === null || value === undefined) return "null";
   if (typeof value === "string") return JSON.stringify(value);
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -420,7 +512,18 @@ export function exportTerraform(
     if (tfType) addressById.set(p.resource.id, `${tfType}.${p.tfName}`);
   }
 
+  /** Render an `attributes` map as the body of a `resource "type" "name" {}` block. */
+  const renderBlock = (tfType: string, name: string, attributes: Record<string, unknown>) => {
+    const lines = [`resource "${tfType}" "${name}" {`];
+    for (const [key, value] of Object.entries(attributes)) {
+      const k = isBareKey(key) ? key : JSON.stringify(key);
+      lines.push(`  ${k} = ${hclValue(value, "  ")}`);
+    }
+    return lines;
+  };
+
   const blocks: string[] = [];
+  const usedTf = new Set(planned.map((p) => p.tfName));
   for (const { resource, tfName } of planned) {
     const tfType = serviceIdToTfType[resource.serviceId];
     if (!tfType) {
@@ -434,11 +537,14 @@ export function exportTerraform(
     const address = `${tfType}.${tfName}`;
     const { values, todoKeys } = knownConfig(resource, address, report);
 
-    const lines: string[] = [`resource "${tfType}" "${tfName}" {`];
-    for (const [key, value] of Object.entries(values)) {
-      const k = isBareKey(key) ? key : JSON.stringify(key);
-      lines.push(`  ${k} = ${hclValue(value, "  ")}`);
-    }
+    // A registered transform builds the primary attributes (and any auxiliary
+    // resources, e.g. S3's separate versioning/encryption/public-access-block);
+    // otherwise the known config maps straight through.
+    const transform = TF_TRANSFORMS[resource.serviceId];
+    const scaffold = transform ? transform(values, address) : undefined;
+    const attributes = scaffold ? scaffold.attributes : values;
+
+    const lines = renderBlock(tfType, tfName, attributes);
     for (const key of todoKeys) lines.push(`  # TODO: set required field "${key}"`);
     const deps = dependencyTargets(resource, graph, ids)
       .map((id) => addressById.get(id))
@@ -447,6 +553,14 @@ export function exportTerraform(
     lines.push("}");
     blocks.push(lines.join("\n"));
     report.exported++;
+
+    // Auxiliary resources reference the primary via interpolation (which creates
+    // the implicit dependency), so they need no explicit depends_on.
+    for (const aux of scaffold?.auxiliary ?? []) {
+      const auxName = unique(`${tfName}${aux.nameSuffix}`, usedTf);
+      blocks.push([...renderBlock(aux.type, auxName, aux.attributes), "}"].join("\n"));
+      report.exported++;
+    }
   }
 
   if (report.exported === 0) report.warnings.push("No resources could be exported to Terraform.");

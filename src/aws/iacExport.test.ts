@@ -261,3 +261,54 @@ describe("iacExport — route53 record/zone round-trip", () => {
     expect(SERVICE_ID_TO_TF_TYPE["route53-record"]).toBe("aws_route53_record");
   });
 });
+
+describe("iacExport — S3 Terraform transform", () => {
+  it("splits versioning/encryption/public-access into separate resources", () => {
+    const g = emptyGraph("S3");
+    g.resources = [
+      res("r-s3", "s3-bucket", {
+        name: "assets",
+        config: {
+          bucketName: "my-bucket",
+          versioning: true,
+          encryption: "SSE-KMS",
+          blockPublicAccess: true,
+        },
+      }),
+    ];
+    const { hcl, report } = exportTerraform(g);
+
+    expect(hcl).toContain('resource "aws_s3_bucket" "assets"');
+    expect(hcl).toContain('bucket = "my-bucket"');
+    expect(hcl).toContain('resource "aws_s3_bucket_versioning" "assets_versioning"');
+    expect(hcl).toContain('status = "Enabled"');
+    expect(hcl).toContain(
+      'resource "aws_s3_bucket_server_side_encryption_configuration" "assets_encryption"',
+    );
+    expect(hcl).toContain('sse_algorithm = "aws:kms"');
+    expect(hcl).toContain(
+      'resource "aws_s3_bucket_public_access_block" "assets_public_access_block"',
+    );
+    expect(hcl).toContain("restrict_public_buckets = true");
+    // Aux resources reference the bucket as an unquoted HCL expression (implicit
+    // dependency), not a quoted string.
+    expect(hcl).toContain("bucket = aws_s3_bucket.assets.id");
+    // Strata's raw config keys must not leak into the HCL.
+    expect(hcl).not.toContain("versioning = true");
+    expect(hcl).not.toContain("blockPublicAccess");
+    // Primary bucket + 3 auxiliary resources.
+    expect(report.exported).toBe(4);
+    // Balanced braces — cheap structural sanity check.
+    expect((hcl.match(/{/g) ?? []).length).toBe((hcl.match(/}/g) ?? []).length);
+  });
+
+  it("emits no auxiliary resources when secure config is unset", () => {
+    const g = emptyGraph("S3");
+    g.resources = [res("r-s3", "s3-bucket", { name: "assets", config: {} })];
+    const { hcl, report } = exportTerraform(g);
+    expect(hcl).toContain('resource "aws_s3_bucket" "assets"');
+    expect(hcl).not.toContain("aws_s3_bucket_versioning");
+    expect(hcl).not.toContain("aws_s3_bucket_public_access_block");
+    expect(report.exported).toBe(1);
+  });
+});
