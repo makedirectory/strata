@@ -850,3 +850,61 @@ describe("validateArchitecture — findings carry resourceId", () => {
     expect(f?.resourceId).toBe("bkt");
   });
 });
+
+describe("validateArchitecture — Well-Architected checks", () => {
+  const has = (out: ValidationResult[], needle: string) =>
+    out.some((r) => r.message.includes(needle));
+
+  it("flags config-driven anti-patterns only on explicit bad values", () => {
+    const ddb = res("dynamodb", { id: "d", config: { pointInTimeRecovery: false } });
+    const ec2 = res("ec2-instance", { id: "e", config: { metadataHttpTokens: "optional" } });
+    const alb = res("elastic-load-balancer", { id: "a", config: { listenerProtocol: "HTTP" } });
+    const sql = res("gcp-cloud-sql", { id: "g", config: { ipv4Enabled: true } });
+    const out = validateArchitecture(graph([ddb, ec2, alb, sql]));
+    expect(has(out, "point-in-time recovery disabled")).toBe(true);
+    expect(has(out, "IMDSv1")).toBe(true);
+    expect(has(out, "unencrypted HTTP listener")).toBe(true);
+    expect(has(out, "public IP")).toBe(true);
+    // resourceId attached for badging.
+    expect(out.find((r) => r.message.includes("IMDSv1"))!.resourceId).toBe("e");
+  });
+
+  it("does not fire on secure defaults / absent config", () => {
+    const ddb = res("dynamodb", { config: { pointInTimeRecovery: true } });
+    const ec2 = res("ec2-instance", { config: {} }); // no metadataHttpTokens key
+    const out = validateArchitecture(graph([ddb, ec2]));
+    expect(has(out, "point-in-time")).toBe(false);
+    expect(has(out, "IMDSv1")).toBe(false);
+  });
+
+  it("flags an idle (unattached) EBS volume", () => {
+    const v = res("ebs-volume", { id: "v" });
+    const out = validateArchitecture(graph([v]));
+    expect(has(out, "not attached to an instance")).toBe(true);
+  });
+
+  it("flags a single NAT Gateway serving private subnets in multiple AZs", () => {
+    const vpc = res("vpc", { id: "vpc", config: { cidr: "10.0.0.0/16" } });
+    const a = res("subnet-private", {
+      id: "a",
+      parentId: "vpc",
+      config: { cidr: "10.0.1.0/24", az: "us-east-1a" },
+    });
+    const b = res("subnet-private", {
+      id: "b",
+      parentId: "vpc",
+      config: { cidr: "10.0.2.0/24", az: "us-east-1b" },
+    });
+    const nat = res("nat-gateway", { id: "nat" });
+    const out = validateArchitecture(graph([vpc, a, b, nat]));
+    expect(has(out, "NAT Gateway per AZ")).toBe(true);
+  });
+
+  it("flags CloudFront without a WAF, but not when one is attached", () => {
+    const cf = res("cloudfront", { id: "cf" });
+    expect(has(validateArchitecture(graph([cf])), "no WAF attached")).toBe(true);
+    const waf = res("waf", { id: "w" });
+    const withWaf = validateArchitecture(graph([cf, waf], [rel("w", "cf", "attached_to")]));
+    expect(has(withWaf, "no WAF attached")).toBe(false);
+  });
+});
