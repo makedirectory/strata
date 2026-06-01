@@ -655,7 +655,7 @@ const TOUR_STEPS: { icon: string; title: string; body: React.ReactNode }[] = [
     title: "Connect them",
     body: (
       <>
-        Press <strong>C</strong> (or drag from a node's port) to draw typed relationships —{" "}
+        Press <strong>C</strong> (or drag from a node&rsquo;s port) to draw typed relationships —{" "}
         <em>contains</em>, <em>routes&nbsp;to</em>, <em>invokes</em>, and more.
       </>
     ),
