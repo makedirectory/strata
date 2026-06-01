@@ -833,3 +833,20 @@ describe("suggestRules", () => {
     expect(suggestRules(g)).toEqual([]);
   });
 });
+
+describe("validateArchitecture — findings carry resourceId", () => {
+  it("attaches the offending resource id so the UI can badge that node", () => {
+    const sn = res("subnet-public", { id: "sn", config: { cidr: "10.0.1.0/24" } });
+    const out = validateArchitecture(graph([sn]));
+    const f = out.find((r) => r.message.includes("should be contained by a VPC"));
+    expect(f).toBeDefined();
+    expect(f!.resourceId).toBe("sn");
+  });
+
+  it("flags a public S3 bucket against the bucket's id", () => {
+    const b = res("s3-bucket", { id: "bkt", config: { blockPublicAccess: false } });
+    const out = validateArchitecture(graph([b]));
+    const f = out.find((r) => r.message.includes("Block Public Access disabled"));
+    expect(f?.resourceId).toBe("bkt");
+  });
+});

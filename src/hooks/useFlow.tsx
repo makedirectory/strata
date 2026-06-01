@@ -7,7 +7,8 @@ import type { ResourceInstance, Relationship, InfrastructureGraph } from "../aws
 import { emptyGraph, DEFAULT_NODE_SIZE } from "../aws/model";
 import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind } from "../aws/types";
-import { defaultConfig, getService } from "../aws/registry";
+import { defaultConfig, getService, serviceColor, serviceIcon } from "../aws/registry";
+import { buildSvg } from "../canvas/imageExport";
 import {
   validateArchitecture,
   suggestRules as suggestRulesEngine,
@@ -21,6 +22,8 @@ import { listGraphs, getGraph, createGraph, updateGraph, deleteGraph } from "../
 import type { GraphSummary } from "../aws/model";
 import { importAnyIaC } from "../lib/importIac";
 import { getExample } from "../examples";
+import { estimateMonthlyCost, estimateTotal, formatMonthly } from "../aws/cost";
+import { buildShareUrl, readGraphFromHash } from "../lib/shareLink";
 import {
   zoomAbout,
   zoomByFactor,
@@ -187,6 +190,10 @@ interface FlowContextValue {
   /** Alias of {@link runRulesUI}, consumed by the top toolbar. */
   suggestRules: () => void;
   exportJSON: () => void;
+  /** Download the diagram as a vector SVG or rasterised PNG image. */
+  exportImage: (format: "svg" | "png") => void;
+  /** Copy a self-contained share link (diagram encoded in the URL hash). */
+  shareDiagram: () => void;
   importJSONDialog: () => void;
   importIaCDialog: () => void;
   clear: () => void;
@@ -244,6 +251,17 @@ interface FlowContextValue {
   deleteSavedGraph: (id: string) => Promise<void>;
   /** Structured validation findings, or `null` before the first run. */
   validationResults: ValidationResult[] | null;
+  /** Always-on validation: live findings recomputed on every graph change. */
+  liveFindings: ValidationResult[];
+  /** Per-node finding markers (top-right corner) for the canvas overlay. */
+  findingMarkers: { id: string; x: number; y: number; level: "error" | "warn" }[];
+  /** Live error/warn counts for the validation summary badge. */
+  findingCounts: { error: number; warn: number };
+  /** Cost overlay: per-node $/mo labels + a diagram total (rough estimate). */
+  showCost: boolean;
+  toggleCost: () => void;
+  costSummary: { total: number; estimated: number; unknown: number; label: string };
+  costMarkers: { id: string; x: number; y: number; text: string }[];
   /** Structured rule suggestions, or `null` before the first run. */
   ruleSuggestions: RuleSuggestion[] | null;
   status: string;
@@ -432,6 +450,68 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isContainerPred,
     ],
   );
+
+  // ---- always-on validation ----------------------------------------------
+  // Findings recompute whenever the graph changes (validateArchitecture only
+  // reads resources + relationships), so badges and the summary stay live.
+  const liveFindings = React.useMemo<ValidationResult[]>(
+    () =>
+      validateArchitecture({
+        resources: store.resources,
+        relationships: store.relationships,
+      } as InfrastructureGraph),
+    [store.resources, store.relationships],
+  );
+  // Max severity per resource id (error beats warn), for node badging.
+  const findingLevelById = React.useMemo(() => {
+    const m = new Map<string, "error" | "warn">();
+    for (const f of liveFindings) {
+      if (!f.resourceId || f.level === "ok") continue;
+      if (f.level === "error" || !m.has(f.resourceId)) m.set(f.resourceId, f.level);
+    }
+    return m;
+  }, [liveFindings]);
+  // Marker dots positioned at each flagged, visible node's top-right corner —
+  // drawn by the Canvas as an SVG overlay (no imperative-renderer change).
+  const findingMarkers = React.useMemo(() => {
+    const out: { id: string; x: number; y: number; level: "error" | "warn" }[] = [];
+    for (const [id, level] of findingLevelById) {
+      const r = layout.rects.get(id);
+      if (r) out.push({ id, x: r.x + r.w, y: r.y, level });
+    }
+    return out;
+  }, [findingLevelById, layout]);
+  const findingCounts = React.useMemo(() => {
+    let error = 0;
+    let warn = 0;
+    for (const f of liveFindings) {
+      if (f.level === "error") error++;
+      else if (f.level === "warn") warn++;
+    }
+    return { error, warn };
+  }, [liveFindings]);
+
+  // ---- cost estimate overlay ---------------------------------------------
+  const [showCost, setShowCost] = React.useState(false);
+  const toggleCost = useCallback(() => setShowCost((v) => !v), []);
+  const costSummary = React.useMemo(() => {
+    const { total, estimated, unknown } = estimateTotal(store.resources);
+    return { total, estimated, unknown, label: formatMonthly(total) };
+  }, [store.resources]);
+  // Per-node $/mo labels (bottom-right corner) shown only while the overlay is on.
+  const costMarkers = React.useMemo(() => {
+    if (!showCost) return [];
+    const out: { id: string; x: number; y: number; text: string }[] = [];
+    for (const r of store.resources) {
+      const rect = layout.rects.get(r.id);
+      if (!rect) continue;
+      const c = estimateMonthlyCost(r);
+      if (c === null || c === 0) continue;
+      out.push({ id: r.id, x: rect.x + rect.w, y: rect.y + rect.h, text: formatMonthly(c) });
+    }
+    return out;
+  }, [showCost, store.resources, layout]);
+
   // Environment-tint overlay: resource id → tint colour, from its account's
   // environment (or an Environment tag), null when the overlay is off.
   const envTintById = React.useMemo<ReadonlyMap<string, string> | null>(() => {
@@ -1177,6 +1257,89 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     a.click();
   }, [buildGraph]);
 
+  /** Download a blob with a given filename (shared by the image exporters). */
+  const downloadBlob = useCallback((blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, []);
+
+  /** Export the diagram as an SVG (vector) or PNG (rasterised from the SVG). */
+  const exportImage = useCallback(
+    async (format: "svg" | "png") => {
+      const svg = buildSvg({
+        resources: store.resources,
+        edges: store.relationships.map((e) => ({ from: e.from, to: e.to })),
+        rects: layout.rects,
+        color: (sid) => serviceColor(sid),
+        icon: (sid) => serviceIcon(sid),
+        label: (r) => r.name,
+        isContainer: (id) => layout.isContainerNode(id),
+      });
+      if (!svg) {
+        setStatus("Nothing to export — the canvas is empty.");
+        return;
+      }
+      const base =
+        (store.graphName || "diagram").replace(/[^\w.-]+/g, "-").toLowerCase() || "diagram";
+      if (format === "svg") {
+        downloadBlob(new Blob([svg], { type: "image/svg+xml" }), `${base}.svg`);
+        setStatus("Exported SVG.");
+        return;
+      }
+      // PNG: rasterise the SVG at 2× via an offscreen canvas.
+      try {
+        const img = new Image();
+        const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("decode failed"));
+          img.src = svgUrl;
+        });
+        const scale = 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = (img.naturalWidth || img.width) * scale;
+        canvas.height = (img.naturalHeight || img.height) * scale;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("no 2d context");
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(svgUrl);
+        const png = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+        if (!png) throw new Error("encode failed");
+        downloadBlob(png, `${base}.png`);
+        setStatus("Exported PNG.");
+      } catch {
+        setStatus("PNG export failed — try SVG instead.");
+      }
+    },
+    [store.resources, store.relationships, store.graphName, layout, downloadBlob],
+  );
+
+  /** Copy a self-contained share link (the diagram packed into the URL hash). */
+  const shareDiagram = useCallback(async () => {
+    const graph = buildGraph();
+    if (graph.resources.length === 0) {
+      setStatus("Nothing to share — the canvas is empty.");
+      return;
+    }
+    const base =
+      typeof location !== "undefined"
+        ? location.origin + location.pathname
+        : "https://strata.mk-dir.com/";
+    const url = buildShareUrl(base, graph);
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus("Share link copied to clipboard.");
+    } catch {
+      setStatus("Couldn't copy automatically — your share link is in the address bar.");
+      if (typeof location !== "undefined") location.hash = url.slice(url.indexOf("#") + 1);
+    }
+  }, [buildGraph]);
+
   const importJSONDialog = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -1419,6 +1582,31 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         link(alb, tg, "targets");
         link(tg, ecs, "targets");
         link(sgApp, ecs, "attached_to");
+      } else if (presetName === "serverless-api") {
+        const api = seed("api-gateway", 0, 0, "HTTP API");
+        const fn = seed("lambda", 0, 0, "request-handler", { runtime: "nodejs20.x", memory: 256 });
+        const worker = seed("lambda", 0, 0, "async-worker");
+        const ddb = seed("dynamodb", 0, 0, "Table", { billingMode: "PAY_PER_REQUEST" });
+        const queue = seed("sqs", 0, 0, "Jobs");
+        const topic = seed("sns", 0, 0, "Events");
+        const bucket = seed("s3-bucket", 0, 0, "Uploads", { blockPublicAccess: true });
+        link(api, fn, "invokes");
+        link(fn, ddb, "reads_from");
+        link(fn, bucket, "writes_to");
+        link(fn, queue, "writes_to");
+        link(worker, queue, "subscribes_to");
+        link(fn, topic, "publishes_to");
+      } else if (presetName === "static-website") {
+        const dns = seed("route53", 0, 0, "DNS");
+        const cdn = seed("cloudfront", 0, 0, "CDN");
+        const waf = seed("waf", 0, 0, "WAF");
+        const bucket = seed("s3-bucket", 0, 0, "Site assets", {
+          blockPublicAccess: true,
+          encryption: "SSE-S3",
+        });
+        link(dns, cdn, "routes_to");
+        link(cdn, bucket, "reads_from");
+        link(waf, cdn, "attached_to");
       } else {
         return;
       }
@@ -1441,7 +1629,14 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         viewport: { x: 120, y: 80, scale: 0.85 },
         accounts: [],
         graphId: "",
-        graphName: presetName === "ecs-alb" ? "ECS + ALB starter" : "Basic AWS starter",
+        graphName:
+          (
+            {
+              "ecs-alb": "ECS + ALB starter",
+              "serverless-api": "Serverless API starter",
+              "static-website": "Static Website starter",
+            } as Record<string, string>
+          )[presetName] ?? "Basic AWS starter",
       });
     },
     [storeUid, storeReplaceAll, confirmReplaceIfDirty],
@@ -1508,6 +1703,26 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (autoOpenedHubRef.current) return;
     autoOpenedHubRef.current = true;
+    // A share link (#g=…) loads its diagram and skips the hub/tour entirely.
+    const shared = typeof location !== "undefined" ? readGraphFromHash(location.hash) : null;
+    if (shared) {
+      storeReplaceAll({
+        resources: shared.resources ?? [],
+        relationships: shared.relationships ?? [],
+        viewport: shared.viewport,
+        accounts: shared.accounts ?? [],
+        graphId: "",
+        graphName: shared.name || "Shared diagram",
+      });
+      // Drop the (large) hash so a refresh doesn't reload and the URL stays clean.
+      try {
+        history.replaceState(null, "", location.pathname + location.search);
+      } catch {
+        /* ignore */
+      }
+      setStatus("Loaded a shared diagram.");
+      return;
+    }
     if (store.resources.length > 0) return;
     let onboarded = false;
     try {
@@ -1609,6 +1824,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       validate: runValidate,
       suggestRules: runSuggest,
       exportJSON,
+      exportImage,
+      shareDiagram,
       importJSONDialog,
       importIaCDialog,
       clear,
@@ -1643,6 +1860,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loadGraph,
       deleteSavedGraph,
       validationResults,
+      liveFindings,
+      findingMarkers,
+      findingCounts,
+      showCost,
+      toggleCost,
+      costSummary,
+      costMarkers,
       ruleSuggestions,
       status,
     }),
@@ -1703,6 +1927,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       runValidate,
       runSuggest,
       exportJSON,
+      exportImage,
+      shareDiagram,
       importJSONDialog,
       importIaCDialog,
       clear,
@@ -1735,6 +1961,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loadGraph,
       deleteSavedGraph,
       validationResults,
+      liveFindings,
+      findingMarkers,
+      findingCounts,
+      showCost,
+      toggleCost,
+      costSummary,
+      costMarkers,
       ruleSuggestions,
       status,
     ],

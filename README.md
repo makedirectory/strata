@@ -1,5 +1,7 @@
 # Strata
 
+**Live app: [strata.mk-dir.com](https://strata.mk-dir.com/)**
+
 A registry-driven canvas for **modeling cloud infrastructure as a typed graph**.
 Drag services onto a canvas, configure them with auto-generated forms, and connect
 them with typed relationships (`contains`, `routes_to`, `invokes`, `peers_with`, …)

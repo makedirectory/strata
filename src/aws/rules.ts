@@ -12,6 +12,8 @@ import type { RelationshipKind } from "./types";
 export interface ValidationResult {
   level: "error" | "warn" | "ok";
   message: string;
+  /** Resource the finding is about, when known — lets the UI badge that node. */
+  resourceId?: string;
 }
 
 export interface RuleSuggestion {
@@ -191,12 +193,20 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
   resources.filter(isSubnet).forEach((sn) => {
     const parentVpc = containerOf(sn, (n) => n.serviceId === "vpc");
     if (!parentVpc) {
-      out.push({ level: "error", message: `Subnet "${sn.name}" should be contained by a VPC.` });
+      out.push({
+        level: "error",
+        message: `Subnet "${sn.name}" should be contained by a VPC.`,
+        resourceId: sn.id,
+      });
     } else {
       const sc = cfgStr(sn, "cidr");
       const pc = cfgStr(parentVpc, "cidr");
       if (sc && pc && !cidrContains(pc, sc)) {
-        out.push({ level: "error", message: `Subnet ${sc} is not inside VPC ${pc}.` });
+        out.push({
+          level: "error",
+          message: `Subnet ${sc} is not inside VPC ${pc}.`,
+          resourceId: sn.id,
+        });
       }
     }
   });
@@ -214,6 +224,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `Route Table "${rt.name}" is not attached to any Subnet.`,
+        resourceId: rt.id,
       });
     }
   });
@@ -227,7 +238,11 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       .filter(isDefined)
       .filter(isSubnet);
     if (subs.length === 0) {
-      out.push({ level: "warn", message: `NACL "${nacl.name}" is not attached to any Subnet.` });
+      out.push({
+        level: "warn",
+        message: `NACL "${nacl.name}" is not attached to any Subnet.`,
+        resourceId: nacl.id,
+      });
     }
   });
 
@@ -241,6 +256,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "error",
         message: `Internet Gateway "${igw.name}" must be attached to a VPC.`,
+        resourceId: igw.id,
       });
     }
   });
@@ -261,6 +277,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "error",
         message: `Public Subnet "${sn.name}" should have a Route Table that routes to an Internet Gateway.`,
+        resourceId: sn.id,
       });
     }
   });
@@ -273,6 +290,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "error",
         message: `NAT Gateway "${nat.name}" should be placed in a public Subnet.`,
+        resourceId: nat.id,
       });
     }
   });
@@ -295,6 +313,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         out.push({
           level: "warn",
           message: `Private Subnet "${sn.name}" usually needs a Route Table that routes to a NAT Gateway for egress.`,
+          resourceId: sn.id,
         });
       }
     });
@@ -307,6 +326,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `Load Balancer "${alb.name}" is not placed in any public Subnet.`,
+        resourceId: alb.id,
       });
     } else {
       // AWS requires an ALB to have subnets in at least two Availability Zones.
@@ -319,6 +339,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         out.push({
           level: "error",
           message: `Load Balancer "${alb.name}" must have public Subnets in at least 2 Availability Zones.`,
+          resourceId: alb.id,
         });
       }
     }
@@ -329,6 +350,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `Load Balancer "${alb.name}" should target a Target Group.`,
+        resourceId: alb.id,
       });
     }
   });
@@ -350,6 +372,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `Target Group "${tg.name}" should target a compute target (ECS Service, EC2 instance, Lambda, or an ALB).`,
+        resourceId: tg.id,
       });
     }
   });
@@ -361,6 +384,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "error",
         message: `ECS Service "${svc.name}" must be attached to Subnet(s).`,
+        resourceId: svc.id,
       });
     }
     const sg =
@@ -374,6 +398,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "error",
         message: `ECS Service "${svc.name}" should be attached to a Security Group.`,
+        resourceId: svc.id,
       });
     }
   });
@@ -385,6 +410,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `RDS "${rds.name}" should be attached to private Subnet(s).`,
+        resourceId: rds.id,
       });
     }
     subs.forEach((s) => {
@@ -392,6 +418,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         out.push({
           level: "error",
           message: `RDS "${rds.name}" should not be in public Subnet "${s.name}".`,
+          resourceId: rds.id,
         });
       }
     });
@@ -406,10 +433,15 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `RDS "${rds.name}" should be attached to a Security Group.`,
+        resourceId: rds.id,
       });
     }
     if (rds.config["publiclyAccessible"] === true) {
-      out.push({ level: "error", message: `RDS "${rds.name}" must not be publicly accessible.` });
+      out.push({
+        level: "error",
+        message: `RDS "${rds.name}" must not be publicly accessible.`,
+        resourceId: rds.id,
+      });
     }
   });
 
@@ -420,6 +452,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `S3 bucket "${b.name}" has Block Public Access disabled; the bucket may be publicly accessible.`,
+        resourceId: b.id,
       });
     }
   });
@@ -441,6 +474,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         out.push({
           level: "warn",
           message: `${r.name} stores data at rest unencrypted; enable encryption.`,
+          resourceId: r.id,
         });
       }
     });
@@ -473,6 +507,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         out.push({
           level: "warn",
           message: `Security Group "${sg.name}" exposes sensitive port ${port} to the world (${cidr}).`,
+          resourceId: sg.id,
         });
       }
     }
@@ -484,6 +519,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `Cloud Storage bucket "${b.name}" has uniform bucket-level access disabled; per-object ACLs allow public exposure.`,
+        resourceId: b.id,
       });
     }
   });
@@ -505,6 +541,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         out.push({
           level: "warn",
           message: `Firewall rule "${fw.name}" exposes sensitive port ${portStr} to the world (0.0.0.0/0).`,
+          resourceId: fw.id,
         });
       }
     }
@@ -516,6 +553,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `Storage Account "${sa.name}" has public blob access enabled.`,
+        resourceId: sa.id,
       });
     }
   });
@@ -526,6 +564,7 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       out.push({
         level: "warn",
         message: `Redis "${redis.name}" has the non-SSL port enabled.`,
+        resourceId: redis.id,
       });
     }
   });

@@ -1170,6 +1170,135 @@ svg.guides {
   cursor: pointer;
   padding: 0;
 }
+
+/* ---- Always-on validation: node marker dots + summary badge ---- */
+.findings-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 5;
+}
+.finding-dot {
+  stroke: #0a0f1e;
+  stroke-width: 2;
+}
+.finding-dot--error {
+  fill: #f87171;
+}
+.finding-dot--warn {
+  fill: #fbbf24;
+}
+.valbadge {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 20;
+  max-width: 400px;
+}
+.valbadge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0e1729;
+  border: 1px solid #223055;
+  border-radius: 10px;
+  padding: 6px 10px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+.valbadge-chip:hover {
+  border-color: var(--accent);
+}
+.valbadge-count.error {
+  color: #f87171;
+}
+.valbadge-count.warn {
+  color: #fbbf24;
+}
+.valbadge-label {
+  color: var(--sub);
+}
+.valbadge-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 6px;
+  max-height: 300px;
+  overflow: auto;
+  background: #0c1426;
+  border: 1px solid #223055;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.valbadge-item {
+  margin: 0;
+}
+.valbadge-item-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.valbadge-item-btn:hover:not(:disabled) {
+  background: #17213a;
+}
+.valbadge-item-btn:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+.valbadge-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 4px;
+}
+.valbadge-dot.error {
+  background: #f87171;
+}
+.valbadge-dot.warn {
+  background: #fbbf24;
+}
+
+/* ---- Cost overlay ---- */
+.cost-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  overflow: hidden;
+}
+.cost-label {
+  position: absolute;
+  transform: translate(-100%, 4px);
+  background: rgba(14, 23, 41, 0.85);
+  border: 1px solid #2a3f6a;
+  color: #9fe6b0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.toolbar-toggle.active {
+  background: var(--accent);
+  color: #0b1220;
+  border-color: var(--accent);
+}
 .hub-title {
   margin: 0;
   font-size: 18px;

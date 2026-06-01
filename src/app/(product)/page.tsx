@@ -17,6 +17,19 @@ import type { CloudProvider } from "../../aws/types";
 import { runDiscovery, runGcpDiscovery, runAzureDiscovery } from "../../lib/api";
 import { EXAMPLES } from "../../examples";
 
+/** Built-in coded starter templates (loadPreset ids) shown in the Start hub. */
+const TEMPLATES: { id: string; label: string; icon: string; desc: string }[] = [
+  { id: "aws-basic", label: "Basic AWS VPC", icon: "🧩", desc: "VPC + public/private subnets" },
+  { id: "ecs-alb", label: "ECS behind an ALB", icon: "🚀", desc: "ALB → ECS, NAT, route tables" },
+  {
+    id: "serverless-api",
+    label: "Serverless API",
+    icon: "⚡",
+    desc: "API GW → Lambda, DynamoDB, SQS",
+  },
+  { id: "static-website", label: "Static Website", icon: "🌐", desc: "Route 53 → CloudFront → S3" },
+];
+
 const VIEW_PRESETS = [
   { id: "all", label: "All" },
   { id: "network", label: "Network" },
@@ -379,6 +392,8 @@ function TopBar() {
     runValidateUI,
     runRulesUI,
     exportJSON,
+    exportImage,
+    shareDiagram,
     importJSONDialog,
     importIaCDialog,
     clear,
@@ -395,6 +410,9 @@ function TopBar() {
     graphName,
     renameGraph,
     openTour,
+    showCost,
+    toggleCost,
+    costSummary,
   } = useFlow();
   return (
     <div className="topbar">
@@ -490,6 +508,18 @@ function TopBar() {
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={exportJSON}>Export JSON</MenuItem>
+          <MenuItem onClick={() => exportImage("png")} title="Download the diagram as a PNG image">
+            Export PNG image
+          </MenuItem>
+          <MenuItem onClick={() => exportImage("svg")} title="Download the diagram as an SVG image">
+            Export SVG image
+          </MenuItem>
+          <MenuItem
+            onClick={shareDiagram}
+            title="Copy a self-contained share link to the clipboard"
+          >
+            Copy share link
+          </MenuItem>
           <MenuItem
             onClick={openExportIaC}
             title="Generate Terraform / CloudFormation from the diagram"
@@ -511,6 +541,15 @@ function TopBar() {
             Suggest rules
           </MenuItem>
         </Menu>
+
+        <button
+          className={showCost ? "toolbar-toggle active" : "toolbar-toggle"}
+          onClick={toggleCost}
+          title="Toggle estimated monthly cost (rough)"
+          aria-pressed={showCost}
+        >
+          {showCost ? `Cost ~${costSummary.label}` : "Cost"}
+        </button>
 
         <span className="toolbar-divider" aria-hidden="true" />
 
@@ -633,6 +672,46 @@ function HubSavedGraphs() {
   );
 }
 
+/** Always-on validation summary: a corner chip with live error/warn counts that
+ *  expands to a clickable findings list (click focuses the offending node). */
+function ValidationBadge() {
+  const { liveFindings, findingCounts, goToResource, presentation } = useFlow();
+  const [open, setOpen] = React.useState(false);
+  const { error, warn } = findingCounts;
+  if (presentation || liveFindings.length === 0) return null;
+  return (
+    <div className={open ? "valbadge open" : "valbadge"}>
+      <button
+        className="valbadge-chip"
+        onClick={() => setOpen((v) => !v)}
+        title="Validation findings"
+        aria-expanded={open}
+      >
+        {error > 0 && <span className="valbadge-count error">⛔ {error}</span>}
+        {warn > 0 && <span className="valbadge-count warn">⚠ {warn}</span>}
+        <span className="valbadge-label">{open ? "▾" : "▸"} findings</span>
+      </button>
+      {open && (
+        <ul className="valbadge-list">
+          {liveFindings.map((f, i) => (
+            <li key={i} className={`valbadge-item ${f.level}`}>
+              <button
+                className="valbadge-item-btn"
+                disabled={!f.resourceId}
+                onClick={() => f.resourceId && goToResource(f.resourceId)}
+                title={f.resourceId ? "Go to resource" : undefined}
+              >
+                <span className={`valbadge-dot ${f.level}`} aria-hidden="true" />
+                {f.message}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** Steps for the first-run guided tour. */
 const TOUR_STEPS: { icon: string; title: string; body: React.ReactNode }[] = [
   {
@@ -657,6 +736,16 @@ const TOUR_STEPS: { icon: string; title: string; body: React.ReactNode }[] = [
       <>
         Press <strong>C</strong> (or drag from a node&rsquo;s port) to draw typed relationships —{" "}
         <em>contains</em>, <em>routes&nbsp;to</em>, <em>invokes</em>, and more.
+      </>
+    ),
+  },
+  {
+    icon: "⌨️",
+    title: "Command palette",
+    body: (
+      <>
+        Press <strong>⌘K</strong> (Ctrl+K) to search services, jump to any node, or run any command
+        — the fastest way to get around.
       </>
     ),
   },
@@ -851,20 +940,6 @@ function StartHub() {
             className="hub-card"
             onClick={() => {
               closeStartHub();
-              void loadPreset("aws-basic");
-            }}
-          >
-            <span className="hub-card-icon" aria-hidden="true">
-              🧩
-            </span>
-            <span className="hub-card-title">Start from a template</span>
-            <span className="hub-card-desc">Begin with a ready-made architecture (Basic AWS).</span>
-          </button>
-
-          <button
-            className="hub-card"
-            onClick={() => {
-              closeStartHub();
               openConnect();
             }}
           >
@@ -896,6 +971,31 @@ function StartHub() {
               </span>
             </button>
           )}
+        </div>
+
+        <div className="hub-examples">
+          <div className="hub-section-title">Templates</div>
+          <div className="hub-examples-grid">
+            {TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                className="hub-example"
+                onClick={() => {
+                  closeStartHub();
+                  void loadPreset(t.id);
+                }}
+                title={t.desc}
+              >
+                <span className="hub-example-icon" aria-hidden="true">
+                  {t.icon}
+                </span>
+                <span className="hub-example-body">
+                  <span className="hub-example-label">{t.label}</span>
+                  <span className="hub-example-meta">{t.desc}</span>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="hub-examples">
@@ -1624,6 +1724,7 @@ function Workspace() {
         </aside>
         <main className="canvas-wrap" id="canvasWrap">
           <Canvas />
+          <ValidationBadge />
         </main>
         <aside className="right">
           <h3>Inspector</h3>

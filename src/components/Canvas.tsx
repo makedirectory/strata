@@ -44,6 +44,8 @@ export const Canvas: React.FC = () => {
     focusedContainerId,
     presentation,
     openStartHub,
+    findingMarkers,
+    costMarkers,
   } = useFlow();
 
   // Whether a minimap click-drag is in progress (window-level so the drag keeps
@@ -284,6 +286,39 @@ export const Canvas: React.FC = () => {
             />
           )}
         </svg>
+      )}
+      {findingMarkers.length > 0 && (
+        <svg className="findings-overlay" aria-hidden="true">
+          {findingMarkers.map((m) => (
+            <circle
+              key={m.id}
+              cx={viewport.x + m.x * viewport.scale}
+              cy={viewport.y + m.y * viewport.scale}
+              r={6}
+              className={
+                m.level === "error"
+                  ? "finding-dot finding-dot--error"
+                  : "finding-dot finding-dot--warn"
+              }
+            />
+          ))}
+        </svg>
+      )}
+      {costMarkers.length > 0 && (
+        <div className="cost-overlay" aria-hidden="true">
+          {costMarkers.map((m) => (
+            <span
+              key={m.id}
+              className="cost-label"
+              style={{
+                left: viewport.x + m.x * viewport.scale,
+                top: viewport.y + m.y * viewport.scale,
+              }}
+            >
+              {m.text}
+            </span>
+          ))}
+        </div>
       )}
       {state.resources.length === 0 && (
         <div className="empty-hint">
