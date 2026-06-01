@@ -394,6 +394,7 @@ function TopBar() {
     openConnect,
     graphName,
     renameGraph,
+    openTour,
   } = useFlow();
   return (
     <div className="topbar">
@@ -423,6 +424,9 @@ function TopBar() {
       >
         Docs ↗
       </a>
+      <button className="topbar-link topbar-tour" onClick={openTour} title="Show the quick tour">
+        ? Tour
+      </button>
       <div className="status" id="status">
         {status}
       </div>
@@ -629,6 +633,120 @@ function HubSavedGraphs() {
   );
 }
 
+/** Steps for the first-run guided tour. */
+const TOUR_STEPS: { icon: string; title: string; body: React.ReactNode }[] = [
+  {
+    icon: "👋",
+    title: "Welcome to Strata",
+    body: "Design cloud architecture as a typed graph — across AWS, Google Cloud and Azure. Here's the 20-second tour.",
+  },
+  {
+    icon: "🧱",
+    title: "Add services",
+    body: (
+      <>
+        Drag a service from the <strong>palette</strong> on the left onto the canvas. Drop it inside
+        a container (like a VPC or Resource Group) to nest it — containers resize to fit.
+      </>
+    ),
+  },
+  {
+    icon: "🔗",
+    title: "Connect them",
+    body: (
+      <>
+        Press <strong>C</strong> (or drag from a node's port) to draw typed relationships —{" "}
+        <em>contains</em>, <em>routes&nbsp;to</em>, <em>invokes</em>, and more.
+      </>
+    ),
+  },
+  {
+    icon: "✨",
+    title: "Organize, check & save",
+    body: (
+      <>
+        Hit <strong>Tidy</strong> to auto-arrange, <strong>Validate</strong> for best-practice
+        findings, then name your diagram in the top bar and <strong>Save</strong>.
+      </>
+    ),
+  },
+];
+
+/** First-run guided tour — a short, dismissible intro shown once (and
+ *  re-launchable from the top bar). The final step hands off to the Start hub. */
+function Tour() {
+  const { tourOpen, tourStep, closeTour, setTourStep, openStartHub } = useFlow();
+  React.useEffect(() => {
+    if (!tourOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeTour();
+      if (e.key === "ArrowRight") setTourStep(Math.min(TOUR_STEPS.length - 1, tourStep + 1));
+      if (e.key === "ArrowLeft") setTourStep(tourStep - 1);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [tourOpen, tourStep, closeTour, setTourStep]);
+
+  if (!tourOpen) return null;
+  const step = TOUR_STEPS[Math.min(tourStep, TOUR_STEPS.length - 1)];
+  const isLast = tourStep >= TOUR_STEPS.length - 1;
+
+  return (
+    <div className="hub-backdrop hub-backdrop--top" onMouseDown={closeTour}>
+      <div
+        className="tour"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Getting started"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <button className="hub-close" onClick={closeTour} aria-label="Close">
+          ✕
+        </button>
+        <div className="tour-icon" aria-hidden="true">
+          {step.icon}
+        </div>
+        <h2 className="tour-title">{step.title}</h2>
+        <p className="tour-body">{step.body}</p>
+
+        <div className="tour-dots" aria-hidden="true">
+          {TOUR_STEPS.map((_, i) => (
+            <span key={i} className={i === tourStep ? "tour-dot active" : "tour-dot"} />
+          ))}
+        </div>
+
+        <div className="tour-nav">
+          <button className="tour-skip" onClick={closeTour}>
+            {isLast ? "Close" : "Skip"}
+          </button>
+          <div className="tour-nav-right">
+            {tourStep > 0 && (
+              <button className="tour-back" onClick={() => setTourStep(tourStep - 1)}>
+                Back
+              </button>
+            )}
+            {isLast ? (
+              <button
+                className="btn-start"
+                onClick={() => {
+                  closeTour();
+                  openStartHub();
+                }}
+              >
+                Browse examples
+              </button>
+            ) : (
+              <button className="btn-start" onClick={() => setTourStep(tourStep + 1)}>
+                Next
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** "Start a diagram" launcher — a hub of mutually-exclusive starting points,
  *  not a linear wizard. Real entries call the existing (guarded) handlers;
  *  unbuilt capabilities are shown disabled with a "Coming soon" badge. */
@@ -683,6 +801,11 @@ function StartHub() {
             ✕
           </button>
         </div>
+        <p className="hub-subtitle">
+          New here? Open an <strong>example</strong> below to explore, start from a{" "}
+          <strong>template</strong>, or build from scratch — you can drag services from the palette
+          anytime.
+        </p>
 
         <div className="hub-grid">
           <button className="hub-card" onClick={() => startBlank()}>
@@ -1509,6 +1632,7 @@ function Workspace() {
         </aside>
       </div>
       <CommandPalette />
+      <Tour />
       <StartHub />
       <ExportDialog />
       <ConnectDialog />

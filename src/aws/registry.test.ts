@@ -354,3 +354,35 @@ describe("importable types resolve", () => {
     }
   });
 });
+
+describe("palette integrity — no dead ends", () => {
+  const all = allServices();
+
+  it("every commonConnection target resolves (no dangling links)", () => {
+    const dangling: string[] = [];
+    for (const s of all) {
+      for (const c of s.commonConnections) {
+        if (!getService(c.to)) dangling.push(`${s.id} -> ${c.to}`);
+      }
+    }
+    expect(dangling).toEqual([]);
+  });
+
+  it("every service is connectable — has a suggested connection (in or out) or is a container", () => {
+    // A node nothing can connect to/from (and that isn't a container you nest
+    // into) is a palette dead end. Containers are reached via parentId nesting.
+    const hasIncoming = new Set<string>();
+    for (const s of all) for (const c of s.commonConnections) hasIncoming.add(c.to);
+    const deadEnds = all
+      .filter((s) => s.commonConnections.length === 0 && !hasIncoming.has(s.id) && !s.isContainer)
+      .map((s) => `${s.id} (${serviceProvider(s)})`);
+    expect(deadEnds).toEqual([]);
+  });
+
+  it("every service has an icon and a known category", () => {
+    for (const s of all) {
+      expect(s.icon, `${s.id} missing icon`).toBeTruthy();
+      expect(CATEGORIES[s.category], `${s.id} has unknown category ${s.category}`).toBeTruthy();
+    }
+  });
+});

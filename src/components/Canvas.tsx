@@ -287,12 +287,13 @@ export const Canvas: React.FC = () => {
       )}
       {state.resources.length === 0 && (
         <div className="empty-hint">
-          <div className="empty-hint-title">Nothing here yet</div>
+          <div className="empty-hint-title">Design your cloud architecture</div>
           <div className="empty-hint-sub">
-            Drag a service from the palette, or pick a starting point.
+            Open an example, start from a template, or drag a service from the palette on the left.
+            Connect nodes, then use <strong>Tidy</strong> to auto-arrange.
           </div>
           <button className="empty-hint-cta btn-start" onClick={openStartHub}>
-            Start here
+            Browse examples & templates
           </button>
         </div>
       )}

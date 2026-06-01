@@ -467,3 +467,27 @@ describe("route53 record/zone split", () => {
     expect(getServiceByCfnType("AWS::Route53::RecordSet")?.id).toBe("route53-record");
   });
 });
+
+describe("import auto-arrange (buildGraph)", () => {
+  it("lays imported top-level nodes out on the snapped grid without overlap", () => {
+    const tpl = {
+      Resources: {
+        VpcA: { Type: "AWS::EC2::VPC", Properties: { CidrBlock: "10.0.0.0/16" } },
+        BucketA: { Type: "AWS::S3::Bucket", Properties: {} },
+        QueueA: { Type: "AWS::SQS::Queue", Properties: {} },
+        TopicA: { Type: "AWS::SNS::Topic", Properties: {} },
+      },
+    };
+    const { graph } = importCloudFormation(tpl);
+    const roots = graph.resources.filter((r) => !r.parentId);
+    expect(roots.length).toBeGreaterThan(1);
+    // Every root position is grid-snapped (a signal the arrange pass ran)...
+    for (const r of roots) {
+      expect(r.position!.x % 16).toBe(0);
+      expect(r.position!.y % 16).toBe(0);
+    }
+    // ...and no two roots occupy the same spot.
+    const spots = new Set(roots.map((r) => `${r.position!.x},${r.position!.y}`));
+    expect(spots.size).toBe(roots.length);
+  });
+});

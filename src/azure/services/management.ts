@@ -33,7 +33,16 @@ const management: ServiceDefinition[] = [
       },
       { key: "tags", label: "Tags", type: "tags" },
     ],
-    commonConnections: [],
+    // A resource group contains the resources of a solution. Containment is
+    // normally expressed via parentId nesting, but surfacing the common members
+    // here gives the palette useful "add inside" suggestions (no dead end).
+    commonConnections: [
+      { to: "azure-vnet", relationship: "contains" },
+      { to: "azure-vm", relationship: "contains" },
+      { to: "azure-storage-account", relationship: "contains" },
+      { to: "azure-sql-server", relationship: "contains" },
+      { to: "azure-aks", relationship: "contains" },
+    ],
   },
 ];
 

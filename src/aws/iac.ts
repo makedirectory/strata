@@ -28,6 +28,7 @@ import type {
 import { emptyGraph, DEFAULT_NODE_SIZE } from "./model";
 import type { RelationshipKind } from "./types";
 import { getService, getServiceByCfnType } from "./registry";
+import { arrangeTiered } from "../canvas/arrange";
 
 export type IacFormat = "cloudformation" | "terraform" | "arm";
 
@@ -133,6 +134,25 @@ export function buildGraph(
     }
   }
   graph.relationships = relationships;
+
+  // Open imports already-arranged: lay top-level nodes out left-to-right by
+  // dependency flow (the index-grid positions above are just a fallback for
+  // children, which the containment layout engine repositions anyway).
+  const arranged = new Map(
+    arrangeTiered(
+      graph.resources,
+      graph.relationships,
+      (r) => !!getService(r.serviceId)?.isContainer,
+    ).map((p) => [p.id, p]),
+  );
+  for (const r of graph.resources) {
+    const p = arranged.get(r.id);
+    if (p && r.position) {
+      r.position.x = p.x;
+      r.position.y = p.y;
+    }
+  }
+
   if (iacSource) graph.iacSource = iacSource;
   return graph;
 }
