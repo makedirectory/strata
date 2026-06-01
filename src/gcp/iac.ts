@@ -19,6 +19,7 @@ export const GCP_TF_TYPE_TO_SERVICE_ID: Record<string, string> = {
   google_compute_instance_group_manager: "gcp-instance-group-manager",
   google_compute_region_instance_group_manager: "gcp-instance-group-manager",
   google_container_cluster: "gcp-gke-cluster",
+  google_container_node_pool: "gcp-gke-cluster",
   google_cloud_run_service: "gcp-cloud-run",
   google_cloud_run_v2_service: "gcp-cloud-run",
   google_cloudfunctions_function: "gcp-cloud-functions",
@@ -69,6 +70,9 @@ export const GCP_SERVICE_ID_TO_TF_TYPE: Record<string, string> = (() => {
   for (const [tfType, serviceId] of Object.entries(GCP_TF_TYPE_TO_SERVICE_ID)) {
     if (!(serviceId in inv)) inv[serviceId] = tfType;
   }
+  // Canonical overrides: emit current resource types instead of deprecated ones.
+  inv["gcp-cloud-run"] = "google_cloud_run_v2_service";
+  inv["gcp-cloud-functions"] = "google_cloudfunctions2_function";
   return inv;
 })();
 

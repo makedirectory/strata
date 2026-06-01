@@ -31,6 +31,7 @@ const ARM_SCHEMA_DEFAULT =
 interface ArmResource {
   type: string;
   apiVersion?: string;
+  kind?: string;
   name: string;
   properties?: Record<string, unknown>;
   dependsOn?: string[];
@@ -112,7 +113,15 @@ export function importArm(template: unknown, name = "ARM Import"): IacImportResu
   const unmapped = new Set<string>();
 
   flat.forEach(({ res, parentName }, i) => {
-    const svc = getServiceByNativeType("azure", res.type);
+    // Both Function Apps and Web Apps are Microsoft.Web/sites; the registry's
+    // first-wins native lookup resolves both to azure-app-service, leaving
+    // azure-functions unreachable. Disambiguate on `kind` (e.g. "functionapp").
+    const svc =
+      res.type === "Microsoft.Web/sites" &&
+      typeof res.kind === "string" &&
+      res.kind.toLowerCase().includes("functionapp")
+        ? getService("azure-functions")
+        : getServiceByNativeType("azure", res.type);
     if (!svc) {
       unmapped.add(res.type);
       return;

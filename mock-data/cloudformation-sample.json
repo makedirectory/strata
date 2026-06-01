@@ -1,0 +1,67 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Sample CloudFormation template for testing Strata's IaC import (Import IaC dialog).",
+  "Resources": {
+    "MainVpc": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.0.0.0/16",
+        "EnableDnsHostnames": true,
+        "Tags": [{ "Key": "Name", "Value": "main-vpc" }]
+      }
+    },
+    "PublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": { "Ref": "MainVpc" },
+        "CidrBlock": "10.0.1.0/24",
+        "MapPublicIpOnLaunch": true
+      }
+    },
+    "PrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": { "Ref": "MainVpc" },
+        "CidrBlock": "10.0.2.0/24"
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway"
+    },
+    "WebSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": { "Ref": "MainVpc" },
+        "GroupDescription": "Allow HTTP/HTTPS inbound",
+        "SecurityGroupIngress": [
+          { "IpProtocol": "tcp", "FromPort": 443, "ToPort": 443, "CidrIp": "0.0.0.0/0" }
+        ]
+      }
+    },
+    "AppServer": {
+      "Type": "AWS::EC2::Instance",
+      "DependsOn": ["WebSecurityGroup"],
+      "Properties": {
+        "SubnetId": { "Ref": "PrivateSubnet" },
+        "SecurityGroupIds": [{ "Ref": "WebSecurityGroup" }],
+        "InstanceType": "t3.small",
+        "ImageId": "ami-0abcd1234"
+      }
+    },
+    "AppDatabase": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "Engine": "postgres",
+        "DBInstanceClass": "db.t3.medium",
+        "AllocatedStorage": "20"
+      }
+    },
+    "AssetsBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "strata-cfn-demo-assets",
+        "VersioningConfiguration": { "Status": "Enabled" }
+      }
+    }
+  }
+}

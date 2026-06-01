@@ -36,6 +36,16 @@ const compute: ServiceDefinition[] = [
       { key: "ami", label: "AMI ID", type: "string", placeholder: "ami-0abcdef1234567890" },
       { key: "keyName", label: "Key Pair", type: "string", placeholder: "my-keypair" },
       { key: "ebsOptimized", label: "EBS Optimized", type: "boolean", default: false },
+      {
+        key: "metadataHttpTokens",
+        label: "IMDS Tokens (IMDSv2)",
+        type: "select",
+        default: "required",
+        options: [
+          { value: "required", label: "Required (IMDSv2)" },
+          { value: "optional", label: "Optional" },
+        ],
+      },
     ],
     commonConnections: [
       { to: "ebs-volume", relationship: "attached_to", description: "Instance mounts EBS volumes" },
@@ -81,6 +91,19 @@ const compute: ServiceDefinition[] = [
       { key: "memory", label: "Memory (MB)", type: "number", default: 128 },
       { key: "timeout", label: "Timeout (s)", type: "number", default: 3 },
       { key: "handler", label: "Handler", type: "string", placeholder: "index.handler" },
+      { key: "reservedConcurrency", label: "Reserved Concurrency", type: "number" },
+      { key: "ephemeralStorageMB", label: "Ephemeral Storage (MB)", type: "number", default: 512 },
+      {
+        key: "tracingMode",
+        label: "X-Ray Tracing",
+        type: "select",
+        default: "PassThrough",
+        options: [
+          { value: "PassThrough", label: "PassThrough" },
+          { value: "Active", label: "Active" },
+        ],
+      },
+      { key: "vpcEnabled", label: "Attach to VPC", type: "boolean", default: false },
     ],
     commonConnections: [
       {
@@ -145,7 +168,7 @@ const compute: ServiceDefinition[] = [
     description: "Runs batch computing workloads across managed compute environments.",
     icon: "🧰",
     scope: "region",
-    cfnType: "AWS::Batch::JobQueue",
+    cfnType: "AWS::Batch::ComputeEnvironment",
     keywords: ["batch", "jobs", "queue", "hpc", "compute environment"],
     configFields: [
       {

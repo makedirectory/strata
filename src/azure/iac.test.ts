@@ -145,4 +145,78 @@ describe("Azure Terraform (azurerm)", () => {
       expect(getService(serviceId), `missing service ${serviceId}`).toBeDefined();
     }
   });
+
+  it("nests a subnet under its vnet via virtual_network_id", () => {
+    const vnetId =
+      "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet1";
+    const containment = {
+      values: {
+        root_module: {
+          resources: [
+            {
+              address: "azurerm_virtual_network.vnet",
+              type: "azurerm_virtual_network",
+              name: "vnet",
+              values: { id: vnetId, name: "vnet1" },
+            },
+            {
+              address: "azurerm_subnet.sub",
+              type: "azurerm_subnet",
+              name: "sub",
+              values: { id: "sub-1", name: "subnet1", virtual_network_id: vnetId },
+            },
+          ],
+        },
+      },
+    };
+    const { graph } = importAzureTerraform(containment);
+    const vnet = graph.resources.find((r) => r.serviceId === "azure-vnet");
+    const subnet = graph.resources.find((r) => r.serviceId === "azure-subnet");
+    expect(subnet?.parentId).toBe(vnet?.id);
+  });
+
+  it("imports a plan-shaped (resource_changes) storage account", () => {
+    const plan = {
+      resource_changes: [
+        {
+          address: "azurerm_storage_account.sa",
+          type: "azurerm_storage_account",
+          change: { after: { id: "sa-1", name: "mystorage" } },
+        },
+      ],
+    };
+    const { graph, unmappedTypes } = importAzureTerraform(plan);
+    expect(unmappedTypes).toEqual([]);
+    expect(graph.resources).toHaveLength(1);
+    expect(graph.resources[0].serviceId).toBe("azure-storage-account");
+  });
+});
+
+describe("ARM Microsoft.Web/sites disambiguation", () => {
+  it("resolves kind 'functionapp' to azure-functions", () => {
+    const { graph } = importArm({
+      resources: [
+        {
+          type: "Microsoft.Web/sites",
+          name: "fn1",
+          kind: "functionapp",
+          properties: {},
+        },
+      ],
+    });
+    expect(graph.resources).toHaveLength(1);
+    expect(graph.resources[0].serviceId).toBe("azure-functions");
+  });
+
+  it("resolves kind 'app' (or none) to azure-app-service", () => {
+    const kindApp = importArm({
+      resources: [{ type: "Microsoft.Web/sites", name: "web1", kind: "app", properties: {} }],
+    });
+    expect(kindApp.graph.resources[0].serviceId).toBe("azure-app-service");
+
+    const noKind = importArm({
+      resources: [{ type: "Microsoft.Web/sites", name: "web2", properties: {} }],
+    });
+    expect(noKind.graph.resources[0].serviceId).toBe("azure-app-service");
+  });
 });

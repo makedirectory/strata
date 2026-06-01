@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { importAnyIaC } from "./importIac";
 import { getService, serviceProvider } from "../aws/registry";
+import { TF_TYPE_TO_SERVICE_ID } from "../aws/iac";
+import { GCP_TF_TYPE_TO_SERVICE_ID } from "../gcp/iac";
+import { AZURE_TF_TYPE_TO_SERVICE_ID } from "../azure/iac";
 
 const providersOf = (graph: { resources: { serviceId: string }[] }) =>
   new Set(graph.resources.map((r) => serviceProvider(getService(r.serviceId)!)));
@@ -91,5 +94,34 @@ describe("importAnyIaC — multi-cloud routing", () => {
     });
     const r = importAnyIaC(tf);
     expect(providersOf(r.graph)).toEqual(new Set(["aws", "gcp"]));
+  });
+
+  it("throws on malformed JSON", () => {
+    expect(() => importAnyIaC("{not json")).toThrow(/valid JSON/);
+  });
+
+  it("throws when a JSON object matches no known format", () => {
+    expect(() => importAnyIaC(JSON.stringify({ random: true }))).toThrow(/detect/i);
+  });
+});
+
+describe("merged TF map disjointness", () => {
+  const keysOf = (m: Record<string, string>) => new Set(Object.keys(m));
+  const intersect = (a: Set<string>, b: Set<string>) => [...a].filter((k) => b.has(k));
+
+  const aws = keysOf(TF_TYPE_TO_SERVICE_ID);
+  const gcp = keysOf(GCP_TF_TYPE_TO_SERVICE_ID);
+  const azure = keysOf(AZURE_TF_TYPE_TO_SERVICE_ID);
+
+  it("has no pairwise key-set overlap across providers", () => {
+    expect(intersect(aws, gcp)).toEqual([]);
+    expect(intersect(aws, azure)).toEqual([]);
+    expect(intersect(gcp, azure)).toEqual([]);
+  });
+
+  it("prefixes every key with its provider (aws_ / google_ / azurerm_)", () => {
+    for (const k of aws) expect(k.startsWith("aws_")).toBe(true);
+    for (const k of gcp) expect(k.startsWith("google_")).toBe(true);
+    for (const k of azure) expect(k.startsWith("azurerm_")).toBe(true);
   });
 });

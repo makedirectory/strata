@@ -34,6 +34,16 @@ const database: ServiceDefinition[] = [
         options: [{ value: "12.0", label: "12.0" }],
       },
       { key: "minimalTlsVersion", label: "Minimum TLS", type: "string", default: "1.2" },
+      {
+        key: "publicNetworkAccess",
+        label: "Public Network Access",
+        type: "select",
+        default: "Disabled",
+        options: [
+          { value: "Enabled", label: "Enabled" },
+          { value: "Disabled", label: "Disabled" },
+        ],
+      },
     ],
     commonConnections: [
       { to: "azure-sql-database", relationship: "contains" },
@@ -66,6 +76,12 @@ const database: ServiceDefinition[] = [
       },
       { key: "maxSizeGb", label: "Max Size (GiB)", type: "number", default: 32 },
       { key: "zoneRedundant", label: "Zone Redundant", type: "boolean", default: false },
+      {
+        key: "transparentDataEncryption",
+        label: "Transparent Data Encryption",
+        type: "boolean",
+        default: true,
+      },
     ],
     commonConnections: [],
   },

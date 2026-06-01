@@ -119,6 +119,32 @@ describe("iacExport — ExportReport (honesty surface)", () => {
   });
 });
 
+describe("iacExport — cfnPropertyNames rename (scaffold path)", () => {
+  it("renames modeled keys to provider-native CFN property names", () => {
+    // A manually-built rds resource with NO raw/iacSource takes the scaffold
+    // path, where applyPropertyNames maps storageEncrypted/publiclyAccessible.
+    const g = emptyGraph("Rename");
+    g.resources = [
+      res("r-db", "rds", {
+        name: "primary",
+        config: { storageEncrypted: true, publiclyAccessible: false },
+      }),
+    ];
+    const { json, report } = exportCloudFormation(g);
+    const parsed = JSON.parse(json) as Record<string, any>;
+    const entry = Object.values(parsed.Resources)[0] as any;
+
+    // Scaffold (not faithful) — confirms we exercised the rename path.
+    expect(report.faithful).toBe(0);
+    expect(entry.Type).toBe("AWS::RDS::DBInstance");
+    // Emitted under the renamed keys, NOT the modeled keys.
+    expect(entry.Properties.StorageEncrypted).toBe(true);
+    expect(entry.Properties.PubliclyAccessible).toBe(false);
+    expect(entry.Properties).not.toHaveProperty("storageEncrypted");
+    expect(entry.Properties).not.toHaveProperty("publiclyAccessible");
+  });
+});
+
 describe("iacExport — inverse Terraform type map", () => {
   it("every imported serviceId has a single canonical TF type that maps back", () => {
     for (const serviceId of new Set(Object.values(TF_TYPE_TO_SERVICE_ID))) {
