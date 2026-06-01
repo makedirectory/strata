@@ -569,6 +569,156 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
     }
   });
 
+  // ---- Well-Architected best-practice checks (config-driven) -------------
+  // Each fires ONLY on an explicit, non-default-bad value, so secure defaults
+  // and absent/unknown config (e.g. from imports) never produce noise.
+  const WA_CHECKS: {
+    serviceId: string;
+    bad: (config: Record<string, unknown>) => boolean;
+    level: "warn" | "error";
+    message: (r: ResourceInstance) => string;
+  }[] = [
+    {
+      serviceId: "dynamodb",
+      bad: (c) => c["pointInTimeRecovery"] === false,
+      level: "warn",
+      message: (r) => `DynamoDB table "${r.name}" has point-in-time recovery disabled.`,
+    },
+    {
+      serviceId: "rds",
+      bad: (c) => c["deletionProtection"] === false,
+      level: "warn",
+      message: (r) => `RDS "${r.name}" has deletion protection disabled.`,
+    },
+    {
+      serviceId: "aurora",
+      bad: (c) => c["deletionProtection"] === false,
+      level: "warn",
+      message: (r) => `Aurora cluster "${r.name}" has deletion protection disabled.`,
+    },
+    {
+      serviceId: "rds",
+      bad: (c) => c["backupRetentionPeriod"] === 0,
+      level: "warn",
+      message: (r) => `RDS "${r.name}" has automated backups disabled (retention 0 days).`,
+    },
+    {
+      serviceId: "ec2-instance",
+      bad: (c) => c["metadataHttpTokens"] === "optional",
+      level: "warn",
+      message: (r) =>
+        `EC2 instance "${r.name}" allows IMDSv1; require IMDSv2 (HttpTokens=required).`,
+    },
+    {
+      serviceId: "elastic-load-balancer",
+      bad: (c) => c["listenerProtocol"] === "HTTP",
+      level: "warn",
+      message: (r) => `Load Balancer "${r.name}" uses an unencrypted HTTP listener; use HTTPS/TLS.`,
+    },
+    {
+      serviceId: "azure-storage-account",
+      bad: (c) => c["supportsHttpsTrafficOnly"] === false,
+      level: "warn",
+      message: (r) =>
+        `Storage Account "${r.name}" allows non-HTTPS traffic; require secure transfer.`,
+    },
+    {
+      serviceId: "azure-storage-account",
+      bad: (c) => c["minimumTlsVersion"] === "TLS1_0" || c["minimumTlsVersion"] === "TLS1_1",
+      level: "warn",
+      message: (r) => `Storage Account "${r.name}" allows TLS below 1.2.`,
+    },
+    {
+      serviceId: "gcp-cloud-sql",
+      bad: (c) => c["ipv4Enabled"] === true,
+      level: "warn",
+      message: (r) => `Cloud SQL "${r.name}" has a public IP (IPv4) enabled.`,
+    },
+    {
+      serviceId: "gcp-cloud-sql",
+      bad: (c) => c["requireSsl"] === false,
+      level: "warn",
+      message: (r) => `Cloud SQL "${r.name}" does not require SSL.`,
+    },
+    {
+      serviceId: "azure-sql-server",
+      bad: (c) => c["publicNetworkAccess"] === "Enabled",
+      level: "warn",
+      message: (r) => `SQL Server "${r.name}" allows public network access.`,
+    },
+    {
+      serviceId: "azure-sql-database",
+      bad: (c) => c["transparentDataEncryption"] === false,
+      level: "warn",
+      message: (r) => `SQL Database "${r.name}" has Transparent Data Encryption disabled.`,
+    },
+    {
+      serviceId: "gcp-cloud-storage",
+      bad: (c) => c["publicAccessPrevention"] === "inherited",
+      level: "warn",
+      message: (r) => `Cloud Storage bucket "${r.name}" does not enforce public access prevention.`,
+    },
+  ];
+  for (const check of WA_CHECKS) {
+    ofService(check.serviceId).forEach((r) => {
+      if (check.bad(r.config)) {
+        out.push({ level: check.level, message: check.message(r), resourceId: r.id });
+      }
+    });
+  }
+
+  // Cost: an EBS volume attached to nothing is idle spend.
+  ofService("ebs-volume").forEach((v) => {
+    const attached =
+      !!v.parentId ||
+      incoming(v.id, "attached_to").length > 0 ||
+      outgoing(v.id, "attached_to").length > 0;
+    if (!attached) {
+      out.push({
+        level: "warn",
+        message: `EBS volume "${v.name}" is not attached to an instance (idle cost).`,
+        resourceId: v.id,
+      });
+    }
+  });
+
+  // Reliability: a single NAT Gateway serving private subnets across ≥2 AZs is a
+  // single point of failure (and incurs cross-AZ data charges).
+  const natGateways = ofService("nat-gateway");
+  if (natGateways.length === 1) {
+    const privateAzs = new Set(
+      resources
+        .filter((r) => r.serviceId === "subnet-private")
+        .map((s) => cfgStr(s, "az"))
+        .filter((az): az is string => !!az),
+    );
+    if (privateAzs.size >= 2) {
+      out.push({
+        level: "warn",
+        message: `One NAT Gateway serves private subnets across ${privateAzs.size} AZs; use a NAT Gateway per AZ for resilience.`,
+        resourceId: natGateways[0].id,
+      });
+    }
+  }
+
+  // Security: a CloudFront distribution with no WAF in front of it.
+  ofService("cloudfront").forEach((cf) => {
+    const hasWaf =
+      incoming(cf.id, "attached_to")
+        .map((e) => get(e.from))
+        .some((n) => n?.serviceId === "waf") ||
+      outgoing(cf.id, "attached_to")
+        .map((e) => get(e.to))
+        .some((n) => n?.serviceId === "waf");
+    if (!hasWaf) {
+      out.push({
+        level: "warn",
+        message: `CloudFront distribution "${cf.name}" has no WAF attached.`,
+        resourceId: cf.id,
+      });
+    }
+  });
+
   return out;
 }
 
