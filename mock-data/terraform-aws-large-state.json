@@ -1,0 +1,219 @@
+{
+  "format_version": "1.0",
+  "terraform_version": "1.7.5",
+  "values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_vpc.main",
+          "type": "aws_vpc",
+          "name": "main",
+          "values": { "id": "vpc-main", "cidr_block": "10.0.0.0/16", "enable_dns_hostnames": true }
+        },
+        {
+          "address": "aws_internet_gateway.igw",
+          "type": "aws_internet_gateway",
+          "name": "igw",
+          "values": { "id": "igw-1", "vpc_id": "vpc-main" }
+        },
+        {
+          "address": "aws_route53_zone.main",
+          "type": "aws_route53_zone",
+          "name": "main",
+          "values": { "id": "zone-1", "name": "example.com" }
+        },
+        {
+          "address": "aws_route53_health_check.api",
+          "type": "aws_route53_health_check",
+          "name": "api",
+          "values": { "id": "hc-1", "type": "HTTPS", "fqdn": "api.example.com" }
+        },
+        {
+          "address": "aws_s3_bucket.assets",
+          "type": "aws_s3_bucket",
+          "name": "assets",
+          "values": { "id": "acme-assets", "bucket": "acme-assets" }
+        },
+        {
+          "address": "aws_s3_bucket.logs",
+          "type": "aws_s3_bucket",
+          "name": "logs",
+          "values": { "id": "acme-logs", "bucket": "acme-logs" }
+        },
+        {
+          "address": "aws_dynamodb_table.sessions",
+          "type": "aws_dynamodb_table",
+          "name": "sessions",
+          "values": { "id": "sessions", "billing_mode": "PAY_PER_REQUEST" }
+        },
+        {
+          "address": "aws_sns_topic.events",
+          "type": "aws_sns_topic",
+          "name": "events",
+          "values": { "id": "arn:aws:sns:us-east-1:111122223333:events", "name": "events" }
+        },
+        {
+          "address": "aws_sqs_queue.jobs",
+          "type": "aws_sqs_queue",
+          "name": "jobs",
+          "values": {
+            "id": "https://sqs.us-east-1.amazonaws.com/111122223333/jobs",
+            "name": "jobs"
+          }
+        },
+        {
+          "address": "aws_kms_key.data",
+          "type": "aws_kms_key",
+          "name": "data",
+          "values": { "id": "key-1", "description": "Application data key" }
+        },
+        {
+          "address": "aws_iam_role.app",
+          "type": "aws_iam_role",
+          "name": "app",
+          "values": { "id": "app-role", "name": "app-task-role" }
+        },
+        {
+          "address": "aws_cloudwatch_log_group.app",
+          "type": "aws_cloudwatch_log_group",
+          "name": "app",
+          "values": { "id": "/aws/app", "name": "/aws/app", "retention_in_days": 30 }
+        }
+      ],
+      "child_modules": [
+        {
+          "address": "module.network",
+          "resources": [
+            {
+              "address": "module.network.aws_subnet.public_a",
+              "type": "aws_subnet",
+              "name": "public_a",
+              "values": { "id": "subnet-pub-a", "vpc_id": "vpc-main", "cidr_block": "10.0.1.0/24" }
+            },
+            {
+              "address": "module.network.aws_subnet.public_b",
+              "type": "aws_subnet",
+              "name": "public_b",
+              "values": { "id": "subnet-pub-b", "vpc_id": "vpc-main", "cidr_block": "10.0.2.0/24" }
+            },
+            {
+              "address": "module.network.aws_subnet.private_a",
+              "type": "aws_subnet",
+              "name": "private_a",
+              "values": {
+                "id": "subnet-priv-a",
+                "vpc_id": "vpc-main",
+                "cidr_block": "10.0.11.0/24"
+              }
+            },
+            {
+              "address": "module.network.aws_subnet.private_b",
+              "type": "aws_subnet",
+              "name": "private_b",
+              "values": {
+                "id": "subnet-priv-b",
+                "vpc_id": "vpc-main",
+                "cidr_block": "10.0.12.0/24"
+              }
+            },
+            {
+              "address": "module.network.aws_nat_gateway.nat",
+              "type": "aws_nat_gateway",
+              "name": "nat",
+              "values": { "id": "nat-1", "subnet_id": "subnet-pub-a" }
+            },
+            {
+              "address": "module.network.aws_route_table.public",
+              "type": "aws_route_table",
+              "name": "public",
+              "values": { "id": "rtb-pub", "vpc_id": "vpc-main" }
+            },
+            {
+              "address": "module.network.aws_security_group.web",
+              "type": "aws_security_group",
+              "name": "web",
+              "values": { "id": "sg-web", "vpc_id": "vpc-main", "name": "web-sg" }
+            },
+            {
+              "address": "module.network.aws_security_group.app",
+              "type": "aws_security_group",
+              "name": "app",
+              "values": { "id": "sg-app", "vpc_id": "vpc-main", "name": "app-sg" }
+            },
+            {
+              "address": "module.network.aws_lb.public",
+              "type": "aws_lb",
+              "name": "public",
+              "values": { "id": "alb-1", "name": "public-alb", "load_balancer_type": "application" }
+            },
+            {
+              "address": "module.network.aws_lb_target_group.web",
+              "type": "aws_lb_target_group",
+              "name": "web",
+              "values": { "id": "tg-1", "port": 8080, "protocol": "HTTP" }
+            },
+            {
+              "address": "module.network.aws_lb_listener.https",
+              "type": "aws_lb_listener",
+              "name": "https",
+              "values": { "id": "listener-1", "port": 443, "protocol": "HTTPS" }
+            }
+          ]
+        },
+        {
+          "address": "module.app",
+          "resources": [
+            {
+              "address": "module.app.aws_eks_cluster.main",
+              "type": "aws_eks_cluster",
+              "name": "main",
+              "values": { "id": "eks-1", "name": "app-cluster", "version": "1.29" }
+            },
+            {
+              "address": "module.app.aws_eks_node_group.default",
+              "type": "aws_eks_node_group",
+              "name": "default",
+              "values": { "id": "ng-1", "node_group_name": "default" }
+            },
+            {
+              "address": "module.app.aws_ecs_cluster.main",
+              "type": "aws_ecs_cluster",
+              "name": "main",
+              "values": { "id": "ecs-1", "name": "app-ecs" }
+            },
+            {
+              "address": "module.app.aws_ecs_task_definition.web",
+              "type": "aws_ecs_task_definition",
+              "name": "web",
+              "values": { "id": "taskdef-1", "family": "web", "cpu": "512", "memory": "1024" }
+            },
+            {
+              "address": "module.app.aws_ecs_service.web",
+              "type": "aws_ecs_service",
+              "name": "web",
+              "values": { "id": "svc-1", "name": "web", "subnet_id": "subnet-priv-a" }
+            },
+            {
+              "address": "module.app.aws_db_instance.app",
+              "type": "aws_db_instance",
+              "name": "app",
+              "values": { "id": "db-1", "engine": "postgres", "subnet_id": "subnet-priv-a" }
+            },
+            {
+              "address": "module.app.aws_elasticache_cluster.cache",
+              "type": "aws_elasticache_cluster",
+              "name": "cache",
+              "values": { "id": "cache-1", "engine": "redis", "subnet_id": "subnet-priv-b" }
+            },
+            {
+              "address": "module.app.aws_lambda_function.worker",
+              "type": "aws_lambda_function",
+              "name": "worker",
+              "values": { "id": "fn-1", "function_name": "worker", "runtime": "python3.12" }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
