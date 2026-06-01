@@ -15,6 +15,7 @@ import { listAzureDiscoverableTypes, parseAzureExport } from "../../azure/discov
 import { mapDiscoveredToGraph, unmappedTypes, type DiscoveredResource } from "../../aws/mcp";
 import type { CloudProvider } from "../../aws/types";
 import { runDiscovery, runGcpDiscovery, runAzureDiscovery } from "../../lib/api";
+import { EXAMPLES } from "../../examples";
 
 const VIEW_PRESETS = [
   { id: "all", label: "All" },
@@ -391,6 +392,8 @@ function TopBar() {
     openStartHub,
     openExportIaC,
     openConnect,
+    graphName,
+    renameGraph,
   } = useFlow();
   return (
     <div className="topbar">
@@ -400,6 +403,17 @@ function TopBar() {
         </span>{" "}
         <span style={{ fontWeight: 800 }}>Strata</span>
       </div>
+      <input
+        className="diagram-name"
+        value={graphName}
+        onChange={(e) => renameGraph(e.target.value)}
+        onBlur={(e) => {
+          if (!e.target.value.trim()) renameGraph("Untitled diagram");
+        }}
+        title="Diagram name — used when you save"
+        aria-label="Diagram name"
+        spellCheck={false}
+      />
       <a
         className="topbar-link"
         href="/docs"
@@ -626,6 +640,7 @@ function StartHub() {
     importIaCDialog,
     importJSONDialog,
     loadPreset,
+    loadExample,
     openExportIaC,
     openConnect,
     state,
@@ -758,6 +773,28 @@ function StartHub() {
               </span>
             </button>
           )}
+        </div>
+
+        <div className="hub-examples">
+          <div className="hub-section-title">Examples</div>
+          <div className="hub-examples-grid">
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex.id}
+                className="hub-example"
+                onClick={() => void loadExample(ex.id)}
+                title={ex.graph.description}
+              >
+                <span className="hub-example-icon" aria-hidden="true">
+                  {ex.icon}
+                </span>
+                <span className="hub-example-body">
+                  <span className="hub-example-label">{ex.label}</span>
+                  <span className="hub-example-meta">{ex.graph.resources.length} resources</span>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <HubSavedGraphs />

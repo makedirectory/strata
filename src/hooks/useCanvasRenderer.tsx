@@ -141,6 +141,8 @@ interface DrawInputs {
   /** Active analytical overlay's lit node/edge set; others dim. Null = no overlay. */
   overlayLit: OverlayLit | null;
   onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void;
+  /** Begin a corner resize of a node (null when editing is disabled). */
+  onResizeStart: ((e: React.MouseEvent, r: ResourceInstance) => void) | null;
   onConnect: (id: string, type: "start" | "end") => void;
   onSelect: (sel: Selection) => void;
   onHover: (id: string | null) => void;
@@ -213,6 +215,7 @@ export function useCanvasRenderer(
         searchMatches,
         overlayLit,
         onNodeMouseDown,
+        onResizeStart,
         onConnect,
         onSelect,
         onHover,
@@ -365,6 +368,12 @@ export function useCanvasRenderer(
             body.className = "node-body";
             div.appendChild(body);
 
+            // Bottom-right corner resize handle (shown via CSS when selected).
+            const handle = document.createElement("div");
+            handle.className = "resize-handle";
+            handle.title = "Drag to resize";
+            div.appendChild(handle);
+
             world.appendChild(div);
 
             rec = {
@@ -436,6 +445,20 @@ export function useCanvasRenderer(
           };
           rec.div.addEventListener("mousedown", onNodeDown);
           rec.cleanups.push(() => rec!.div.removeEventListener("mousedown", onNodeDown));
+
+          // Corner resize handle: only interactive when editing is enabled.
+          const handle = rec.div.querySelector<HTMLElement>(".resize-handle");
+          if (handle) {
+            handle.style.display = onResizeStart ? "" : "none";
+            if (onResizeStart) {
+              const onResizeDown = (e: MouseEvent) => {
+                e.stopPropagation();
+                onResizeStart(e as unknown as React.MouseEvent, r);
+              };
+              handle.addEventListener("mousedown", onResizeDown);
+              rec.cleanups.push(() => handle.removeEventListener("mousedown", onResizeDown));
+            }
+          }
 
           // Hover drives focus-dimming (lights the node + its 1-hop neighbours).
           const onEnter = () => onHover(r.id);
@@ -551,6 +574,8 @@ export function useCanvasRenderer(
             rec.div.style.boxShadow = selected
               ? "0 4px 14px rgba(76,167,255,.35)"
               : "0 2px 10px rgba(0,0,0,.35)";
+            // Drives `.node.selected .resize-handle` visibility.
+            rec.div.classList.toggle("selected", selected);
           }
 
           prev.x = p.x;
@@ -827,6 +852,7 @@ export function useCanvasRenderer(
       searchMatches: ReadonlySet<string>,
       overlayLit: OverlayLit | null,
       onNodeMouseDown: (e: React.MouseEvent, r: ResourceInstance) => void,
+      onResizeStart: ((e: React.MouseEvent, r: ResourceInstance) => void) | null,
       onConnect: (id: string, type: "start" | "end") => void,
       onSelect: (sel: Selection) => void,
       onHover: (id: string | null) => void,
@@ -869,6 +895,7 @@ export function useCanvasRenderer(
         searchMatches,
         overlayLit,
         onNodeMouseDown,
+        onResizeStart,
         onConnect,
         onSelect,
         onHover,
@@ -901,6 +928,7 @@ export function useCanvasRenderer(
         last.searchMatches === searchMatches &&
         last.overlayLit === overlayLit &&
         last.onNodeMouseDown === onNodeMouseDown &&
+        last.onResizeStart === onResizeStart &&
         last.onConnect === onConnect &&
         last.onSelect === onSelect &&
         last.onHover === onHover &&

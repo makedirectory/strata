@@ -1,12 +1,12 @@
 # Strata
 
-A registry-driven canvas for **modeling AWS infrastructure as a typed graph**.
+A registry-driven canvas for **modeling cloud infrastructure as a typed graph**.
 Drag services onto a canvas, configure them with auto-generated forms, and connect
 them with typed relationships (`contains`, `routes_to`, `invokes`, `peers_with`, …)
-— with the whole vocabulary spanning 14 AWS service categories. It can also import
-existing Infrastructure-as-Code — CloudFormation (JSON/YAML) and Terraform
-`show -json` — into the same graph, export the graph back out as IaC, and ingest
-live AWS state via the Cloud Control API.
+— with a multi-cloud catalog spanning AWS, Google Cloud and Azure. It can also import
+existing Infrastructure-as-Code — CloudFormation (JSON/YAML), Terraform
+`show -json` (AWS/GCP/Azure) and Azure ARM — into the same graph, export the graph
+back out as IaC, and ingest live cloud state via provider discovery APIs.
 
 > **On "MCP-native":** Strata is designed so an LLM/agent can reason over the
 > registry, and MCP is the intended future ingestion path — but **there is no MCP

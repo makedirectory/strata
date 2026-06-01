@@ -20,6 +20,7 @@ import {
 import { listGraphs, getGraph, createGraph, updateGraph, deleteGraph } from "../lib/localStore";
 import type { GraphSummary } from "../aws/model";
 import { importAnyIaC } from "../lib/importIac";
+import { getExample } from "../examples";
 import {
   zoomAbout,
   zoomByFactor,
@@ -190,6 +191,12 @@ interface FlowContextValue {
   importIaCDialog: () => void;
   clear: () => void;
   loadPreset: (presetName: string) => void;
+  /** Load a bundled example architecture by id (guarded by the unsaved check). */
+  loadExample: (exampleId: string) => void;
+  /** Current diagram name (what a save persists). */
+  graphName: string;
+  /** Rename the current diagram. */
+  renameGraph: (name: string) => void;
 
   // ---- Start hub + unsaved-work guard (Flow 2) ----
   /** True when there are unsaved changes a replace action would lose. */
@@ -291,6 +298,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     onMouseUp: iOnMouseUp,
     onWheelZoom: iOnWheelZoom,
     onNodeMouseDown: iOnNodeMouseDown,
+    onResizeStart: iOnResizeStart,
     onCanvasMouseDown: iOnCanvasMouseDown,
     onConnect: iOnConnect,
     center: iCenter,
@@ -500,7 +508,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /** Assemble the current model into an InfrastructureGraph. */
   const buildGraph = useCallback((): InfrastructureGraph => {
-    const base = emptyGraph("AWS Architecture");
+    const base = emptyGraph(store.graphName || "Untitled diagram");
     return {
       ...base,
       id: store.graphId || "",
@@ -511,7 +519,14 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // stable across pans — keeps the panel context from re-rendering.
       viewport: getViewport(),
     };
-  }, [store.graphId, store.accounts, store.resources, store.relationships, getViewport]);
+  }, [
+    store.graphId,
+    store.graphName,
+    store.accounts,
+    store.resources,
+    store.relationships,
+    getViewport,
+  ]);
 
   const { setMode: storeSetMode, addResource: storeAddResource } = store;
 
@@ -649,6 +664,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         rects: layout.rects,
         pan: store.viewport,
         updatePositions: updateResourcePositions,
+        updateSize: store.updateResourceSize,
         updatePan: storeSetViewport,
         setGuides,
         setMarquee,
@@ -660,6 +676,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       layout,
       store.viewport,
       updateResourcePositions,
+      store.updateResourceSize,
       storeSetViewport,
       store.setDragOverride,
     ],
@@ -722,6 +739,17 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ],
   );
 
+  const onResizeStart = useCallback(
+    (e: React.MouseEvent, resource: ResourceInstance) => {
+      iOnResizeStart(e, resource, {
+        rects: layout.rects,
+        readOnly: store.presentation,
+        selectSingle,
+      });
+    },
+    [iOnResizeStart, layout, store.presentation, selectSingle],
+  );
+
   // Stable connect callback: its identity only changes when resources/connect
   // change, NOT on viewport changes. This lets the renderer's viewport-only
   // fast path (which compares callback references) actually short-circuit on
@@ -775,6 +803,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.searchMatches,
       overlayLit,
       onNodeMouseDown,
+      store.presentation ? null : onResizeStart,
       onConnectCb,
       storeSetSelection,
       onHover,
@@ -804,6 +833,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.edgeStyle,
     store.searchMatches,
     onNodeMouseDown,
+    onResizeStart,
+    store.presentation,
     onConnectCb,
     storeSetSelection,
     onHover,
@@ -1154,6 +1185,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
             viewport: g.viewport,
             accounts: g.accounts ?? [],
             graphId: g.id ?? "",
+            graphName: g.name || "Imported diagram",
           });
           setStatus(`Imported "${g.name ?? "architecture"}".`);
         } catch {
@@ -1191,6 +1223,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
             viewport: graph.viewport,
             accounts: graph.accounts ?? [],
             graphId: graph.id ?? "",
+            graphName: graph.name || file.name.replace(/\.[^.]+$/, "") || "Imported diagram",
           });
           storeSetSelection(null);
           const parts = [`Imported ${graph.resources.length} resource(s) from ${format}.`];
@@ -1252,6 +1285,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           viewport: g.viewport,
           accounts: g.accounts ?? [],
           graphId: g.id,
+          graphName: g.name || "Untitled diagram",
         });
         // Loaded state matches what's saved — not unsaved work.
         storeMarkSaved();
@@ -1373,9 +1407,32 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         viewport: { x: 200, y: 120, scale: 1 },
         accounts: [],
         graphId: "",
+        graphName: presetName === "ecs-alb" ? "ECS + ALB starter" : "Basic AWS starter",
       });
     },
     [storeUid, storeReplaceAll, confirmReplaceIfDirty],
+  );
+
+  /** Load a bundled example architecture onto the canvas (guarded). Treated as a
+   *  fresh unsaved diagram (graphId cleared) so saving never overwrites a file. */
+  const loadExample = useCallback(
+    async (exampleId: string) => {
+      const ex = getExample(exampleId);
+      if (!ex) return;
+      if (!(await confirmReplaceIfDirty())) return;
+      const g = ex.graph;
+      storeReplaceAll({
+        resources: g.resources ?? [],
+        relationships: g.relationships ?? [],
+        viewport: g.viewport,
+        accounts: g.accounts ?? [],
+        graphId: "",
+        graphName: g.name || ex.label,
+      });
+      setStartHubOpen(false);
+      setStatus(`Loaded example "${g.name}".`);
+    },
+    [storeReplaceAll, confirmReplaceIfDirty],
   );
 
   // Guarded clear — both the toolbar and ⌘K route through here, so the
@@ -1513,6 +1570,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       importIaCDialog,
       clear,
       loadPreset,
+      loadExample,
+      graphName: store.graphName,
+      renameGraph: store.setGraphName,
       dirty: store.dirty,
       startHubOpen,
       openStartHub,
@@ -1599,6 +1659,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       importIaCDialog,
       clear,
       loadPreset,
+      loadExample,
+      store.graphName,
+      store.setGraphName,
       store.dirty,
       startHubOpen,
       openStartHub,

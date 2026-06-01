@@ -1,8 +1,8 @@
 # Contributing to Strata
 
 Thanks for your interest in contributing! Strata is a registry-driven canvas for
-modeling AWS infrastructure as a typed graph, and contributions of all kinds —
-bug reports, new AWS services, docs, and features — are welcome.
+modeling cloud infrastructure as a typed graph, and contributions of all kinds —
+bug reports, new cloud services, docs, and features — are welcome.
 
 By participating you agree to abide by our [Code of Conduct](./CODE_OF_CONDUCT.md).
 

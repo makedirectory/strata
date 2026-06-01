@@ -181,6 +181,11 @@ export function computeLayout(
     if (collapsed.has(id)) {
       return { id, w: COLLAPSED_W, h: COLLAPSED_H, container, children: [] };
     }
+    // A container's stored geometry is treated as a user-set MINIMUM: the box
+    // auto-grows to fit its children but never shrinks below what the user
+    // dragged it to. (Leaf size, by contrast, IS the stored geometry.)
+    const minW = container ? (r?.position?.w ?? 0) : 0;
+    const minH = container ? (r?.position?.h ?? 0) : 0;
     // Exclude the dragged node so its former parent repacks without it.
     const kids = kidsOf(id).filter((k) => !onPath.has(k.id) && k.id !== override?.id);
     if (!container || kids.length === 0) {
@@ -188,8 +193,8 @@ export function computeLayout(
         // Empty (or childless) container: header + a small drop area.
         return {
           id,
-          w: EMPTY_CONTENT_W + PAD * 2,
-          h: HEADER_H + PAD + EMPTY_CONTENT_H + PAD,
+          w: Math.max(EMPTY_CONTENT_W + PAD * 2, minW),
+          h: Math.max(HEADER_H + PAD + EMPTY_CONTENT_H + PAD, minH),
           container: true,
           children: [],
         };
@@ -265,8 +270,8 @@ export function computeLayout(
     const contentH = y + rowH;
     return {
       id,
-      w: Math.max(EMPTY_CONTENT_W, contentW) + PAD * 2,
-      h: HEADER_H + PAD + contentH + PAD,
+      w: Math.max(Math.max(EMPTY_CONTENT_W, contentW) + PAD * 2, minW),
+      h: Math.max(HEADER_H + PAD + contentH + PAD, minH),
       container: true,
       children: placed,
     };

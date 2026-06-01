@@ -18,6 +18,20 @@ import {
 /** Wheel-zoom sensitivity: factor = exp(-deltaY * k). Smooth for pinch + ⌘-wheel. */
 const ZOOM_SENSITIVITY = 0.0015;
 
+/** Smallest a node may be resized to (world units), and the resize step. */
+const MIN_NODE_W = 120;
+const MIN_NODE_H = 60;
+const RESIZE_STEP = 8;
+
+/** An in-progress corner resize of a single node. */
+interface ResizeState {
+  id: string;
+  startW: number;
+  startH: number;
+  startClientX: number;
+  startClientY: number;
+}
+
 /** An in-progress node drag — one node (single) or many (group), unified. */
 interface DragState {
   /** The node under the pointer; its snap drives the group delta. */
@@ -36,6 +50,9 @@ interface DragState {
   /** Latest snapped top-left of the anchor (for drop reparent / free placement). */
   lastX: number;
   lastY: number;
+  /** Latest pointer position in world coords (for drop-into-container targeting). */
+  lastPointerX: number;
+  lastPointerY: number;
 }
 
 /** An in-progress marquee selection rectangle. */
@@ -61,6 +78,7 @@ function localPoint(e: {
 
 export function useCanvasInteraction() {
   const dragRef = useRef<DragState | null>(null);
+  const resizeRef = useRef<ResizeState | null>(null);
   const marqueeRef = useRef<MarqueeState | null>(null);
   // Tracks whether the active drag actually moved the node, so a plain click
   // (mousedown + mouseup with no movement) records no history step.
@@ -146,10 +164,37 @@ export function useCanvasInteraction() {
         wasChild: !!resource.parentId,
         lastX: p.x,
         lastY: p.y,
+        lastPointerX: p.x + p.w / 2,
+        lastPointerY: p.y + p.h / 2,
       };
       draggedRef.current = false;
     },
     [defaultKind],
+  );
+
+  /** Begin a corner resize of a single node. Mirrors onNodeMouseDown's grab but
+   *  drives node size (position.w/h) instead of position. */
+  const onResizeStart = useCallback(
+    (
+      e: React.MouseEvent,
+      resource: ResourceInstance,
+      ctx: { rects: Map<string, Rect>; readOnly: boolean; selectSingle: (id: string) => void },
+    ) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (ctx.readOnly) return;
+      ctx.selectSingle(resource.id);
+      const rect = ctx.rects.get(resource.id);
+      resizeRef.current = {
+        id: resource.id,
+        startW: rect?.w ?? resource.position?.w ?? 240,
+        startH: rect?.h ?? resource.position?.h ?? 100,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+      };
+      draggedRef.current = false;
+    },
+    [],
   );
 
   const onCanvasMouseDown = useCallback(
@@ -206,13 +251,39 @@ export function useCanvasInteraction() {
         rects: Map<string, Rect>;
         pan: Pan;
         updatePositions: (updates: { id: string; x: number; y: number }[]) => void;
+        updateSize: (id: string, size: { w: number; h: number }) => void;
         updatePan: (newPan: Pan) => void;
         setGuides: (guides: GuideLine[]) => void;
         setMarquee: (rect: Rect | null) => void;
         setOverride: (o: { id: string; x: number; y: number } | null) => void;
       },
     ) => {
-      const { rects, pan, updatePositions, updatePan, setGuides, setMarquee, setOverride } = ctx;
+      const {
+        rects,
+        pan,
+        updatePositions,
+        updateSize,
+        updatePan,
+        setGuides,
+        setMarquee,
+        setOverride,
+      } = ctx;
+      // A corner resize takes priority over drag/marquee/pan.
+      const resize = resizeRef.current;
+      if (resize) {
+        const round = (v: number) => Math.round(v / RESIZE_STEP) * RESIZE_STEP;
+        const w = Math.max(
+          MIN_NODE_W,
+          round(resize.startW + (e.clientX - resize.startClientX) / pan.scale),
+        );
+        const h = Math.max(
+          MIN_NODE_H,
+          round(resize.startH + (e.clientY - resize.startClientY) / pan.scale),
+        );
+        draggedRef.current = true;
+        updateSize(resize.id, { w, h });
+        return;
+      }
       const drag = dragRef.current;
       if (drag) {
         const box = rects.get(drag.anchorId);
@@ -230,6 +301,11 @@ export function useCanvasInteraction() {
         draggedRef.current = true;
         drag.lastX = snap.x;
         drag.lastY = snap.y;
+        // Track the raw cursor in world coords so drop-to-reparent targets the
+        // container under the pointer (more reliable for deep nesting into a
+        // small container than the dragged node's centre).
+        drag.lastPointerX = (e.clientX - pan.x) / pan.scale;
+        drag.lastPointerY = (e.clientY - pan.y) / pan.scale;
         if (drag.isGroup) {
           // Move every selected node together (top-level stored positions).
           const ddx = snap.x - startAnchor.x;
@@ -281,6 +357,14 @@ export function useCanvasInteraction() {
       containerAt: (point: Vec2, excludeId: string) => string | null;
       setParent: (id: string, parentId: string | undefined, dropPos?: Vec2) => void;
     }) => {
+      // End a corner resize: commit one history entry if the size actually changed.
+      const resize = resizeRef.current;
+      if (resize) {
+        if (draggedRef.current) ctx.commitState();
+        resizeRef.current = null;
+        draggedRef.current = false;
+        return;
+      }
       const drag = dragRef.current;
       if (drag) {
         if (draggedRef.current) {
@@ -289,12 +373,13 @@ export function useCanvasInteraction() {
             // Group move → one history entry; no reparenting.
             ctx.commitState();
           } else {
-            // Single drag: reparent based on the container under the node centre.
-            const center = {
-              x: drag.lastX + (box?.w ?? 0) / 2,
-              y: drag.lastY + (box?.h ?? 0) / 2,
+            // Single drag: reparent based on the container under the cursor
+            // (falls back to the node centre if no pointer was recorded).
+            const point = {
+              x: drag.lastPointerX || drag.lastX + (box?.w ?? 0) / 2,
+              y: drag.lastPointerY || drag.lastY + (box?.h ?? 0) / 2,
             };
-            const target = ctx.containerAt(center, drag.anchorId);
+            const target = ctx.containerAt(point, drag.anchorId);
             if (target) {
               ctx.setParent(drag.anchorId, target);
             } else if (drag.wasChild) {
@@ -384,6 +469,7 @@ export function useCanvasInteraction() {
 
   return {
     onNodeMouseDown,
+    onResizeStart,
     onCanvasMouseDown,
     onMouseMove,
     onMouseUp,

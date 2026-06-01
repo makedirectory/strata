@@ -35,7 +35,12 @@ interface FlowState extends HistoryState {
   viewport: Viewport;
   accounts: Account[];
   graphId: string;
+  /** User-facing diagram name (persisted on save; defaults to "Untitled diagram"). */
+  graphName: string;
 }
+
+/** Default name for a fresh, never-named diagram. */
+export const DEFAULT_GRAPH_NAME = "Untitled diagram";
 
 const DEFAULT_VIEWPORT: Viewport = { x: 200, y: 120, scale: 1 };
 
@@ -99,6 +104,7 @@ export function useFlowStore() {
   // move, multi-delete and the selected outline for every member.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [graphId, setGraphId] = useState<string>("");
+  const [graphName, setGraphName] = useState<string>(DEFAULT_GRAPH_NAME);
   // True when the model has changed since the last save/load — i.e. there is
   // unsaved work that a replace (import / preset / load / clear) would lose. Set
   // on every committed change; cleared by `markSaved` after save/server-load.
@@ -122,6 +128,7 @@ export function useFlowStore() {
     viewport,
     accounts,
     graphId,
+    graphName,
   });
 
   /** Record a snapshot in history (ignored while restoring undo/redo). */
@@ -155,6 +162,7 @@ export function useFlowStore() {
     setViewport(next.viewport);
     setAccounts(next.accounts);
     setGraphId(next.graphId);
+    setGraphName(next.graphName);
   }, []);
 
   /**
@@ -276,6 +284,19 @@ export function useFlowStore() {
       if (!u) return r;
       const prev = r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
       return { ...r, position: { ...prev, x: u.x, y: u.y } };
+    });
+    liveRef.current = { ...cur, resources: nextResources };
+    setResources(nextResources);
+  }, []);
+
+  /** Live size update during a resize drag — not committed here (the history
+   *  entry is recorded at resize end via {@link commitCurrentState}). */
+  const updateResourceSize = useCallback((id: string, size: { w: number; h: number }) => {
+    const cur = liveRef.current;
+    const nextResources = cur.resources.map((r) => {
+      if (r.id !== id) return r;
+      const prev = r.position ?? { x: 0, y: 0, ...DEFAULT_NODE_SIZE };
+      return { ...r, position: { ...prev, w: size.w, h: size.h } };
     });
     liveRef.current = { ...cur, resources: nextResources };
     setResources(nextResources);
@@ -410,7 +431,14 @@ export function useFlowStore() {
   // Reset to an empty model. Confirmation now lives in the useFlow unsaved-work
   // guard (which wraps every replace path), so this primitive never prompts.
   const clear = useCallback(() => {
-    mutate(() => ({ resources: [], relationships: [] }));
+    // A cleared canvas is a fresh, untitled, unsaved diagram.
+    mutate(() => ({
+      resources: [],
+      relationships: [],
+      accounts: [],
+      graphId: "",
+      graphName: DEFAULT_GRAPH_NAME,
+    }));
     setSelection(null);
     setSelectedIds([]);
     setCollapsed(new Set());
@@ -428,6 +456,7 @@ export function useFlowStore() {
       viewport?: Viewport;
       accounts?: Account[];
       graphId?: string;
+      graphName?: string;
     }) => {
       mutate((cur) => ({
         resources: next.resources,
@@ -435,6 +464,7 @@ export function useFlowStore() {
         viewport: next.viewport ?? { ...DEFAULT_VIEWPORT },
         accounts: next.accounts ?? [],
         graphId: next.graphId ?? cur.graphId,
+        graphName: next.graphName ?? cur.graphName,
       }));
       setSelection(null);
       setSelectedIds([]);
@@ -495,6 +525,14 @@ export function useFlowStore() {
     setGraphId(id);
   }, []);
 
+  // Rename the diagram (kept in the live mirror; not a history step — a rename
+  // shouldn't be undone separately from the edits around it).
+  const setGraphNameSynced = useCallback((name: string) => {
+    liveRef.current = { ...liveRef.current, graphName: name };
+    setGraphName(name);
+    setDirty(true);
+  }, []);
+
   /** Mark the current model as persisted (clears the unsaved-work flag). Call
    *  after a successful save or server load. */
   const markSaved = useCallback(() => setDirty(false), []);
@@ -522,6 +560,7 @@ export function useFlowStore() {
     selection,
     selectedIds,
     graphId,
+    graphName,
     dirty,
 
     // Setters
@@ -548,6 +587,7 @@ export function useFlowStore() {
     setSelection,
     setSelectedIds,
     setGraphId: setGraphIdSynced,
+    setGraphName: setGraphNameSynced,
     markSaved,
 
     // Actions
@@ -556,6 +596,7 @@ export function useFlowStore() {
     updateResource,
     updateResourcePosition,
     updateResourcePositions,
+    updateResourceSize,
     updateRelationshipKind,
     connect,
     duplicateSelection,
