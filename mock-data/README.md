@@ -2,13 +2,14 @@
 
 Sample files for exercising Strata's import/visualization paths.
 
-| File                         | Upload via                       | What it tests                                                                         |
-| ---------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
-| `multicloud-showcase.json`   | **Import JSON**                  | All three provider badges (AWS / GCP / Azure) side by side                            |
-| `aws-three-tier.json`        | **Import JSON**                  | A realistic AWS layout — containment, routing, targeting, and data-flow edges         |
-| `cloudformation-sample.json` | **Import IaC**                   | The CloudFormation parser → graph conversion (a different code path from native JSON) |
-| `arm-sample.json`            | **Import IaC** — Azure ARM       | ARM-vs-CloudFormation detection + `dependsOn` edges                                   |
-| `terraform-aws-state.json`   | **Import IaC** — Terraform state | Containment inferred from `vpc_id` / `subnet_id` references                           |
+| File                             | Upload via                       | What it tests                                                                                                                                                                                                       |
+| -------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `multicloud-showcase.json`       | **Import JSON**                  | All three provider badges (AWS / GCP / Azure) side by side                                                                                                                                                          |
+| `aws-three-tier.json`            | **Import JSON**                  | A realistic AWS layout — containment, routing, targeting, and data-flow edges                                                                                                                                       |
+| `cloudformation-sample.json`     | **Import IaC**                   | The CloudFormation parser → graph conversion (a different code path from native JSON)                                                                                                                               |
+| `arm-sample.json`                | **Import IaC** — Azure ARM       | ARM-vs-CloudFormation detection + `dependsOn` edges                                                                                                                                                                 |
+| `terraform-aws-state.json`       | **Import IaC** — Terraform state | Containment inferred from `vpc_id` / `subnet_id` references                                                                                                                                                         |
+| `terraform-aws-large-state.json` | **Import IaC** — Terraform state | A realistic `terraform show -json` at scale: 31 resources across root + `module.network` / `module.app` child modules, cross-module containment, and the newer EKS node-group / ECS task-def / LB-listener mappings |
 
 ## Larger-scale examples
 

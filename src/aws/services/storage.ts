@@ -51,6 +51,25 @@ const storage: ServiceDefinition[] = [
           { value: "DSSE-KMS", label: "DSSE-KMS" },
         ],
       },
+      {
+        key: "kmsKeyId",
+        label: "KMS Key (ARN/ID)",
+        type: "string",
+        placeholder: "arn:aws:kms:…:key/…",
+        help: "Customer-managed key for SSE-KMS / DSSE-KMS. Blank uses the AWS-managed key.",
+      },
+      {
+        key: "objectOwnership",
+        label: "Object Ownership",
+        type: "select",
+        default: "BucketOwnerEnforced",
+        help: "BucketOwnerEnforced disables ACLs (recommended).",
+        options: [
+          { value: "BucketOwnerEnforced", label: "Bucket owner enforced (ACLs disabled)" },
+          { value: "BucketOwnerPreferred", label: "Bucket owner preferred" },
+          { value: "ObjectWriter", label: "Object writer" },
+        ],
+      },
     ],
     commonConnections: [
       { to: "kms", relationship: "depends_on", description: "Encrypts objects with a KMS key" },

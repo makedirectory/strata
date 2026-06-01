@@ -124,4 +124,28 @@ describe("mock-data fixtures — IaC import", () => {
     expect(byService.get("subnet-private")!.parentId).toBeTruthy();
     expect(byService.get("ec2-instance")!.parentId).toBeTruthy();
   });
+
+  it.runIf(has("terraform-aws-large-state.json"))(
+    "imports the large multi-module Terraform state",
+    () => {
+      const r = importAnyIaC(fixture("terraform-aws-large-state.json"));
+      expect(r.format).toBe("terraform");
+      // Every resource type maps (root + both child modules walked): nothing dropped.
+      expect(r.unmappedTypes).toHaveLength(0);
+      expect(r.graph.resources).toHaveLength(31);
+
+      const byId = new Map(r.graph.resources.map((res) => [res.id, res]));
+      // Containment resolves across modules via vpc_id / subnet_id references.
+      expect(byId.get("module.network.aws_subnet.private_a")!.parentId).toBe("aws_vpc.main");
+      expect(byId.get("module.app.aws_ecs_service.web")!.parentId).toBe(
+        "module.network.aws_subnet.private_a",
+      );
+      // Newly-mapped Terraform types resolve to real services.
+      expect(byId.get("module.app.aws_eks_node_group.default")!.serviceId).toBe("eks-cluster");
+      expect(byId.get("module.app.aws_ecs_task_definition.web")!.serviceId).toBe("fargate");
+      expect(byId.get("module.network.aws_lb_listener.https")!.serviceId).toBe(
+        "elastic-load-balancer",
+      );
+    },
+  );
 });
