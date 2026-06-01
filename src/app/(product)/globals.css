@@ -142,6 +142,11 @@ body {
 }
 
 .panel {
+  /* Explicit placement so the center canvas keeps its cell when the side panels
+     are display:none (presentation mode) — otherwise auto-placement collapses
+     the canvas into the first (0-width) grid cell and nothing renders. */
+  grid-column: 1;
+  grid-row: 2;
   background: var(--panel);
   border-right: 1px solid #1a2540;
   padding: 10px;
@@ -292,6 +297,8 @@ body {
 }
 
 .right {
+  grid-column: 3;
+  grid-row: 2;
   background: var(--panel);
   border-left: 1px solid #1a2540;
   padding: 10px;
@@ -333,6 +340,10 @@ body {
 }
 
 .canvas-wrap {
+  /* Pinned to the center cell so presentation mode (which hides the side panels
+     via display:none) keeps the canvas full-bleed instead of collapsing it. */
+  grid-column: 2;
+  grid-row: 2;
   position: relative;
   overflow: hidden;
   background: radial-gradient(1200px 1200px at 60% -10%, #16223d, #0b1220 50%);
