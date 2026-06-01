@@ -36,6 +36,59 @@ describe("mock-data fixtures — native graphs", () => {
   );
 });
 
+/**
+ * Every native graph fixture (anything in mock-data/ with a numeric
+ * schemaVersion) must be internally consistent: known serviceIds, and edges /
+ * parentIds that reference resources actually present in the graph. This
+ * auto-covers any fixture added later — including the larger-scale examples —
+ * so a typo'd serviceId or dangling edge fails CI.
+ */
+describe("mock-data fixtures — native graph integrity (all files)", () => {
+  const dir = path.join(process.cwd(), "mock-data");
+  const nativeGraphs = fs.existsSync(dir)
+    ? fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith(".json"))
+        .map((f) => ({ file: f, graph: JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) }))
+        .filter((x) => typeof x.graph.schemaVersion === "number")
+    : [];
+
+  it("found native graph fixtures to check", () => {
+    expect(nativeGraphs.length).toBeGreaterThan(0);
+  });
+
+  for (const { file, graph } of nativeGraphs) {
+    describe(file, () => {
+      const ids = new Set<string>(graph.resources.map((r: { id: string }) => r.id));
+
+      it("has unique resource ids", () => {
+        expect(ids.size).toBe(graph.resources.length);
+      });
+
+      it("uses only registry serviceIds", () => {
+        const bad = graph.resources
+          .filter((r: { serviceId: string }) => !getService(r.serviceId))
+          .map((r: { serviceId: string }) => r.serviceId);
+        expect(bad).toEqual([]);
+      });
+
+      it("has parentIds that reference existing resources", () => {
+        const dangling = graph.resources
+          .filter((r: { parentId?: string }) => r.parentId && !ids.has(r.parentId))
+          .map((r: { id: string; parentId?: string }) => `${r.id}->${r.parentId}`);
+        expect(dangling).toEqual([]);
+      });
+
+      it("has relationships whose endpoints exist", () => {
+        const dangling = graph.relationships
+          .filter((e: { from: string; to: string }) => !ids.has(e.from) || !ids.has(e.to))
+          .map((e: { from: string; to: string }) => `${e.from}->${e.to}`);
+        expect(dangling).toEqual([]);
+      });
+    });
+  }
+});
+
 describe("mock-data fixtures — IaC import", () => {
   it.runIf(has("cloudformation-sample.json"))("imports the CloudFormation sample", () => {
     const r = importAnyIaC(fixture("cloudformation-sample.json"));

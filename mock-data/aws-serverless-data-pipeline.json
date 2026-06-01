@@ -1,0 +1,502 @@
+{
+  "id": "mock-aws-serverless-data-pipeline",
+  "name": "AWS Serverless Data Pipeline",
+  "description": "Event-driven serverless ingestion + analytics: Cognito-guarded API Gateway invoking Lambdas over DynamoDB, a Kinesis → Firehose → S3 stream, EventBridge-driven Step Functions, and a Glue/Athena/QuickSight analytics path.",
+  "schemaVersion": 1,
+  "createdAt": "2026-06-01T00:00:00.000Z",
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "accounts": [
+    {
+      "id": "data",
+      "provider": "aws",
+      "accountId": "444455556666",
+      "name": "Data Platform",
+      "environment": "prod",
+      "color": "#ff9900"
+    }
+  ],
+  "resources": [
+    {
+      "id": "cognito",
+      "serviceId": "cognito",
+      "name": "User Pool",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 80,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "apigw",
+      "serviceId": "api-gateway",
+      "name": "Ingest API",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "fn-ingest",
+      "serviceId": "lambda",
+      "name": "ingest-fn",
+      "config": {
+        "runtime": "python3.12",
+        "memory": 256
+      },
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "fn-process",
+      "serviceId": "lambda",
+      "name": "process-fn",
+      "config": {
+        "runtime": "python3.12",
+        "memory": 1024
+      },
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "fn-notify",
+      "serviceId": "lambda",
+      "name": "notify-fn",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "ddb",
+      "serviceId": "dynamodb",
+      "name": "Events Table",
+      "config": {
+        "billingMode": "PAY_PER_REQUEST",
+        "streamEnabled": true,
+        "pointInTimeRecovery": true
+      },
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "stream",
+      "serviceId": "kinesis-data-streams",
+      "name": "Telemetry Stream",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "firehose",
+      "serviceId": "kinesis-firehose",
+      "name": "Delivery Stream",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "s3-raw",
+      "serviceId": "s3-bucket",
+      "name": "Raw Lake",
+      "config": {
+        "bucketName": "acme-data-raw",
+        "blockPublicAccess": true,
+        "encryption": "SSE-KMS"
+      },
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "s3-curated",
+      "serviceId": "s3-bucket",
+      "name": "Curated Lake",
+      "config": {
+        "bucketName": "acme-data-curated",
+        "blockPublicAccess": true,
+        "encryption": "SSE-KMS"
+      },
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "evb",
+      "serviceId": "eventbridge",
+      "name": "Pipeline Bus",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "sfn",
+      "serviceId": "step-functions",
+      "name": "ETL Workflow",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "glue",
+      "serviceId": "glue",
+      "name": "Glue ETL",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "athena",
+      "serviceId": "athena",
+      "name": "Athena",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "quicksight",
+      "serviceId": "quicksight",
+      "name": "Dashboards",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1880,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "sns",
+      "serviceId": "sns",
+      "name": "Alerts",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "sqs-dlq",
+      "serviceId": "sqs",
+      "name": "DLQ",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "secrets",
+      "serviceId": "secrets-manager",
+      "name": "Secrets",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "kms",
+      "serviceId": "kms",
+      "name": "Lake Key",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "role",
+      "serviceId": "iam-role",
+      "name": "Pipeline Role",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "cw",
+      "serviceId": "cloudwatch",
+      "name": "Metrics",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1880,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    },
+    {
+      "id": "logs",
+      "serviceId": "cloudwatch-logs",
+      "name": "Logs",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1880,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "data"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "e1",
+      "from": "cognito",
+      "to": "apigw",
+      "kind": "allows",
+      "label": "authorizer"
+    },
+    {
+      "id": "e2",
+      "from": "apigw",
+      "to": "fn-ingest",
+      "kind": "invokes"
+    },
+    {
+      "id": "e3",
+      "from": "fn-ingest",
+      "to": "ddb",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e4",
+      "from": "ddb",
+      "to": "fn-process",
+      "kind": "invokes",
+      "label": "stream trigger"
+    },
+    {
+      "id": "e5",
+      "from": "fn-process",
+      "to": "s3-raw",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e6",
+      "from": "fn-process",
+      "to": "evb",
+      "kind": "publishes_to"
+    },
+    {
+      "id": "e7",
+      "from": "evb",
+      "to": "sfn",
+      "kind": "invokes"
+    },
+    {
+      "id": "e8",
+      "from": "sfn",
+      "to": "glue",
+      "kind": "invokes"
+    },
+    {
+      "id": "e9",
+      "from": "glue",
+      "to": "s3-raw",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e10",
+      "from": "glue",
+      "to": "s3-curated",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e11",
+      "from": "athena",
+      "to": "s3-curated",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e12",
+      "from": "quicksight",
+      "to": "athena",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e13",
+      "from": "stream",
+      "to": "firehose",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e14",
+      "from": "firehose",
+      "to": "s3-raw",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e15",
+      "from": "fn-process",
+      "to": "sns",
+      "kind": "publishes_to"
+    },
+    {
+      "id": "e16",
+      "from": "sns",
+      "to": "fn-notify",
+      "kind": "subscribes_to"
+    },
+    {
+      "id": "e17",
+      "from": "fn-process",
+      "to": "sqs-dlq",
+      "kind": "writes_to",
+      "label": "on failure"
+    },
+    {
+      "id": "e18",
+      "from": "fn-ingest",
+      "to": "secrets",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e19",
+      "from": "kms",
+      "to": "s3-raw",
+      "kind": "grants",
+      "label": "encrypts"
+    },
+    {
+      "id": "e20",
+      "from": "kms",
+      "to": "s3-curated",
+      "kind": "grants",
+      "label": "encrypts"
+    },
+    {
+      "id": "e21",
+      "from": "fn-ingest",
+      "to": "role",
+      "kind": "assumes"
+    },
+    {
+      "id": "e22",
+      "from": "fn-process",
+      "to": "role",
+      "kind": "assumes"
+    },
+    {
+      "id": "e23",
+      "from": "cw",
+      "to": "fn-process",
+      "kind": "monitors"
+    },
+    {
+      "id": "e24",
+      "from": "logs",
+      "to": "fn-ingest",
+      "kind": "monitors"
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "scale": 0.6
+  }
+}

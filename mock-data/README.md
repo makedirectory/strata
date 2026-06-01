@@ -10,6 +10,16 @@ Sample files for exercising Strata's import/visualization paths.
 | `arm-sample.json`            | **Import IaC** — Azure ARM       | ARM-vs-CloudFormation detection + `dependsOn` edges                                   |
 | `terraform-aws-state.json`   | **Import IaC** — Terraform state | Containment inferred from `vpc_id` / `subnet_id` references                           |
 
+## Larger-scale examples
+
+Bigger native graphs (all **Import JSON**) for seeing what real-world-sized infrastructure looks like on the canvas. They open zoomed-out (`viewport.scale`) so the whole topology is visible at once.
+
+| File                                | Resources / edges | What it shows                                                                                                                                                                                          |
+| ----------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `aws-microservices-platform.json`   | 36 / 44           | Production multi-AZ AWS stack: edge (Route 53/CloudFront/WAF) → ALB → ECS services, Aurora/ElastiCache/DynamoDB, async messaging (SQS/SNS/EventBridge/Step Functions/Lambda), security + observability |
+| `aws-serverless-data-pipeline.json` | 22 / 24           | Event-driven serverless ingestion + analytics: Cognito → API Gateway → Lambda/DynamoDB, Kinesis → Firehose → S3, EventBridge → Step Functions, and a Glue/Athena/QuickSight path                       |
+| `multicloud-enterprise.json`        | 26 / 19           | A full networking/compute/data/storage tier in **each** of AWS, GCP and Azure, with cross-cloud connectivity — all three badges at scale                                                               |
+
 **Import JSON** expects a native `InfrastructureGraph` (`src/aws/model.ts`) and replaces the whole canvas.
 **Import IaC** auto-detects CloudFormation / ARM / Terraform and converts to a graph.
 

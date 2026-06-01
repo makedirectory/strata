@@ -1,0 +1,555 @@
+{
+  "id": "mock-multicloud-enterprise",
+  "name": "Multi-Cloud Enterprise Landscape",
+  "description": "A meaningful stack per provider — AWS, GCP and Azure each with networking, compute, data and storage tiers — to show all three node badges at scale alongside cross-cloud connectivity.",
+  "schemaVersion": 1,
+  "createdAt": "2026-06-01T00:00:00.000Z",
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "accounts": [
+    {
+      "id": "aws",
+      "provider": "aws",
+      "accountId": "111122223333",
+      "name": "AWS Prod",
+      "environment": "prod",
+      "color": "#ff9900"
+    },
+    {
+      "id": "gcp",
+      "provider": "gcp",
+      "accountId": "acme-prod",
+      "name": "GCP Prod",
+      "environment": "prod",
+      "color": "#4285f4"
+    },
+    {
+      "id": "az",
+      "provider": "azure",
+      "accountId": "00000000-0000-0000-0000-000000000000",
+      "name": "Azure Prod",
+      "environment": "prod",
+      "color": "#0078d4"
+    }
+  ],
+  "resources": [
+    {
+      "id": "aws-vpc",
+      "serviceId": "vpc",
+      "name": "AWS VPC",
+      "config": {
+        "cidr": "10.0.0.0/16"
+      },
+      "source": "manual",
+      "position": {
+        "x": 80,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "aws"
+    },
+    {
+      "id": "aws-sn",
+      "serviceId": "subnet-private",
+      "name": "AWS Private Subnet",
+      "config": {
+        "cidr": "10.0.1.0/24"
+      },
+      "source": "manual",
+      "position": {
+        "x": 80,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "aws-vpc",
+      "accountId": "aws"
+    },
+    {
+      "id": "aws-alb",
+      "serviceId": "elastic-load-balancer",
+      "name": "AWS ALB",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 80,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "aws"
+    },
+    {
+      "id": "aws-eks",
+      "serviceId": "eks-cluster",
+      "name": "EKS",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "aws"
+    },
+    {
+      "id": "aws-rds",
+      "serviceId": "aurora",
+      "name": "Aurora",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "aws-sn",
+      "accountId": "aws"
+    },
+    {
+      "id": "aws-s3",
+      "serviceId": "s3-bucket",
+      "name": "S3 Data",
+      "config": {
+        "blockPublicAccess": true,
+        "encryption": "SSE-KMS"
+      },
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "aws"
+    },
+    {
+      "id": "aws-tgw",
+      "serviceId": "transit-gateway",
+      "name": "Transit GW",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "aws"
+    },
+    {
+      "id": "gcp-vpc",
+      "serviceId": "gcp-vpc-network",
+      "name": "GCP VPC",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "gcp"
+    },
+    {
+      "id": "gcp-sn",
+      "serviceId": "gcp-subnet",
+      "name": "GCP Subnet",
+      "config": {
+        "ipCidrRange": "10.10.0.0/20"
+      },
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "gcp-vpc",
+      "accountId": "gcp"
+    },
+    {
+      "id": "gcp-fw",
+      "serviceId": "gcp-firewall-rule",
+      "name": "Allow HTTPS",
+      "config": {
+        "direction": "INGRESS",
+        "action": "ALLOW",
+        "sourceRanges": "0.0.0.0/0",
+        "allowed": "tcp:443",
+        "priority": 1000
+      },
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "gcp"
+    },
+    {
+      "id": "gcp-gke",
+      "serviceId": "gcp-gke-cluster",
+      "name": "GKE",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "gcp"
+    },
+    {
+      "id": "gcp-run",
+      "serviceId": "gcp-cloud-run",
+      "name": "Cloud Run API",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "gcp"
+    },
+    {
+      "id": "gcp-sql",
+      "serviceId": "gcp-cloud-sql",
+      "name": "Cloud SQL",
+      "config": {
+        "requireSsl": true,
+        "ipv4Enabled": false
+      },
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "gcp"
+    },
+    {
+      "id": "gcp-gcs",
+      "serviceId": "gcp-cloud-storage",
+      "name": "GCS Bucket",
+      "config": {
+        "publicAccessPrevention": "enforced"
+      },
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "gcp"
+    },
+    {
+      "id": "gcp-ps",
+      "serviceId": "gcp-pubsub-topic",
+      "name": "Pub/Sub",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "gcp"
+    },
+    {
+      "id": "gcp-bq",
+      "serviceId": "gcp-bigquery-dataset",
+      "name": "BigQuery",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "gcp"
+    },
+    {
+      "id": "az-vnet",
+      "serviceId": "azure-vnet",
+      "name": "Azure VNet",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    },
+    {
+      "id": "az-sn",
+      "serviceId": "azure-subnet",
+      "name": "Azure Subnet",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "az-vnet",
+      "accountId": "az"
+    },
+    {
+      "id": "az-nsg",
+      "serviceId": "azure-nsg",
+      "name": "NSG",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    },
+    {
+      "id": "az-agw",
+      "serviceId": "azure-app-gateway",
+      "name": "App Gateway",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    },
+    {
+      "id": "az-aks",
+      "serviceId": "azure-aks",
+      "name": "AKS",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    },
+    {
+      "id": "az-app",
+      "serviceId": "azure-app-service",
+      "name": "App Service",
+      "config": {
+        "httpsOnly": true
+      },
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    },
+    {
+      "id": "az-sql",
+      "serviceId": "azure-sql-database",
+      "name": "Azure SQL DB",
+      "config": {
+        "transparentDataEncryption": true
+      },
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    },
+    {
+      "id": "az-sa",
+      "serviceId": "azure-storage-account",
+      "name": "Storage Acct",
+      "config": {
+        "supportsHttpsTrafficOnly": true,
+        "allowPublicAccess": false
+      },
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    },
+    {
+      "id": "az-sb",
+      "serviceId": "azure-service-bus",
+      "name": "Service Bus",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    },
+    {
+      "id": "az-kv",
+      "serviceId": "azure-key-vault",
+      "name": "Key Vault",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "az"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "e1",
+      "from": "aws-vpc",
+      "to": "aws-sn",
+      "kind": "contains"
+    },
+    {
+      "id": "e2",
+      "from": "aws-alb",
+      "to": "aws-eks",
+      "kind": "targets"
+    },
+    {
+      "id": "e3",
+      "from": "aws-eks",
+      "to": "aws-rds",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e4",
+      "from": "aws-eks",
+      "to": "aws-s3",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e5",
+      "from": "gcp-vpc",
+      "to": "gcp-sn",
+      "kind": "contains"
+    },
+    {
+      "id": "e6",
+      "from": "gcp-fw",
+      "to": "gcp-sn",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e7",
+      "from": "gcp-gke",
+      "to": "gcp-sql",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e8",
+      "from": "gcp-run",
+      "to": "gcp-ps",
+      "kind": "publishes_to"
+    },
+    {
+      "id": "e9",
+      "from": "gcp-ps",
+      "to": "gcp-bq",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e10",
+      "from": "gcp-gke",
+      "to": "gcp-gcs",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e11",
+      "from": "az-vnet",
+      "to": "az-sn",
+      "kind": "contains"
+    },
+    {
+      "id": "e12",
+      "from": "az-nsg",
+      "to": "az-sn",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e13",
+      "from": "az-agw",
+      "to": "az-aks",
+      "kind": "targets"
+    },
+    {
+      "id": "e14",
+      "from": "az-aks",
+      "to": "az-sql",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e15",
+      "from": "az-app",
+      "to": "az-sb",
+      "kind": "publishes_to"
+    },
+    {
+      "id": "e16",
+      "from": "az-app",
+      "to": "az-sa",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e17",
+      "from": "az-aks",
+      "to": "az-kv",
+      "kind": "reads_from",
+      "label": "secrets"
+    },
+    {
+      "id": "e18",
+      "from": "aws-tgw",
+      "to": "gcp-vpc",
+      "kind": "connects_to",
+      "label": "VPN / Interconnect"
+    },
+    {
+      "id": "e19",
+      "from": "aws-tgw",
+      "to": "az-vnet",
+      "kind": "connects_to",
+      "label": "VPN"
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "scale": 0.6
+  }
+}
