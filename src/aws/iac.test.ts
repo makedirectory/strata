@@ -4,10 +4,13 @@ import {
   importCloudFormation,
   importTerraform,
   detectFormat,
+  buildGraph,
   TF_TYPE_TO_SERVICE_ID,
   type IacImportResult,
+  type ResolvedItem,
 } from "./iac";
 import { validateGraph } from "./model";
+import { getServiceByCfnType } from "./registry";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -371,5 +374,96 @@ describe("TF_TYPE_TO_SERVICE_ID", () => {
     expect(TF_TYPE_TO_SERVICE_ID.aws_vpc).toBe("vpc");
     expect(TF_TYPE_TO_SERVICE_ID.aws_subnet).toBe("subnet-private");
     expect(TF_TYPE_TO_SERVICE_ID.aws_instance).toBe("ec2-instance");
+  });
+
+  it("maps the newly-added TF types", () => {
+    expect(TF_TYPE_TO_SERVICE_ID.aws_ecs_task_definition).toBe("fargate");
+    expect(TF_TYPE_TO_SERVICE_ID.aws_eks_node_group).toBe("eks-cluster");
+    expect(TF_TYPE_TO_SERVICE_ID.aws_lb_listener).toBe("elastic-load-balancer");
+    expect(TF_TYPE_TO_SERVICE_ID.aws_batch_job_queue).toBe("batch");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildGraph (unit) — exercised directly with hand-built ResolvedItem[]
+// ---------------------------------------------------------------------------
+
+describe("buildGraph (unit)", () => {
+  it("defaults config to {} when properties are omitted", () => {
+    const items: ResolvedItem[] = [{ id: "v1", serviceId: "vpc", name: "v1", relationships: [] }];
+    const graph = buildGraph(items, "Unit");
+    expect(byId({ graph } as IacImportResult, "v1").config).toEqual({});
+  });
+
+  it("drops a parentId that points at the item's own id", () => {
+    const items: ResolvedItem[] = [
+      { id: "v1", serviceId: "vpc", name: "v1", parentId: "v1", relationships: [] },
+    ];
+    const graph = buildGraph(items, "Unit");
+    expect(byId({ graph } as IacImportResult, "v1").parentId).toBeUndefined();
+  });
+
+  it("drops a relationship whose target is not in the item set", () => {
+    const items: ResolvedItem[] = [
+      {
+        id: "v1",
+        serviceId: "vpc",
+        name: "v1",
+        relationships: [{ to: "ghost", kind: "depends_on" }],
+      },
+    ];
+    const graph = buildGraph(items, "Unit");
+    expect(graph.relationships).toEqual([]);
+  });
+
+  it("yields {} config for an unregistered serviceId even with properties", () => {
+    const items: ResolvedItem[] = [
+      {
+        id: "x1",
+        serviceId: "does-not-exist",
+        name: "x1",
+        properties: { cidr: "10.0.0.0/16" },
+        relationships: [],
+      },
+    ];
+    const graph = buildGraph(items, "Unit");
+    expect(byId({ graph } as IacImportResult, "x1").config).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Terraform planned_values + CloudFormation registry resolution
+// ---------------------------------------------------------------------------
+
+describe("importTerraform (planned_values)", () => {
+  it("imports terraform planned_values.root_module", () => {
+    const res = importTerraform({
+      planned_values: {
+        root_module: {
+          resources: [
+            { address: "aws_s3_bucket.b", type: "aws_s3_bucket", name: "b", values: { id: "b" } },
+          ],
+        },
+      },
+    });
+    expect(res.format).toBe("terraform");
+    expect(res.graph.resources).toHaveLength(1);
+    expect(byId(res, "aws_s3_bucket.b").serviceId).toBe("s3-bucket");
+  });
+});
+
+describe("registry CloudFormation resolution", () => {
+  it("batch resolves from CloudFormation ComputeEnvironment", () => {
+    expect(getServiceByCfnType("AWS::Batch::ComputeEnvironment")?.id).toBe("batch");
+  });
+});
+
+describe("route53 record/zone split", () => {
+  it("imports aws_route53_record as the route53-record service", () => {
+    expect(TF_TYPE_TO_SERVICE_ID["aws_route53_record"]).toBe("route53-record");
+    expect(TF_TYPE_TO_SERVICE_ID["aws_route53_zone"]).toBe("route53");
+  });
+  it("resolves AWS::Route53::RecordSet to route53-record via cfnType", () => {
+    expect(getServiceByCfnType("AWS::Route53::RecordSet")?.id).toBe("route53-record");
   });
 });

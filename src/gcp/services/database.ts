@@ -30,6 +30,9 @@ const database: ServiceDefinition[] = [
       { key: "tier", label: "Machine Tier", type: "string", placeholder: "db-custom-2-7680" },
       { key: "storageGb", label: "Storage (GB)", type: "number", default: 10 },
       { key: "highAvailability", label: "High Availability", type: "boolean", default: false },
+      { key: "requireSsl", label: "Require SSL", type: "boolean", default: true },
+      { key: "ipv4Enabled", label: "Public IP (IPv4)", type: "boolean", default: false },
+      { key: "authorizedNetworks", label: "Authorized Networks (CIDR)", type: "string" },
     ],
     commonConnections: [
       { to: "gcp-vpc-network", relationship: "attached_to" },

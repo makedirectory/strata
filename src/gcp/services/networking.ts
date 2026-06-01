@@ -122,6 +122,8 @@ const networking: ServiceDefinition[] = [
       },
       { key: "sourceRanges", label: "Source Ranges", type: "text", placeholder: "0.0.0.0/0" },
       { key: "allowed", label: "Allowed Protocols/Ports", type: "text", placeholder: "tcp:443" },
+      { key: "priority", label: "Priority", type: "number", default: 1000, placeholder: "1000" },
+      { key: "targetTags", label: "Target Tags", type: "text", placeholder: "web-server" },
     ],
     commonConnections: [
       { to: "gcp-vpc-network", relationship: "attached_to" },

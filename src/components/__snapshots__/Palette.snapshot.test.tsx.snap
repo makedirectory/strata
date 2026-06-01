@@ -965,6 +965,31 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
           </span>
         </button>
         <button
+          aria-label="Add Amazon Route 53 Record Set"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon Route 53 Record Set"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            📇
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Route 53 Record
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
           aria-label="Add Amazon VPC Peering Connection"
           class="item"
           draggable="true"
@@ -1414,6 +1439,56 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             AZ
           </span>
         </button>
+        <button
+          aria-label="Add Azure Network Interface"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Network Interface"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🔌
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Network Interface
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Private Endpoint"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Azure Private Endpoint"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🔒
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Private Endpoint
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
       </div>
     </div>
     <div
@@ -1809,6 +1884,31 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             AZ
           </span>
         </button>
+        <button
+          aria-label="Add Azure App Service Plan"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(245, 158, 11);"
+          title="Azure App Service Plan"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(245, 158, 11);"
+          >
+            📐
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            App Service Plan
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
       </div>
     </div>
     <div
@@ -2047,6 +2147,31 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Container Instances
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Container Registry"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(251, 146, 60);"
+          title="Azure Container Registry"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(251, 146, 60);"
+          >
+            🗂️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Container Registry
           </span>
           <span
             class="palette-item-provider"
@@ -2837,6 +2962,56 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Cache for Redis
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure Database for MySQL (Flexible Server)"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Azure Database for MySQL (Flexible Server)"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🐬
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Azure Database for MySQL
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AZ
+          </span>
+        </button>
+        <button
+          aria-label="Add Azure SQL Managed Instance"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(16, 185, 129);"
+          title="Azure SQL Managed Instance"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(16, 185, 129);"
+          >
+            🏦
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            SQL Managed Instance
           </span>
           <span
             class="palette-item-provider"

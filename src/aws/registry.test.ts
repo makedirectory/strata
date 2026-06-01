@@ -4,6 +4,9 @@ import {
   getService,
   requireService,
   getServiceByCfnType,
+  getServiceByNativeType,
+  serviceProvider,
+  serviceNativeType,
   allServices,
   servicesByCategory,
   serviceColor,
@@ -11,6 +14,7 @@ import {
   defaultConfig,
   searchServices,
 } from "./registry";
+import { TF_TYPE_TO_SERVICE_ID } from "./iac";
 import { CATEGORIES, CATEGORY_ORDER } from "./categories";
 import type { ServiceCategoryId } from "./types";
 
@@ -100,8 +104,8 @@ describe("getServiceByCfnType", () => {
 });
 
 describe("allServices", () => {
-  it("contains roughly 101 AWS services", () => {
-    expect(allServices("aws").length).toBe(101);
+  it("contains roughly 102 AWS services", () => {
+    expect(allServices("aws").length).toBe(102);
   });
 
   it("includes GCP and Azure catalogs in the multi-cloud registry", () => {
@@ -266,5 +270,87 @@ describe("searchServices", () => {
 
   it("returns an empty array when nothing matches", () => {
     expect(searchServices("zzz-no-such-service-zzz")).toEqual([]);
+  });
+});
+
+describe("secure defaults", () => {
+  // The catalog now ships security-sensitive resources locked-down by default.
+  // These assert the *runtime* default config (what a freshly-created node gets),
+  // so a regression that flips a default to the insecure value is caught here.
+  it("s3-bucket blocks public access and encrypts at rest by default", () => {
+    const cfg = defaultConfig("s3-bucket");
+    expect(cfg.blockPublicAccess).toBe(true);
+    expect(cfg.encryption).toBe("SSE-S3");
+  });
+
+  it("rds encrypts storage and is not publicly accessible by default", () => {
+    const cfg = defaultConfig("rds");
+    expect(cfg.storageEncrypted).toBe(true);
+    expect(cfg.publiclyAccessible).toBe(false);
+  });
+
+  it("aurora encrypts storage by default (only if the field is modeled)", () => {
+    const aurora = requireService("aurora");
+    const hasField = aurora.configFields.some((f) => f.key === "storageEncrypted");
+    if (hasField) {
+      expect(defaultConfig("aurora").storageEncrypted).toBe(true);
+    }
+  });
+
+  it("ebs-volume is encrypted by default", () => {
+    expect(defaultConfig("ebs-volume").encrypted).toBe(true);
+  });
+
+  it("efs is encrypted by default", () => {
+    expect(defaultConfig("efs").encrypted).toBe(true);
+  });
+
+  it("dynamodb enables point-in-time recovery by default", () => {
+    expect(defaultConfig("dynamodb").pointInTimeRecovery).toBe(true);
+  });
+});
+
+describe("cfnPropertyNames invariant", () => {
+  it("every cfnPropertyNames key maps a real configField key", () => {
+    for (const s of allServices()) {
+      if (!s.cfnPropertyNames) continue;
+      const keys = new Set(s.configFields.map((f) => f.key));
+      for (const k of Object.keys(s.cfnPropertyNames)) {
+        expect(keys.has(k), `${s.id}: cfnPropertyNames key "${k}" has no configField`).toBe(true);
+      }
+    }
+  });
+
+  it("post-rename property names have no collisions", () => {
+    for (const s of allServices()) {
+      const map = s.cfnPropertyNames ?? {};
+      const renamed = s.configFields.map((f) => map[f.key] ?? f.key);
+      expect(new Set(renamed).size, `${s.id}: rename produced duplicate property names`).toBe(
+        renamed.length,
+      );
+    }
+  });
+});
+
+describe("importable types resolve", () => {
+  it("every TF_TYPE_TO_SERVICE_ID target is a defined service", () => {
+    for (const id of Object.values(TF_TYPE_TO_SERVICE_ID)) {
+      expect(getService(id), `TF type maps to unknown service "${id}"`).toBeDefined();
+    }
+  });
+
+  it("every serviceNativeType resolves to a defined service of the same provider", () => {
+    // First-wins: a variant's nativeType resolves to the canonical winner, so we
+    // assert resolution + provider parity, NOT identity with the source service.
+    for (const s of allServices()) {
+      const nativeType = serviceNativeType(s);
+      if (!nativeType) continue;
+      const provider = serviceProvider(s);
+      const resolved = getServiceByNativeType(provider, nativeType);
+      expect(resolved, `${s.id}: nativeType "${nativeType}" did not resolve`).toBeDefined();
+      expect(serviceProvider(resolved!), `${s.id}: resolved to a different provider`).toBe(
+        provider,
+      );
+    }
   });
 });

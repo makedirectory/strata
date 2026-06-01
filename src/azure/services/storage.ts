@@ -58,6 +58,23 @@ const storage: ServiceDefinition[] = [
         type: "boolean",
         default: false,
       },
+      {
+        key: "supportsHttpsTrafficOnly",
+        label: "Secure transfer required",
+        type: "boolean",
+        default: true,
+      },
+      {
+        key: "minimumTlsVersion",
+        label: "Minimum TLS version",
+        type: "select",
+        default: "TLS1_2",
+        options: [
+          { value: "TLS1_0", label: "TLS 1.0" },
+          { value: "TLS1_1", label: "TLS 1.1" },
+          { value: "TLS1_2", label: "TLS 1.2" },
+        ],
+      },
     ],
     commonConnections: [
       { to: "azure-blob-container", relationship: "contains" },

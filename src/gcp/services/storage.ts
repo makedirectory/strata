@@ -32,6 +32,26 @@ const storage: ServiceDefinition[] = [
       { key: "location", label: "Location", type: "string", placeholder: "US" },
       { key: "uniformBucketLevelAccess", label: "Uniform Access", type: "boolean", default: true },
       { key: "versioning", label: "Versioning", type: "boolean", default: false },
+      {
+        key: "publicAccessPrevention",
+        label: "Public Access Prevention",
+        type: "select",
+        default: "enforced",
+        options: [
+          { value: "enforced", label: "Enforced" },
+          { value: "inherited", label: "Inherited" },
+        ],
+      },
+      {
+        key: "encryption",
+        label: "Encryption",
+        type: "select",
+        default: "google-managed",
+        options: [
+          { value: "google-managed", label: "Google-managed" },
+          { value: "cmek", label: "Customer-managed (CMEK)" },
+        ],
+      },
     ],
     commonConnections: [
       {

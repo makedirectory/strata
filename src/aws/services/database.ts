@@ -48,7 +48,21 @@ const database: ServiceDefinition[] = [
       { key: "allocatedStorage", label: "Allocated Storage (GiB)", type: "number", default: 20 },
       { key: "multiAz", label: "Multi-AZ", type: "boolean", default: false },
       { key: "storageEncrypted", label: "Storage Encrypted", type: "boolean", default: true },
+      { key: "publiclyAccessible", label: "Publicly Accessible", type: "boolean", default: false },
+      { key: "deletionProtection", label: "Deletion Protection", type: "boolean", default: true },
+      {
+        key: "backupRetentionPeriod",
+        label: "Backup Retention (days)",
+        type: "number",
+        default: 7,
+      },
     ],
+    cfnPropertyNames: {
+      publiclyAccessible: "PubliclyAccessible",
+      storageEncrypted: "StorageEncrypted",
+      deletionProtection: "DeletionProtection",
+      backupRetentionPeriod: "BackupRetentionPeriod",
+    },
     commonConnections: [
       {
         to: "security-group",
@@ -113,7 +127,18 @@ const database: ServiceDefinition[] = [
         ],
       },
       { key: "replicaCount", label: "Read Replicas", type: "number", default: 1 },
+      { key: "deletionProtection", label: "Deletion Protection", type: "boolean", default: true },
+      {
+        key: "backupRetentionPeriod",
+        label: "Backup Retention (days)",
+        type: "number",
+        default: 7,
+      },
     ],
+    cfnPropertyNames: {
+      deletionProtection: "DeletionProtection",
+      backupRetentionPeriod: "BackupRetentionPeriod",
+    },
     commonConnections: [
       { to: "security-group", relationship: "attached_to", description: "Controls cluster access" },
       { to: "subnet-private", relationship: "depends_on", description: "Spans private DB subnets" },
@@ -253,6 +278,13 @@ const database: ServiceDefinition[] = [
       },
       { key: "instanceCount", label: "Instance Count", type: "number", default: 3 },
       { key: "storageEncrypted", label: "Storage Encrypted", type: "boolean", default: true },
+      { key: "deletionProtection", label: "Deletion Protection", type: "boolean", default: true },
+      {
+        key: "backupRetentionPeriod",
+        label: "Backup Retention (days)",
+        type: "number",
+        default: 7,
+      },
     ],
     commonConnections: [
       { to: "security-group", relationship: "attached_to", description: "Controls cluster access" },
@@ -295,6 +327,13 @@ const database: ServiceDefinition[] = [
         ],
       },
       { key: "storageEncrypted", label: "Storage Encrypted", type: "boolean", default: true },
+      { key: "deletionProtection", label: "Deletion Protection", type: "boolean", default: true },
+      {
+        key: "backupRetentionPeriod",
+        label: "Backup Retention (days)",
+        type: "number",
+        default: 7,
+      },
     ],
     commonConnections: [
       { to: "security-group", relationship: "attached_to", description: "Controls cluster access" },

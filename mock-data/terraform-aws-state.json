@@ -1,0 +1,46 @@
+{
+  "format_version": "1.0",
+  "terraform_version": "1.6.0",
+  "values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_vpc.main",
+          "type": "aws_vpc",
+          "name": "main",
+          "values": {
+            "id": "vpc-aaa",
+            "cidr_block": "10.0.0.0/16"
+          }
+        },
+        {
+          "address": "aws_subnet.private",
+          "type": "aws_subnet",
+          "name": "private",
+          "values": {
+            "id": "subnet-bbb",
+            "vpc_id": "vpc-aaa",
+            "cidr_block": "10.0.1.0/24"
+          }
+        },
+        {
+          "address": "aws_instance.app",
+          "type": "aws_instance",
+          "name": "app",
+          "values": {
+            "id": "i-ccc",
+            "subnet_id": "subnet-bbb"
+          }
+        },
+        {
+          "address": "aws_s3_bucket.data",
+          "type": "aws_s3_bucket",
+          "name": "data",
+          "values": {
+            "id": "data"
+          }
+        }
+      ]
+    }
+  }
+}

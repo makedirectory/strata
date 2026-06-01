@@ -73,6 +73,41 @@ describe("validateArchitecture", () => {
     expect(out).toEqual([]);
   });
 
+  it("accepts an explicit default route (destinationCidr 0.0.0.0/0) to the IGW", () => {
+    const vpc = res("vpc", { id: "vpc", config: { cidr: "10.0.0.0/16" } });
+    const subnet = res("subnet-public", { id: "sn", config: { cidr: "10.0.1.0/24" } });
+    const igw = res("internet-gateway", { id: "igw" });
+    const rt = res("route-table", { id: "rt" });
+    const g = graph(
+      [vpc, subnet, igw, rt],
+      [
+        rel("vpc", "sn", "contains"),
+        rel("igw", "vpc", "attached_to"),
+        rel("rt", "sn", "attached_to"),
+        rel("rt", "igw", "routes_to", { destinationCidr: "0.0.0.0/0" }),
+      ],
+    );
+    expect(validateArchitecture(g)).toEqual([]);
+  });
+
+  it("flags a public subnet whose only IGW route is prefix-specific (not a default route)", () => {
+    const vpc = res("vpc", { id: "vpc", config: { cidr: "10.0.0.0/16" } });
+    const subnet = res("subnet-public", { id: "sn", config: { cidr: "10.0.1.0/24" } });
+    const igw = res("internet-gateway", { id: "igw" });
+    const rt = res("route-table", { id: "rt" });
+    const g = graph(
+      [vpc, subnet, igw, rt],
+      [
+        rel("vpc", "sn", "contains"),
+        rel("igw", "vpc", "attached_to"),
+        rel("rt", "sn", "attached_to"),
+        rel("rt", "igw", "routes_to", { destinationCidr: "192.168.0.0/16" }),
+      ],
+    );
+    const out = validateArchitecture(g);
+    expect(messages(out).some((m) => m.includes("routes to an Internet Gateway"))).toBe(true);
+  });
+
   it("accepts the same topology when containment is expressed via parentId (imported graph)", () => {
     // Mirrors the happy-path topology, but the subnet is contained by the VPC
     // through parentId (how MCP/imported graphs model it) — no `contains` edge.
@@ -454,6 +489,190 @@ describe("validateArchitecture", () => {
       expect(messages(out)).toContain('Subnet "orphan" should be contained by a VPC.');
     });
   });
+
+  describe("attachment checks accept either edge direction", () => {
+    it("does not flag a route table attached via the reverse subnet->rt edge", () => {
+      const rt = res("route-table", { id: "rt", name: "rtb" });
+      const sn = res("subnet-public", { id: "sn" });
+      const out = validateArchitecture(graph([rt, sn], [rel("sn", "rt", "attached_to")]));
+      expect(messages(out).some((m) => m.includes("is not attached to any Subnet"))).toBe(false);
+    });
+
+    it("does not flag a NACL attached via the reverse subnet->nacl edge", () => {
+      const nacl = res("nacl", { id: "nacl", name: "acl" });
+      const sn = res("subnet-public", { id: "sn" });
+      const out = validateArchitecture(graph([nacl, sn], [rel("sn", "nacl", "attached_to")]));
+      expect(messages(out).some((m) => m.includes('NACL "acl" is not attached'))).toBe(false);
+    });
+
+    it("does not flag an IGW attached via the reverse vpc->igw edge", () => {
+      const igw = res("internet-gateway", { id: "igw", name: "gw" });
+      const vpc = res("vpc", { id: "vpc" });
+      const out = validateArchitecture(graph([igw, vpc], [rel("vpc", "igw", "attached_to")]));
+      expect(messages(out).some((m) => m.includes("must be attached to a VPC"))).toBe(false);
+    });
+  });
+
+  describe("S3 Block Public Access", () => {
+    it("warns when Block Public Access is explicitly disabled", () => {
+      const b = res("s3-bucket", { id: "b", name: "data", config: { blockPublicAccess: false } });
+      const out = validateArchitecture(graph([b]));
+      expect(messages(out)).toContain(
+        'S3 bucket "data" has Block Public Access disabled; the bucket may be publicly accessible.',
+      );
+    });
+
+    it("does not warn when Block Public Access is unset (defaults on)", () => {
+      const b = res("s3-bucket", { id: "b", name: "data" });
+      const out = validateArchitecture(graph([b]));
+      expect(messages(out).some((m) => m.includes("Block Public Access"))).toBe(false);
+    });
+  });
+
+  describe("RDS public access + encryption", () => {
+    it("errors when RDS is publicly accessible", () => {
+      const rds = res("rds", {
+        id: "rds",
+        name: "db",
+        parentId: "sn",
+        config: { publiclyAccessible: true },
+      });
+      const priv = res("subnet-private", { id: "sn" });
+      const sg = res("security-group", { id: "sg" });
+      const out = validateArchitecture(graph([rds, priv, sg], [rel("sg", "rds", "attached_to")]));
+      const finding = out.find((r) => r.message === 'RDS "db" must not be publicly accessible.');
+      expect(finding).toBeDefined();
+      expect(finding!.level).toBe("error");
+    });
+
+    it("warns when RDS storage encryption is explicitly disabled", () => {
+      const rds = res("rds", {
+        id: "rds",
+        name: "db",
+        parentId: "sn",
+        config: { storageEncrypted: false },
+      });
+      const priv = res("subnet-private", { id: "sn" });
+      const sg = res("security-group", { id: "sg" });
+      const out = validateArchitecture(graph([rds, priv, sg], [rel("sg", "rds", "attached_to")]));
+      const finding = out.filter(
+        (r) => r.message === "db stores data at rest unencrypted; enable encryption.",
+      );
+      // Implemented via the shared encryption-at-rest pass; must fire exactly once.
+      expect(finding).toHaveLength(1);
+      expect(finding[0].level).toBe("warn");
+    });
+  });
+
+  describe("RDS public-subnet placement severity", () => {
+    it("flags RDS in a public subnet at error level", () => {
+      const rds = res("rds", { id: "rds", name: "db" });
+      const pub = res("subnet-public", { id: "sn", name: "pub" });
+      const sg = res("security-group", { id: "sg" });
+      const out = validateArchitecture(
+        graph([rds, pub, sg], [rel("sn", "rds", "attached_to"), rel("sg", "rds", "attached_to")]),
+      );
+      const finding = out.find(
+        (r) => r.message === 'RDS "db" should not be in public Subnet "pub".',
+      );
+      expect(finding).toBeDefined();
+      expect(finding!.level).toBe("error");
+    });
+  });
+
+  describe("encryption at rest", () => {
+    it("warns for an EBS volume with encryption disabled", () => {
+      const vol = res("ebs-volume", { id: "v", name: "vol", config: { encrypted: false } });
+      const out = validateArchitecture(graph([vol]));
+      expect(messages(out)).toContain("vol stores data at rest unencrypted; enable encryption.");
+    });
+
+    it("does not warn for an EBS volume with encryption unset", () => {
+      const vol = res("ebs-volume", { id: "v", name: "vol" });
+      const out = validateArchitecture(graph([vol]));
+      expect(messages(out).some((m) => m.includes("stores data at rest"))).toBe(false);
+    });
+  });
+
+  describe("security group open sensitive ports", () => {
+    it("warns when SSH (22) is open to the world", () => {
+      const sg = res("security-group", {
+        id: "sg",
+        name: "web",
+        config: { ingress: "tcp 22 0.0.0.0/0" },
+      });
+      const out = validateArchitecture(graph([sg]));
+      expect(messages(out)).toContain(
+        'Security Group "web" exposes sensitive port 22 to the world (0.0.0.0/0).',
+      );
+    });
+
+    it("does not warn for HTTPS (443) open to the world", () => {
+      const sg = res("security-group", {
+        id: "sg",
+        name: "web",
+        config: { ingress: "tcp 443 0.0.0.0/0" },
+      });
+      const out = validateArchitecture(graph([sg]));
+      expect(messages(out).some((m) => m.includes("exposes sensitive port"))).toBe(false);
+    });
+
+    it("does not warn when SSH is restricted to a private CIDR", () => {
+      const sg = res("security-group", {
+        id: "sg",
+        name: "web",
+        config: { ingress: "tcp 22 10.0.0.0/8" },
+      });
+      const out = validateArchitecture(graph([sg]));
+      expect(messages(out).some((m) => m.includes("exposes sensitive port"))).toBe(false);
+    });
+  });
+
+  describe("GCP/Azure provider checks", () => {
+    it("warns when GCP Cloud Storage has uniform bucket-level access disabled", () => {
+      const b = res("gcp-cloud-storage", {
+        id: "b",
+        name: "bucket",
+        config: { uniformBucketLevelAccess: false },
+      });
+      const out = validateArchitecture(graph([b]));
+      expect(messages(out).some((m) => m.includes("uniform bucket-level access disabled"))).toBe(
+        true,
+      );
+    });
+
+    it("warns when a GCP firewall rule opens a sensitive port to the world", () => {
+      const fw = res("gcp-firewall-rule", {
+        id: "fw",
+        name: "allow-ssh",
+        config: { sourceRanges: "0.0.0.0/0", allowed: "tcp:22" },
+      });
+      const out = validateArchitecture(graph([fw]));
+      expect(messages(out)).toContain(
+        'Firewall rule "allow-ssh" exposes sensitive port 22 to the world (0.0.0.0/0).',
+      );
+    });
+
+    it("warns when an Azure Storage Account allows public blob access", () => {
+      const sa = res("azure-storage-account", {
+        id: "sa",
+        name: "store",
+        config: { allowPublicAccess: true },
+      });
+      const out = validateArchitecture(graph([sa]));
+      expect(messages(out)).toContain('Storage Account "store" has public blob access enabled.');
+    });
+
+    it("warns when Azure Redis has the non-SSL port enabled", () => {
+      const redis = res("azure-redis", {
+        id: "r",
+        name: "cache",
+        config: { enableNonSslPort: true },
+      });
+      const out = validateArchitecture(graph([redis]));
+      expect(messages(out)).toContain('Redis "cache" has the non-SSL port enabled.');
+    });
+  });
 });
 
 describe("suggestRules", () => {
@@ -474,10 +693,10 @@ describe("suggestRules", () => {
     });
   });
 
-  it("suggests an ALB->service SG rule using the service's guessed port", () => {
+  it("suggests an ALB->service SG rule using the target group's port", () => {
     const alb = res("elastic-load-balancer", { id: "alb", name: "web-lb" });
-    const tg = res("target-group", { id: "tg" });
-    const ecs = res("ecs-service", { id: "ecs", name: "api", config: { port: 8080 } });
+    const tg = res("target-group", { id: "tg", config: { port: 8080 } });
+    const ecs = res("ecs-service", { id: "ecs", name: "api" });
     const sg = res("security-group", { id: "sg", name: "api-sg" });
     const out = suggestRules(
       graph(
@@ -553,5 +772,64 @@ describe("suggestRules", () => {
     // Only the ALB public-ingress suggestion, nothing scoped to a service SG.
     expect(out.filter((s) => s.type === "Security Group")).toHaveLength(1);
     expect(out.some((s) => s.rules.some((r) => r.comment === "ALB to Service"))).toBe(false);
+  });
+
+  it("suggests an App->DB ingress rule with the engine port and the app SG as source", () => {
+    const alb = res("elastic-load-balancer", { id: "alb", name: "lb" });
+    const tg = res("target-group", { id: "tg" });
+    const ecs = res("ecs-service", { id: "ecs", name: "api" });
+    const appSg = res("security-group", { id: "appsg", name: "app-sg" });
+    const dbSg = res("security-group", { id: "dbsg", name: "db-sg" });
+    const rds = res("rds", { id: "rds", name: "db", config: { engine: "postgres" } });
+    const out = suggestRules(
+      graph(
+        [alb, tg, ecs, appSg, dbSg, rds],
+        [
+          rel("alb", "tg", "targets"),
+          rel("tg", "ecs", "targets"),
+          rel("appsg", "ecs", "attached_to"),
+          rel("dbsg", "rds", "attached_to"),
+        ],
+      ),
+    );
+    const dbRule = out.find((s) => s.scope === "db-sg" && s.type === "Security Group");
+    expect(dbRule).toBeDefined();
+    expect(dbRule!.rules[0]).toMatchObject({
+      dir: "ingress",
+      proto: "tcp",
+      port: 5432,
+      src: "sg:app-sg",
+      comment: "App to DB",
+    });
+  });
+
+  it("does not suggest a route table when the subnet is already wired to its gateway", () => {
+    const priv = res("subnet-private", { id: "sn", name: "priv" });
+    const rt = res("route-table", { id: "rt" });
+    const nat = res("nat-gateway", { id: "nat" });
+    const out = suggestRules(
+      graph([priv, rt, nat], [rel("rt", "sn", "attached_to"), rel("rt", "nat", "routes_to")]),
+    );
+    expect(out.some((s) => s.type === "Route Table")).toBe(false);
+  });
+
+  it("still suggests a route table for an unwired subnet", () => {
+    const priv = res("subnet-private", { id: "sn", name: "priv" });
+    const out = suggestRules(graph([priv]));
+    expect(out.some((s) => s.type === "Route Table" && s.scope === "priv")).toBe(true);
+  });
+
+  it("returns no suggestions for an all-GCP graph", () => {
+    const g = graph([
+      res("gcp-vpc-network", { id: "vpc" }),
+      res("gcp-cloud-storage", { id: "b" }),
+      res("gcp-firewall-rule", { id: "fw" }),
+    ]);
+    expect(suggestRules(g)).toEqual([]);
+  });
+
+  it("returns no suggestions for an all-Azure graph", () => {
+    const g = graph([res("azure-storage-account", { id: "sa" }), res("azure-redis", { id: "r" })]);
+    expect(suggestRules(g)).toEqual([]);
   });
 });
