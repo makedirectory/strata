@@ -1,0 +1,866 @@
+{
+  "id": "mock-aws-microservices-platform",
+  "name": "AWS Microservices Platform (prod)",
+  "description": "Production multi-AZ microservices stack: edge (Route 53/CloudFront/WAF), a VPC with public+private subnets across two AZs, an ALB fronting ECS services, Aurora + ElastiCache + DynamoDB, async messaging (SQS/SNS/EventBridge/Step Functions/Lambda), plus security and observability.",
+  "schemaVersion": 1,
+  "createdAt": "2026-06-01T00:00:00.000Z",
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "accounts": [
+    {
+      "id": "prod",
+      "provider": "aws",
+      "accountId": "111122223333",
+      "name": "Production",
+      "environment": "prod",
+      "color": "#ff9900"
+    }
+  ],
+  "resources": [
+    {
+      "id": "r53",
+      "serviceId": "route53",
+      "name": "DNS (example.com)",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 80,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "cf",
+      "serviceId": "cloudfront",
+      "name": "CDN",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 80,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "waf",
+      "serviceId": "waf",
+      "name": "Web ACL",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 80,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "vpc",
+      "serviceId": "vpc",
+      "name": "Main VPC",
+      "config": {
+        "cidr": "10.0.0.0/16",
+        "enableDnsHostnames": true,
+        "enableFlowLogs": true
+      },
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod",
+      "region": "us-east-1"
+    },
+    {
+      "id": "igw",
+      "serviceId": "internet-gateway",
+      "name": "Internet Gateway",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "rt-pub",
+      "serviceId": "route-table",
+      "name": "Public RT",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "rt-priv",
+      "serviceId": "route-table",
+      "name": "Private RT",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "nat-a",
+      "serviceId": "nat-gateway",
+      "name": "NAT GW (az-a)",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 380,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "sn-pub-a",
+      "serviceId": "subnet-public",
+      "name": "Public Subnet A",
+      "config": {
+        "cidr": "10.0.1.0/24",
+        "az": "us-east-1a",
+        "mapPublicIp": true
+      },
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "sn-pub-b",
+      "serviceId": "subnet-public",
+      "name": "Public Subnet B",
+      "config": {
+        "cidr": "10.0.2.0/24",
+        "az": "us-east-1b",
+        "mapPublicIp": true
+      },
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "alb",
+      "serviceId": "elastic-load-balancer",
+      "name": "Public ALB",
+      "config": {
+        "lbType": "application",
+        "scheme": "internet-facing",
+        "listenerProtocol": "HTTPS"
+      },
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "sg-alb",
+      "serviceId": "security-group",
+      "name": "ALB SG",
+      "config": {
+        "ingress": "tcp 443 0.0.0.0/0\ntcp 80 0.0.0.0/0"
+      },
+      "source": "manual",
+      "position": {
+        "x": 680,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "sn-priv-a",
+      "serviceId": "subnet-private",
+      "name": "Private Subnet A",
+      "config": {
+        "cidr": "10.0.11.0/24",
+        "az": "us-east-1a"
+      },
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "sn-priv-b",
+      "serviceId": "subnet-private",
+      "name": "Private Subnet B",
+      "config": {
+        "cidr": "10.0.12.0/24",
+        "az": "us-east-1b"
+      },
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "tg-orders",
+      "serviceId": "target-group",
+      "name": "TG: orders",
+      "config": {
+        "port": 8080
+      },
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "tg-users",
+      "serviceId": "target-group",
+      "name": "TG: users",
+      "config": {
+        "port": 8081
+      },
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "ecs",
+      "serviceId": "ecs-cluster",
+      "name": "ECS Cluster",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 980,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "svc-orders",
+      "serviceId": "ecs-service",
+      "name": "orders-svc",
+      "config": {
+        "launchType": "FARGATE",
+        "desiredCount": 4
+      },
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "sn-priv-a",
+      "accountId": "prod"
+    },
+    {
+      "id": "svc-users",
+      "serviceId": "ecs-service",
+      "name": "users-svc",
+      "config": {
+        "launchType": "FARGATE",
+        "desiredCount": 3
+      },
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "sn-priv-b",
+      "accountId": "prod"
+    },
+    {
+      "id": "sg-svc",
+      "serviceId": "security-group",
+      "name": "Service SG",
+      "config": {
+        "ingress": "tcp 8080 sg:ALB SG\ntcp 8081 sg:ALB SG"
+      },
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "vpc",
+      "accountId": "prod"
+    },
+    {
+      "id": "lambda-worker",
+      "serviceId": "lambda",
+      "name": "async-worker",
+      "config": {
+        "runtime": "nodejs20.x",
+        "memory": 512,
+        "timeout": 30
+      },
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "apigw",
+      "serviceId": "api-gateway",
+      "name": "Public API",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1280,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "aurora",
+      "serviceId": "aurora",
+      "name": "Aurora (orders)",
+      "config": {
+        "engine": "aurora-postgresql",
+        "deletionProtection": true
+      },
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "sn-priv-a",
+      "accountId": "prod"
+    },
+    {
+      "id": "cache",
+      "serviceId": "elasticache",
+      "name": "Redis cache",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "parentId": "sn-priv-b",
+      "accountId": "prod"
+    },
+    {
+      "id": "ddb",
+      "serviceId": "dynamodb",
+      "name": "Sessions",
+      "config": {
+        "billingMode": "PAY_PER_REQUEST",
+        "pointInTimeRecovery": true
+      },
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "sqs",
+      "serviceId": "sqs",
+      "name": "Orders queue",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "sns",
+      "serviceId": "sns",
+      "name": "Events topic",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "evb",
+      "serviceId": "eventbridge",
+      "name": "Event Bus",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1580,
+        "y": 885,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "sfn",
+      "serviceId": "step-functions",
+      "name": "Fulfilment SFN",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1880,
+        "y": 60,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "s3",
+      "serviceId": "s3-bucket",
+      "name": "Assets",
+      "config": {
+        "bucketName": "acme-prod-assets",
+        "versioning": true,
+        "blockPublicAccess": true,
+        "encryption": "SSE-KMS"
+      },
+      "source": "manual",
+      "position": {
+        "x": 1880,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "secrets",
+      "serviceId": "secrets-manager",
+      "name": "App Secrets",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1880,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "kms",
+      "serviceId": "kms",
+      "name": "Data Key",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1880,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "role",
+      "serviceId": "iam-role",
+      "name": "Task Role",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 1880,
+        "y": 720,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "cw",
+      "serviceId": "cloudwatch",
+      "name": "Dashboards",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 2180,
+        "y": 225,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "logs",
+      "serviceId": "cloudwatch-logs",
+      "name": "Log Groups",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 2180,
+        "y": 390,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    },
+    {
+      "id": "xray",
+      "serviceId": "x-ray",
+      "name": "Tracing",
+      "config": {},
+      "source": "manual",
+      "position": {
+        "x": 2180,
+        "y": 555,
+        "w": 240,
+        "h": 110
+      },
+      "accountId": "prod"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "e1",
+      "from": "r53",
+      "to": "cf",
+      "kind": "routes_to"
+    },
+    {
+      "id": "e2",
+      "from": "cf",
+      "to": "alb",
+      "kind": "routes_to",
+      "label": "origin"
+    },
+    {
+      "id": "e3",
+      "from": "waf",
+      "to": "cf",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e4",
+      "from": "vpc",
+      "to": "sn-pub-a",
+      "kind": "contains"
+    },
+    {
+      "id": "e5",
+      "from": "vpc",
+      "to": "sn-pub-b",
+      "kind": "contains"
+    },
+    {
+      "id": "e6",
+      "from": "vpc",
+      "to": "sn-priv-a",
+      "kind": "contains"
+    },
+    {
+      "id": "e7",
+      "from": "vpc",
+      "to": "sn-priv-b",
+      "kind": "contains"
+    },
+    {
+      "id": "e8",
+      "from": "igw",
+      "to": "vpc",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e9",
+      "from": "rt-pub",
+      "to": "sn-pub-a",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e10",
+      "from": "rt-pub",
+      "to": "sn-pub-b",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e11",
+      "from": "rt-pub",
+      "to": "igw",
+      "kind": "routes_to",
+      "destinationCidr": "0.0.0.0/0"
+    },
+    {
+      "id": "e12",
+      "from": "rt-priv",
+      "to": "sn-priv-a",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e13",
+      "from": "rt-priv",
+      "to": "sn-priv-b",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e14",
+      "from": "rt-priv",
+      "to": "nat-a",
+      "kind": "routes_to",
+      "destinationCidr": "0.0.0.0/0"
+    },
+    {
+      "id": "e15",
+      "from": "nat-a",
+      "to": "sn-pub-a",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e16",
+      "from": "alb",
+      "to": "sn-pub-a",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e17",
+      "from": "alb",
+      "to": "sn-pub-b",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e18",
+      "from": "sg-alb",
+      "to": "alb",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e19",
+      "from": "alb",
+      "to": "tg-orders",
+      "kind": "targets"
+    },
+    {
+      "id": "e20",
+      "from": "alb",
+      "to": "tg-users",
+      "kind": "targets"
+    },
+    {
+      "id": "e21",
+      "from": "tg-orders",
+      "to": "svc-orders",
+      "kind": "targets"
+    },
+    {
+      "id": "e22",
+      "from": "tg-users",
+      "to": "svc-users",
+      "kind": "targets"
+    },
+    {
+      "id": "e23",
+      "from": "sg-svc",
+      "to": "svc-orders",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e24",
+      "from": "sg-svc",
+      "to": "svc-users",
+      "kind": "attached_to"
+    },
+    {
+      "id": "e25",
+      "from": "svc-orders",
+      "to": "aurora",
+      "kind": "reads_from",
+      "label": "tcp 5432"
+    },
+    {
+      "id": "e26",
+      "from": "svc-orders",
+      "to": "cache",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e27",
+      "from": "svc-users",
+      "to": "ddb",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e28",
+      "from": "svc-orders",
+      "to": "sqs",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e29",
+      "from": "lambda-worker",
+      "to": "sqs",
+      "kind": "subscribes_to"
+    },
+    {
+      "id": "e30",
+      "from": "svc-orders",
+      "to": "sns",
+      "kind": "publishes_to"
+    },
+    {
+      "id": "e31",
+      "from": "apigw",
+      "to": "svc-users",
+      "kind": "invokes"
+    },
+    {
+      "id": "e32",
+      "from": "apigw",
+      "to": "lambda-worker",
+      "kind": "invokes"
+    },
+    {
+      "id": "e33",
+      "from": "lambda-worker",
+      "to": "s3",
+      "kind": "writes_to"
+    },
+    {
+      "id": "e34",
+      "from": "evb",
+      "to": "sfn",
+      "kind": "invokes"
+    },
+    {
+      "id": "e35",
+      "from": "sfn",
+      "to": "lambda-worker",
+      "kind": "invokes"
+    },
+    {
+      "id": "e36",
+      "from": "svc-orders",
+      "to": "secrets",
+      "kind": "reads_from"
+    },
+    {
+      "id": "e37",
+      "from": "kms",
+      "to": "secrets",
+      "kind": "grants",
+      "label": "encrypts"
+    },
+    {
+      "id": "e38",
+      "from": "kms",
+      "to": "s3",
+      "kind": "grants",
+      "label": "encrypts"
+    },
+    {
+      "id": "e39",
+      "from": "svc-orders",
+      "to": "role",
+      "kind": "assumes"
+    },
+    {
+      "id": "e40",
+      "from": "svc-users",
+      "to": "role",
+      "kind": "assumes"
+    },
+    {
+      "id": "e41",
+      "from": "cw",
+      "to": "svc-orders",
+      "kind": "monitors"
+    },
+    {
+      "id": "e42",
+      "from": "cw",
+      "to": "aurora",
+      "kind": "monitors"
+    },
+    {
+      "id": "e43",
+      "from": "logs",
+      "to": "svc-users",
+      "kind": "monitors"
+    },
+    {
+      "id": "e44",
+      "from": "xray",
+      "to": "apigw",
+      "kind": "monitors"
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "scale": 0.6
+  }
+}
