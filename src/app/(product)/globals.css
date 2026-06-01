@@ -1078,7 +1078,97 @@ svg.guides {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
+}
+.hub-subtitle {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sub);
+}
+.hub-subtitle strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---- First-run guided tour ---- */
+.tour {
+  position: relative;
+  width: min(440px, 92vw);
+  background: var(--panel, #0c1426);
+  border: 1px solid #223055;
+  border-radius: 16px;
+  padding: 28px 24px 20px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.tour-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+.tour-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 800;
+}
+.tour-body {
+  margin: 0 auto 18px;
+  max-width: 36ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--sub);
+}
+.tour-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.tour-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.tour-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2a3f6a;
+}
+.tour-dot.active {
+  background: var(--accent);
+}
+.tour-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tour-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tour-skip,
+.tour-back {
+  background: transparent;
+  border: 1px solid #223055;
+  color: var(--sub);
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.tour-skip:hover,
+.tour-back:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.topbar-tour {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
 }
 .hub-title {
   margin: 0;

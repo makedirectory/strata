@@ -31,12 +31,12 @@ import {
   minimapToWorld,
   panToCenter,
   expandRect,
-  gridPack,
   type Rect,
   type Vec2,
   type GuideLine,
 } from "../canvas/geometry";
 import { computeLayout, summaryKey, type LayoutResult } from "../canvas/layout";
+import { arrangeTiered } from "../canvas/arrange";
 import { RELATIONSHIP_CLASS_ORDER, type RelationshipClass } from "../aws/relationshipClasses";
 import {
   iamTrustOverlay,
@@ -205,6 +205,12 @@ interface FlowContextValue {
   startHubOpen: boolean;
   openStartHub: () => void;
   closeStartHub: () => void;
+  /** First-run guided tour. */
+  tourOpen: boolean;
+  tourStep: number;
+  openTour: () => void;
+  closeTour: () => void;
+  setTourStep: (n: number) => void;
   /** Start a fresh blank diagram (guarded by the unsaved-work check). */
   startBlank: () => void;
   /** Whether the replace-confirmation dialog is showing. */
@@ -320,6 +326,24 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const replaceResolverRef = useRef<((proceed: boolean) => void) | null>(null);
   const openStartHub = useCallback(() => setStartHubOpen(true), []);
   const closeStartHub = useCallback(() => setStartHubOpen(false), []);
+
+  // ---- First-run guided tour --------------------------------------------
+  const ONBOARDED_KEY = "strata.onboarded";
+  const [tourOpen, setTourOpen] = React.useState(false);
+  const [tourStep, setTourStep] = React.useState(0);
+  const openTour = useCallback(() => {
+    setTourStep(0);
+    setTourOpen(true);
+  }, []);
+  const closeTour = useCallback(() => {
+    setTourOpen(false);
+    try {
+      localStorage.setItem(ONBOARDED_KEY, "1");
+    } catch {
+      /* localStorage unavailable (private mode) — tour just shows again next time */
+    }
+  }, []);
+  const setTourStepClamped = useCallback((n: number) => setTourStep(Math.max(0, n)), []);
 
   const [exportIaCOpen, setExportIaCOpen] = React.useState(false);
   const openExportIaC = useCallback(() => setExportIaCOpen(true), []);
@@ -858,22 +882,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [iCenter, getViewport, storeSetViewport],
   );
 
-  /** Auto-arrange top-level nodes into a tidy grid (one undo step). Containers
-   *  already auto-pack their children via the layout engine. */
+  /** Auto-arrange top-level nodes into a tidy, relationship-layered layout (one
+   *  undo step). Containers already auto-pack their children via the layout
+   *  engine; this lays the roots out left-to-right by dependency flow. */
   const tidy = useCallback(() => {
-    const ids = new Set(store.resources.map((r) => r.id));
-    const top = store.resources.filter(
-      (r) => !r.parentId || r.parentId === r.id || !ids.has(r.parentId),
-    );
-    if (top.length === 0) return;
-    const items = top.map((r) => {
-      const rect = layout.rects.get(r.id);
-      return { id: r.id, w: rect?.w ?? DEFAULT_NODE_SIZE.w, h: rect?.h ?? DEFAULT_NODE_SIZE.h };
-    });
-    const packed = gridPack(items, { originX: 80, originY: 80, gap: 48 });
-    updateResourcePositions(packed.map((p) => ({ id: p.id, x: p.x, y: p.y })));
+    const packed = arrangeTiered(store.resources, store.relationships, isContainerPred);
+    if (packed.length === 0) return;
+    updateResourcePositions(packed);
     commitCurrentState();
-  }, [store.resources, layout, updateResourcePositions, commitCurrentState]);
+  }, [
+    store.resources,
+    store.relationships,
+    isContainerPred,
+    updateResourcePositions,
+    commitCurrentState,
+  ]);
 
   /** Zoom about the viewport centre by a multiplicative factor. */
   const zoomBy = useCallback(
@@ -1401,10 +1424,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (!(await confirmReplaceIfDirty())) return;
+      // Open already-arranged: lay top-level nodes out by dependency flow so the
+      // template reads cleanly instead of relying on hand-tuned coordinates.
+      const arranged = new Map(
+        arrangeTiered(resources, relationships, (r) => !!getService(r.serviceId)?.isContainer).map(
+          (p) => [p.id, p],
+        ),
+      );
+      for (const r of resources) {
+        const p = arranged.get(r.id);
+        if (p) r.position = { ...DEFAULT_NODE_SIZE, ...r.position, x: p.x, y: p.y };
+      }
       storeReplaceAll({
         resources,
         relationships,
-        viewport: { x: 200, y: 120, scale: 1 },
+        viewport: { x: 120, y: 80, scale: 0.85 },
         accounts: [],
         graphId: "",
         graphName: presetName === "ecs-alb" ? "ECS + ALB starter" : "Basic AWS starter",
@@ -1467,13 +1501,22 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [saveGraph],
   );
 
-  // Auto-open the hub once per session on a blank canvas — an empty-state
-  // launcher, never a forced gate for a session that already has content.
+  // First mount on a blank canvas: a never-onboarded visitor gets the guided
+  // tour (which then hands off to the hub); a returning one gets the hub
+  // straight away. Never a forced gate for a session that already has content.
   const autoOpenedHubRef = useRef(false);
   useEffect(() => {
     if (autoOpenedHubRef.current) return;
     autoOpenedHubRef.current = true;
-    if (store.resources.length === 0) setStartHubOpen(true);
+    if (store.resources.length > 0) return;
+    let onboarded = false;
+    try {
+      onboarded = localStorage.getItem(ONBOARDED_KEY) === "1";
+    } catch {
+      /* ignore */
+    }
+    if (onboarded) setStartHubOpen(true);
+    else setTourOpen(true);
     // Mount-only: deliberately not reacting to later resource changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1577,6 +1620,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       startHubOpen,
       openStartHub,
       closeStartHub,
+      tourOpen,
+      tourStep,
+      openTour,
+      closeTour,
+      setTourStep: setTourStepClamped,
       startBlank,
       replaceConfirmOpen,
       resolveReplaceConfirm,
@@ -1666,6 +1714,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       startHubOpen,
       openStartHub,
       closeStartHub,
+      tourOpen,
+      tourStep,
+      openTour,
+      closeTour,
+      setTourStepClamped,
       startBlank,
       replaceConfirmOpen,
       resolveReplaceConfirm,
