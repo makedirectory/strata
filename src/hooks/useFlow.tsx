@@ -705,7 +705,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearSelection = useCallback(() => {
     storeSetSelectedIds([]);
     storeSetSelection(null);
-  }, [storeSetSelectedIds, storeSetSelection]);
+    // An empty-canvas click also exits container-focus mode, so focus never gets
+    // "stuck" (previously only the breadcrumb ✕ or a re-double-click released it).
+    setFocusedContainerId(null);
+  }, [storeSetSelectedIds, storeSetSelection, setFocusedContainerId]);
   /** Apply a marquee result: 0 → clear, 1 → single (Inspector detail), N → multi. */
   const applyMarquee = useCallback(
     (ids: string[]) => {
