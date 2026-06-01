@@ -457,3 +457,13 @@ describe("registry CloudFormation resolution", () => {
     expect(getServiceByCfnType("AWS::Batch::ComputeEnvironment")?.id).toBe("batch");
   });
 });
+
+describe("route53 record/zone split", () => {
+  it("imports aws_route53_record as the route53-record service", () => {
+    expect(TF_TYPE_TO_SERVICE_ID["aws_route53_record"]).toBe("route53-record");
+    expect(TF_TYPE_TO_SERVICE_ID["aws_route53_zone"]).toBe("route53");
+  });
+  it("resolves AWS::Route53::RecordSet to route53-record via cfnType", () => {
+    expect(getServiceByCfnType("AWS::Route53::RecordSet")?.id).toBe("route53-record");
+  });
+});

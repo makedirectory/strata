@@ -78,6 +78,18 @@ function cidrContains(parent: string, child: string): boolean {
   return c.net >= p.net && c.broadcast <= p.broadcast;
 }
 
+/**
+ * A `routes_to` edge is a *default* route when its destination is the
+ * all-addresses CIDR — or unspecified, which we treat as a default route for
+ * back-compat with manually-drawn edges that omit `destinationCidr`. A
+ * prefix-specific route (e.g. 10.1.0.0/16) does not by itself provide general
+ * internet egress, so it must NOT satisfy the IGW/NAT default-route checks.
+ */
+function isDefaultRoute(e: Relationship): boolean {
+  const d = e.destinationCidr;
+  return d === undefined || d === "" || d === "0.0.0.0/0" || d === "::/0";
+}
+
 export function validateArchitecture(graph: InfrastructureGraph): ValidationResult[] {
   const out: ValidationResult[] = [];
   const resources = graph.resources;
@@ -240,7 +252,10 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       !!rt &&
       rels.some(
         (e) =>
-          e.from === rt.id && e.kind === "routes_to" && get(e.to)?.serviceId === "internet-gateway",
+          e.from === rt.id &&
+          e.kind === "routes_to" &&
+          get(e.to)?.serviceId === "internet-gateway" &&
+          isDefaultRoute(e),
       );
     if (!rt || !hasIgw) {
       out.push({
@@ -271,7 +286,10 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
         !!rt &&
         rels.some(
           (e) =>
-            e.from === rt.id && e.kind === "routes_to" && get(e.to)?.serviceId === "nat-gateway",
+            e.from === rt.id &&
+            e.kind === "routes_to" &&
+            get(e.to)?.serviceId === "nat-gateway" &&
+            isDefaultRoute(e),
         );
       if (!rt || !hasNat) {
         out.push({
@@ -644,7 +662,9 @@ export function suggestRules(graph: InfrastructureGraph): RuleSuggestion[] {
         .map((e) => get(e.to))
         .find((n) => n && n.serviceId === "route-table");
     if (!rt) return false;
-    return outgoing(rt.id, "routes_to").some((e) => get(e.to)?.serviceId === gatewayServiceId);
+    return outgoing(rt.id, "routes_to").some(
+      (e) => get(e.to)?.serviceId === gatewayServiceId && isDefaultRoute(e),
+    );
   };
   resources
     .filter((n) => n.serviceId === "subnet-private")

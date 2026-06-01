@@ -159,6 +159,80 @@ function emptyReport(): ExportReport {
   return { exported: 0, faithful: 0, skipped: [], todos: [], warnings: [] };
 }
 
+/** An extra CloudFormation resource a transform asks the exporter to emit. */
+interface CfnAuxResource {
+  /** Appended to the primary logical id to form the aux logical id. */
+  logicalSuffix: string;
+  type: string;
+  properties: Record<string, unknown>;
+}
+
+/** Properties for the primary resource, plus any auxiliary resources. */
+interface CfnScaffold {
+  properties: Record<string, unknown>;
+  auxiliary?: CfnAuxResource[];
+}
+
+/**
+ * Per-service CloudFormation property transformers (scaffold path only).
+ *
+ * A flat key-rename (`cfnPropertyNames`) can only relabel a key — it cannot
+ * change a value's *shape* or split config across *multiple* resources. Some
+ * services need exactly that to emit valid CloudFormation, so they register a
+ * transformer here. It receives the resource's known config (registry keys) and
+ * returns real CFN `Properties` plus any auxiliary resources to emit alongside
+ * (each gets a `DependsOn` back to the primary).
+ *
+ * Only the scaffold path consults this map; a faithfully-captured `raw` source
+ * is always re-emitted verbatim and never transformed.
+ */
+const CFN_TRANSFORMS: Record<string, (config: Record<string, unknown>) => CfnScaffold> = {
+  // S3: versioning/encryption are nested objects and Block Public Access is a
+  // SEPARATE AWS::S3::BucketPublicAccessBlock resource — none expressible as a
+  // flat rename. (`storageClass` is object/lifecycle-level, not a bucket prop,
+  // so it is intentionally dropped from the scaffold.)
+  "s3-bucket": (config) => {
+    const properties: Record<string, unknown> = {};
+    if (typeof config.bucketName === "string" && config.bucketName) {
+      properties.BucketName = config.bucketName;
+    }
+    if (config.versioning !== undefined) {
+      properties.VersioningConfiguration = { Status: config.versioning ? "Enabled" : "Suspended" };
+    }
+    if (typeof config.encryption === "string" && config.encryption) {
+      const algo =
+        config.encryption === "SSE-KMS"
+          ? "aws:kms"
+          : config.encryption === "DSSE-KMS"
+            ? "aws:kms:dsse"
+            : "AES256";
+      properties.BucketEncryption = {
+        ServerSideEncryptionConfiguration: [
+          { ServerSideEncryptionByDefault: { SSEAlgorithm: algo } },
+        ],
+      };
+    }
+    const auxiliary: CfnAuxResource[] = [];
+    if (config.blockPublicAccess !== undefined) {
+      const on = config.blockPublicAccess === true;
+      auxiliary.push({
+        logicalSuffix: "PublicAccessBlock",
+        type: "AWS::S3::BucketPublicAccessBlock",
+        properties: {
+          Bucket: { Ref: "__PRIMARY__" },
+          PublicAccessBlockConfiguration: {
+            BlockPublicAcls: on,
+            BlockPublicPolicy: on,
+            IgnorePublicAcls: on,
+            RestrictPublicBuckets: on,
+          },
+        },
+      });
+    }
+    return { properties, auxiliary };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // CloudFormation
 // ---------------------------------------------------------------------------
@@ -176,6 +250,7 @@ export function exportCloudFormation(graph: InfrastructureGraph): CloudFormation
   const logicalById = new Map(planned.map((p) => [p.resource.id, p.logicalId]));
 
   const resources: Record<string, unknown> = {};
+  const usedLogical = new Set(planned.map((p) => p.logicalId));
   for (const { resource, logicalId } of planned) {
     const svc = getService(resource.serviceId);
     // A captured CloudFormation `raw` source re-emits faithfully even if the
@@ -210,17 +285,33 @@ export function exportCloudFormation(graph: InfrastructureGraph): CloudFormation
       if (dependsOn.length > 0) entry.DependsOn = dependsOn;
       report.faithful++;
     } else {
-      // Scaffold path: property names follow Strata's model (with the optional
-      // cfnPropertyNames map applied) and required-missing fields become TODOs.
+      // Scaffold path: a registered transform builds real CFN Properties (and
+      // any auxiliary resources); otherwise property names follow Strata's model
+      // with the optional cfnPropertyNames map applied. Required-missing fields
+      // become TODOs either way.
       const { values, todoKeys } = knownConfig(resource, logicalId, report);
-      const renamed = applyPropertyNames(svc, values);
-      const properties: Record<string, unknown> = { ...renamed };
+      const transform = CFN_TRANSFORMS[resource.serviceId];
+      const scaffold = transform ? transform(values) : undefined;
+      const properties: Record<string, unknown> = scaffold
+        ? { ...scaffold.properties }
+        : { ...applyPropertyNames(svc, values) };
       for (const key of todoKeys) {
         properties[svc?.cfnPropertyNames?.[key] ?? key] = "TODO: required — set this value";
       }
       entry = { Type: cfnType };
       if (Object.keys(properties).length > 0) entry.Properties = properties;
       if (computedDependsOn.length > 0) entry.DependsOn = computedDependsOn;
+
+      // Emit any auxiliary resources, substituting the primary's logical id for
+      // the `__PRIMARY__` Ref placeholder and wiring a DependsOn back to it.
+      for (const aux of scaffold?.auxiliary ?? []) {
+        const auxId = unique(`${logicalId}${aux.logicalSuffix}`, usedLogical);
+        const auxProps = JSON.parse(
+          JSON.stringify(aux.properties).replace(/__PRIMARY__/g, logicalId),
+        ) as Record<string, unknown>;
+        resources[auxId] = { Type: aux.type, Properties: auxProps, DependsOn: [logicalId] };
+        report.exported++;
+      }
     }
 
     resources[logicalId] = entry;

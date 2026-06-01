@@ -308,6 +308,9 @@ export const AZURE_TF_TYPE_TO_SERVICE_ID: Record<string, string> = {
   azurerm_linux_virtual_machine_scale_set: "azure-vmss",
   azurerm_windows_virtual_machine_scale_set: "azure-vmss",
   azurerm_kubernetes_cluster: "azure-aks",
+  azurerm_service_plan: "azure-app-service-plan",
+  azurerm_app_service_plan: "azure-app-service-plan",
+  azurerm_container_registry: "azure-container-registry",
   azurerm_app_service: "azure-app-service",
   azurerm_linux_web_app: "azure-app-service",
   azurerm_windows_web_app: "azure-app-service",
@@ -321,6 +324,8 @@ export const AZURE_TF_TYPE_TO_SERVICE_ID: Record<string, string> = {
   azurerm_lb: "azure-load-balancer",
   azurerm_application_gateway: "azure-app-gateway",
   azurerm_public_ip: "azure-public-ip",
+  azurerm_network_interface: "azure-network-interface",
+  azurerm_private_endpoint: "azure-private-endpoint",
   azurerm_route_table: "azure-route-table",
   azurerm_dns_zone: "azure-dns-zone",
   azurerm_servicebus_namespace: "azure-service-bus",
@@ -337,6 +342,8 @@ export const AZURE_TF_TYPE_TO_SERVICE_ID: Record<string, string> = {
   azurerm_sql_database: "azure-sql-database",
   azurerm_cosmosdb_account: "azure-cosmos-db",
   azurerm_postgresql_flexible_server: "azure-postgresql",
+  azurerm_mysql_flexible_server: "azure-mysql",
+  azurerm_mssql_managed_instance: "azure-sql-managed-instance",
   azurerm_redis_cache: "azure-redis",
   azurerm_synapse_workspace: "azure-synapse",
   azurerm_data_factory: "azure-data-factory",
@@ -355,6 +362,9 @@ export const AZURE_SERVICE_ID_TO_TF_TYPE: Record<string, string> = (() => {
   for (const [tfType, serviceId] of Object.entries(AZURE_TF_TYPE_TO_SERVICE_ID)) {
     if (!(serviceId in inv)) inv[serviceId] = tfType;
   }
+  // Canonical override: emit the current `azurerm_service_plan` rather than the
+  // deprecated `azurerm_app_service_plan` alias.
+  inv["azure-app-service-plan"] = "azurerm_service_plan";
   return inv;
 })();
 
