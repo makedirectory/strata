@@ -255,6 +255,64 @@ describe("iacExport — S3 scaffold transform", () => {
   });
 });
 
+describe("iacExport — S3 secure-config (KMS key + object ownership)", () => {
+  const kmsBucket = () => {
+    const g = emptyGraph("S3");
+    g.resources = [
+      res("r-s3", "s3-bucket", {
+        name: "secure",
+        config: {
+          bucketName: "secure-bucket",
+          encryption: "SSE-KMS",
+          kmsKeyId: "arn:aws:kms:us-east-1:111122223333:key/abc-123",
+          objectOwnership: "BucketOwnerEnforced",
+        },
+      }),
+    ];
+    return g;
+  };
+
+  it("CloudFormation: emits customer KMS key, BucketKeyEnabled, and OwnershipControls", () => {
+    const { json } = exportCloudFormation(kmsBucket());
+    const parsed = JSON.parse(json) as Record<string, any>;
+    const bucket = Object.values(parsed.Resources).find(
+      (e) => (e as any).Type === "AWS::S3::Bucket",
+    ) as any;
+    const rule = bucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0];
+    expect(rule.ServerSideEncryptionByDefault.SSEAlgorithm).toBe("aws:kms");
+    expect(rule.ServerSideEncryptionByDefault.KMSMasterKeyID).toBe(
+      "arn:aws:kms:us-east-1:111122223333:key/abc-123",
+    );
+    expect(rule.BucketKeyEnabled).toBe(true);
+    expect(bucket.Properties.OwnershipControls).toEqual({
+      Rules: [{ ObjectOwnership: "BucketOwnerEnforced" }],
+    });
+  });
+
+  it("Terraform: emits kms_master_key_id, bucket_key_enabled, and an ownership-controls resource", () => {
+    const { hcl } = exportTerraform(kmsBucket());
+    expect(hcl).toContain('kms_master_key_id = "arn:aws:kms:us-east-1:111122223333:key/abc-123"');
+    expect(hcl).toContain("bucket_key_enabled = true");
+    expect(hcl).toContain('resource "aws_s3_bucket_ownership_controls" "secure_ownership"');
+    expect(hcl).toContain('object_ownership = "BucketOwnerEnforced"');
+    expect(hcl).toContain("bucket = aws_s3_bucket.secure.id");
+  });
+
+  it("does not add a KMS key or BucketKeyEnabled for SSE-S3", () => {
+    const g = emptyGraph("S3");
+    g.resources = [res("r-s3", "s3-bucket", { name: "plain", config: { encryption: "SSE-S3" } })];
+    const { json } = exportCloudFormation(g);
+    const parsed = JSON.parse(json) as Record<string, any>;
+    const bucket = Object.values(parsed.Resources).find(
+      (e) => (e as any).Type === "AWS::S3::Bucket",
+    ) as any;
+    const rule = bucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0];
+    expect(rule.ServerSideEncryptionByDefault.SSEAlgorithm).toBe("AES256");
+    expect(rule.ServerSideEncryptionByDefault.KMSMasterKeyID).toBeUndefined();
+    expect(rule.BucketKeyEnabled).toBeUndefined();
+  });
+});
+
 describe("iacExport — route53 record/zone round-trip", () => {
   it("keeps hosted zones and records as distinct Terraform types", () => {
     expect(SERVICE_ID_TO_TF_TYPE["route53"]).toBe("aws_route53_zone");

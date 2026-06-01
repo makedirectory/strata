@@ -200,16 +200,31 @@ const CFN_TRANSFORMS: Record<string, (config: Record<string, unknown>) => CfnSca
       properties.VersioningConfiguration = { Status: config.versioning ? "Enabled" : "Suspended" };
     }
     if (typeof config.encryption === "string" && config.encryption) {
+      const kms = config.encryption === "SSE-KMS" || config.encryption === "DSSE-KMS";
       const algo =
         config.encryption === "SSE-KMS"
           ? "aws:kms"
           : config.encryption === "DSSE-KMS"
             ? "aws:kms:dsse"
             : "AES256";
+      const byDefault: Record<string, unknown> = { SSEAlgorithm: algo };
+      // Customer-managed key reference, when one is set for a KMS algorithm.
+      if (kms && typeof config.kmsKeyId === "string" && config.kmsKeyId) {
+        byDefault.KMSMasterKeyID = config.kmsKeyId;
+      }
       properties.BucketEncryption = {
         ServerSideEncryptionConfiguration: [
-          { ServerSideEncryptionByDefault: { SSEAlgorithm: algo } },
+          // BucketKeyEnabled cuts KMS request cost/throttling — a best-practice
+          // default whenever KMS encryption is used.
+          { ServerSideEncryptionByDefault: byDefault, ...(kms ? { BucketKeyEnabled: true } : {}) },
         ],
+      };
+    }
+    // Object Ownership is an inline property of AWS::S3::Bucket (BucketOwnerEnforced
+    // disables ACLs — the hardened, recommended setting).
+    if (typeof config.objectOwnership === "string" && config.objectOwnership) {
+      properties.OwnershipControls = {
+        Rules: [{ ObjectOwnership: config.objectOwnership }],
       };
     }
     const auxiliary: CfnAuxResource[] = [];
@@ -428,13 +443,30 @@ const TF_TRANSFORMS: Record<
           : config.encryption === "DSSE-KMS"
             ? "aws:kms:dsse"
             : "AES256";
+      const kms = config.encryption === "SSE-KMS" || config.encryption === "DSSE-KMS";
+      const byDefault: Record<string, unknown> = { sse_algorithm: algo };
+      if (kms && typeof config.kmsKeyId === "string" && config.kmsKeyId) {
+        byDefault.kms_master_key_id = config.kmsKeyId;
+      }
       auxiliary.push({
         type: "aws_s3_bucket_server_side_encryption_configuration",
         nameSuffix: "_encryption",
         attributes: {
           bucket: bucketRef,
-          rule: { apply_server_side_encryption_by_default: { sse_algorithm: algo } },
+          rule: {
+            apply_server_side_encryption_by_default: byDefault,
+            // BucketKeyEnabled equivalent — cuts KMS request cost when using KMS.
+            ...(kms ? { bucket_key_enabled: true } : {}),
+          },
         },
+      });
+    }
+    // Object Ownership is its own resource in the aws provider.
+    if (typeof config.objectOwnership === "string" && config.objectOwnership) {
+      auxiliary.push({
+        type: "aws_s3_bucket_ownership_controls",
+        nameSuffix: "_ownership",
+        attributes: { bucket: bucketRef, rule: { object_ownership: config.objectOwnership } },
       });
     }
     if (config.blockPublicAccess !== undefined) {
