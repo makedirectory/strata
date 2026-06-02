@@ -2,6 +2,7 @@
 import React, { useEffect, useRef } from "react";
 import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { PALETTE_ADD_EVENT } from "./Palette";
+import { AccessibleNodes } from "./AccessibleNodes";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
 const GRID_MAJOR = 80;
@@ -336,6 +337,7 @@ export const Canvas: React.FC = () => {
           ))}
         </div>
       )}
+      <AccessibleNodes />
       {state.resources.length === 0 && (
         <div className="empty-hint">
           <div className="empty-hint-title">Design your cloud architecture</div>

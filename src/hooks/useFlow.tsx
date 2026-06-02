@@ -7,7 +7,14 @@ import type { ResourceInstance, Relationship, InfrastructureGraph } from "../aws
 import { emptyGraph, DEFAULT_NODE_SIZE } from "../aws/model";
 import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind } from "../aws/types";
-import { defaultConfig, getService, serviceColor, serviceIcon } from "../aws/registry";
+import {
+  defaultConfig,
+  getService,
+  serviceColor,
+  serviceIcon,
+  serviceProvider,
+} from "../aws/registry";
+import type { CloudProvider } from "../aws/types";
 import { buildSvg } from "../canvas/imageExport";
 import { diffGraphs, type DriftResult } from "../aws/drift";
 import {
@@ -60,6 +67,21 @@ const SUMMARY_THRESHOLD = 5;
 
 /** Built-in view-mode presets → relationship-class emphasis. */
 export type ViewPreset = "all" | "network" | "security" | "data" | "high-level";
+
+/** A visible node, projected for the accessible (keyboard/SR) overlay. World coords. */
+export interface A11yNode {
+  id: string;
+  name: string;
+  serviceName: string;
+  provider: CloudProvider;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  isContainer: boolean;
+  /** Name of the containing node, when this node is nested. */
+  parentName: string | null;
+}
 
 /** A user-saved view (layer state) persisted to localStorage. */
 interface SavedView {
@@ -125,6 +147,10 @@ interface FlowContextValue {
   onNodeDoubleClick: (id: string) => void;
   /** Select + centre on a node (⌘K jump / search). */
   goToResource: (id: string) => void;
+  /** Select a node (Inspector detail) without moving the viewport. */
+  selectNode: (id: string) => void;
+  /** Visible nodes projected for the accessible keyboard/screen-reader overlay. */
+  a11yNodes: A11yNode[];
   /** Setter for the live search-match highlight (read by the renderer only). */
   setSearchMatches: (ids: ReadonlySet<string>) => void;
   /** Ancestor path of the focus target, root → leaf (clickable crumbs). */
@@ -521,6 +547,33 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return out;
   }, [showCost, store.resources, layout]);
+
+  // ---- accessible node layer (a11y keyboard nav) -------------------------
+  // A flat list of the visible nodes with world-space rects + descriptive
+  // metadata, consumed by the AccessibleNodes overlay to expose the (otherwise
+  // canvas-only, aria-hidden) diagram to keyboard and screen-reader users.
+  const a11yNodes = React.useMemo<A11yNode[]>(() => {
+    const nameById = new Map(store.resources.map((r) => [r.id, r.name]));
+    const out: A11yNode[] = [];
+    for (const r of store.resources) {
+      const rect = layout.rects.get(r.id);
+      if (!rect) continue;
+      const svc = getService(r.serviceId);
+      out.push({
+        id: r.id,
+        name: r.name,
+        serviceName: svc?.name ?? r.serviceId,
+        provider: svc ? serviceProvider(svc) : "aws",
+        x: rect.x,
+        y: rect.y,
+        w: rect.w,
+        h: rect.h,
+        isContainer: layout.isContainerNode(r.id),
+        parentName: r.parentId ? (nameById.get(r.parentId) ?? null) : null,
+      });
+    }
+    return out;
+  }, [store.resources, layout]);
 
   // Drift markers (top-left corner) for nodes that are new (added) or changed vs
   // the loaded baseline. Removed resources aren't on the canvas — the panel lists them.
@@ -1856,6 +1909,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       focusContainer,
       onNodeDoubleClick,
       goToResource,
+      selectNode: selectSingle,
+      a11yNodes,
       setSearchMatches: store.setSearchMatches,
       breadcrumb,
       focusedContainerId: store.focusedContainerId,
@@ -1969,6 +2024,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       focusContainer,
       onNodeDoubleClick,
       goToResource,
+      selectSingle,
+      a11yNodes,
       store.setSearchMatches,
       breadcrumb,
       store.focusedContainerId,
