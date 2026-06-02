@@ -4,6 +4,7 @@ const meta = {
   "data-model": "Domain Data Model",
   "visual-mapping": "Visual Mapping",
   "rules-engine": "Rules & Validation Engine",
+  drift: "Drift Detection Engine",
   persistence: "Persistence & the Server",
   "mcp-integration": "Live Discovery & MCP",
   "iac-import": "IaC Import & Export",
