@@ -18,17 +18,22 @@ shows one message at a time, so re-read it after each action.
 
 ## The "Discover" button is greyed out
 
-On the **Connect to AWS → Live scan** tab, **Discover** is disabled in three cases.
-Check them in order:
+On the **Connect to cloud → Live scan** tab, **Discover** is disabled in these
+cases. Check them in order:
 
 1. **No resource types selected.** The header reads **Resource types (0
    selected)**. Tick at least one type, or click **Select all**.
-2. **A scan is already running.** The button reads **Scanning…**. Wait for it to
+2. **The required scope is empty.** AWS needs at least one region; **GCP** needs a
+   project/folder/organization; **Azure** needs a subscription id. Fill the
+   provider's scope field.
+3. **A scan is already running.** The button reads **Scanning…**. Wait for it to
    finish.
-3. **Hosted install with no credentials.** On an install where the operator set
-   `NEXT_PUBLIC_STRATA_HOSTED=1`, you must enter both an **Access key ID** and a
-   **Secret access key**; until you do, **Discover** stays disabled. Either fill
-   them in or use the **Paste export** tab instead. See
+4. **Hosted install with no credentials (or no live scan for that provider).** On
+   an install where the operator set `NEXT_PUBLIC_STRATA_HOSTED=1`, AWS requires an
+   **Access key ID** and **Secret access key**; GCP/Azure live scan may be disabled
+   entirely (they use the server's ambient credentials). Until satisfied,
+   **Discover** stays disabled — fill the keys in or use the **Paste export** tab
+   instead. See
    [Connecting to a Cloud](/docs/guide/connecting-aws#when-are-credentials-required).
 
 ## A live scan fails with a credentials error
@@ -47,8 +52,14 @@ Common causes:
   character is easy to miss.
 
 A different banner — _"Discovery failed. Check the region and that the server can
-reach AWS."_ — points at the **Region** value or the server's network access to
-AWS rather than the credentials.
+reach AWS."_ — points at the **Region** value or the server's network access
+rather than the credentials.
+
+For **GCP** and **Azure**, live scans use the server's **ambient credentials**
+(Application Default Credentials / `DefaultAzureCredential`), not pasted keys — so
+an authentication failure there means the server's `gcloud` / `az` login or its
+read role (Cloud Asset Viewer / Reader) needs fixing, not anything you enter in the
+dialog.
 
 ## "Save failed: …"
 

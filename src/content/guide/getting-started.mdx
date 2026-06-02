@@ -4,16 +4,18 @@ title: Getting Started
 
 # Build Your First Diagram
 
-This walkthrough takes you from an empty canvas to a small, connected AWS
+This walkthrough takes you from an empty canvas to a small, connected cloud
 architecture. Start the app with `npm run dev` and open `http://localhost:3000/`.
 
 ## The layout
 
 The screen has three regions:
 
-- **Palette & controls** (left) — under the **Palette** heading, every AWS service
-  grouped by category (networking, compute, storage, database, …) with a search
-  box. Below it are the **Presets**, **Modes** (Move / Connect), **Density**,
+- **Palette & controls** (left) — under the **Palette** heading, every cloud
+  service (AWS, GCP, Azure) grouped by category (networking, compute, storage,
+  database, …) with a search box and a **cloud-provider filter** (All / AWS / GCP /
+  Azure); each item carries a small provider badge so mixed-cloud designs stay
+  legible. Below it are the **Presets**, **Modes** (Move / Connect), **Density**,
   **Shortcuts**, and **Layers & Views** sections (the last described in
   [Views, Layers & Overlays](/docs/guide/views)).
 - **Canvas** (center) — where your diagram lives. Pan, zoom, nest, and arrange
@@ -33,7 +35,7 @@ A top bar runs across the top. From left to right:
 - **↶ / ↷** — Undo / Redo (icon buttons).
 - **💾** — Save (icon button, no text label).
 - **Open ▾** — your saved diagrams.
-- **Data ▾** — Connect to AWS…, Import JSON…, Import IaC…, Export JSON, Export to
+- **Data ▾** — Connect to cloud…, Import JSON…, Import IaC…, Export JSON, Export to
   IaC…, Clear canvas.
 - **Analyze ▾** — Validate architecture, Suggest rules.
 - **▶** — enter [presentation mode](/docs/guide/views#presentation-mode).
