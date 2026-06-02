@@ -22,6 +22,24 @@ These work while the canvas has focus (not while you're typing in a text field).
 | Undo / Redo                        | `⌘Z` / `⇧⌘Z` (`Ctrl Z` / `Ctrl Y`) |
 | Close a dialog / palette           | `Esc`                              |
 
+### Navigating nodes with the keyboard
+
+You can move around the diagram without a mouse. **Tab** into the canvas to focus a
+node, then:
+
+| Action                             | Shortcut           |
+| ---------------------------------- | ------------------ |
+| Move between nodes (spatially)     | `↑` `↓` `←` `→`    |
+| Jump to the first / last node      | `Home` / `End`     |
+| Open a container (focus inside it) | `Enter` on a group |
+| Recentre on a node                 | `Enter` on a leaf  |
+| Step out of the focused container  | `Esc`              |
+
+The focused node is selected automatically, so its details appear in the inspector
+and screen readers announce its name, type, cloud provider, and container. The
+diagram exposes itself as an accessible region — arrow keys move by **position**
+(the node nearest in that direction), not by list order.
+
 ### Mouse & trackpad
 
 - **Pan** — scroll the wheel or two-finger-drag the trackpad; or hold **Space** and
