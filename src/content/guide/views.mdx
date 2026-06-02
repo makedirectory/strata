@@ -59,8 +59,14 @@ node first to trace _from_ it; with nothing selected they show the whole picture
 
 - **IAM trust** — follows permission edges (`allows`, `assumes`, `grants`) to show
   the trust chain.
-- **Network paths** — follows network edges (`routes_to`, `connects_to`, …) to show
-  reachability.
+- **Network paths** — follows traffic-bearing edges (`routes_to`, `connects_to`,
+  `peers_with`, `attached_to`, and load-balancer `targets`) to show reachability.
+  Connections that cross the **internet boundary** — those touching an Internet
+  Gateway, NAT Gateway, CloudFront, API Gateway, or an _internet-facing_ load
+  balancer — are drawn **orange (external)**, and the internet-facing nodes get an
+  orange ring; everything else stays blue (internal). A small legend appears in the
+  panel. If there are no network relationships yet, the overlay is a no-op (it
+  won't dim the canvas) and a hint explains why.
 - **Heat (degree)** — tints each node by how many connections it has, surfacing the
   busiest hubs in the architecture.
 - **None** — clears the overlay.

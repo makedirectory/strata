@@ -9,14 +9,18 @@ import {
 import type { ResourceInstance, Relationship } from "./model";
 import type { RelationshipKind } from "./types";
 
-function res(id: string): ResourceInstance {
-  return { id, serviceId: "ec2", name: id, config: {}, source: "manual" };
+function res(
+  id: string,
+  serviceId = "ec2",
+  config: Record<string, unknown> = {},
+): ResourceInstance {
+  return { id, serviceId, name: id, config, source: "manual" };
 }
 function rel(id: string, from: string, to: string, kind: RelationshipKind): Relationship {
   return { id, from, to, kind, source: "manual" };
 }
 
-const resources = ["role", "policy", "user", "vpc", "subnet", "lonely"].map(res);
+const resources = ["role", "policy", "user", "vpc", "subnet", "lonely"].map((id) => res(id));
 const relationships: Relationship[] = [
   rel("e1", "user", "role", "assumes"), // permission
   rel("e2", "role", "policy", "grants"), // permission
@@ -54,6 +58,39 @@ describe("securityPathOverlay", () => {
     const lit = securityPathOverlay(resources, relationships);
     expect([...lit.edges].sort()).toEqual(["e3", "e4"]);
   });
+
+  it("traces load-balancer `targets` edges even though they colour as data flow", () => {
+    const r = [res("alb", "elastic-load-balancer"), res("tg", "target-group"), res("svc")];
+    const rels = [rel("t1", "alb", "tg", "targets"), rel("t2", "tg", "svc", "targets")];
+    const lit = securityPathOverlay(r, rels);
+    expect(lit.nodes).toEqual(new Set(["alb", "tg", "svc"]));
+    expect([...lit.edges].sort()).toEqual(["t1", "t2"]);
+  });
+
+  it("flags internet-facing nodes and the edges that touch them as external", () => {
+    const r = [
+      res("igw", "internet-gateway"),
+      res("rt", "route-table"),
+      res("subnet", "subnet-private"),
+    ];
+    const rels = [
+      rel("x1", "rt", "igw", "routes_to"), // touches the IGW → external
+      rel("x2", "rt", "subnet", "attached_to"), // intranet only → internal
+    ];
+    const lit = securityPathOverlay(r, rels);
+    expect(lit.externalNodes).toEqual(new Set(["igw"]));
+    expect(lit.externalEdges).toEqual(new Set(["x1"]));
+  });
+
+  it("treats an internal-scheme load balancer as not external", () => {
+    const r = [
+      res("alb", "elastic-load-balancer", { scheme: "internal" }),
+      res("tg", "target-group"),
+    ];
+    const lit = securityPathOverlay(r, [rel("e", "alb", "tg", "targets")]);
+    expect(lit.externalNodes?.size).toBe(0);
+    expect(lit.externalEdges?.size).toBe(0);
+  });
 });
 
 describe("overlayLitFor", () => {
@@ -66,7 +103,7 @@ describe("overlayLitFor", () => {
   it("returns null (a no-op) when the overlay would light nothing", () => {
     // No network/permission edges → an empty lit set would dim the whole
     // canvas; the consumer must instead treat it as 'no overlay'.
-    const noEdges = ["a", "b", "c"].map(res);
+    const noEdges = ["a", "b", "c"].map((id) => res(id));
     expect(overlayLitFor("security", noEdges, [])).toBeNull();
     expect(overlayLitFor("iam", noEdges, [])).toBeNull();
   });

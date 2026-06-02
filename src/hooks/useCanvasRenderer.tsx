@@ -85,6 +85,8 @@ interface NodeRecord {
     envTint: string;
     tintKind: string;
     searchMatch: boolean;
+    /** Internet-facing under the active network overlay (gets a boundary ring). */
+    external: boolean;
   };
 }
 
@@ -102,6 +104,8 @@ interface EdgeRecord {
     midy: number;
     selected: boolean;
     dimmed: boolean;
+    /** Crosses the internet boundary under the active network overlay. */
+    external: boolean;
   };
 }
 
@@ -312,6 +316,7 @@ export function useCanvasRenderer(
           const hoverDim = focusId !== null && !focusNeighbours.has(r.id);
           const containerDim = focusSubtree !== null && !focusSubtree.has(r.id);
           const overlayDim = overlayLit !== null && !overlayLit.nodes.has(r.id);
+          const overlayExternal = !!overlayLit?.externalNodes?.has(r.id);
           const dimmed =
             hoverDim || containerDim || overlayDim || (nodeFilteredOut && filterMode === "dim");
           const envTint = envTintById?.get(r.id) ?? "";
@@ -407,6 +412,7 @@ export function useCanvasRenderer(
                 envTint: "",
                 tintKind: "env",
                 searchMatch: false,
+                external: false,
               },
             };
             nodes.set(r.id, rec);
@@ -484,6 +490,8 @@ export function useCanvasRenderer(
           if (dimmed !== prev.dimmed) rec.div.classList.toggle("dimmed", dimmed);
           if (searchMatch !== prev.searchMatch)
             rec.div.classList.toggle("search-match", searchMatch);
+          if (overlayExternal !== prev.external)
+            rec.div.classList.toggle("node-external", overlayExternal);
           // Background tint overlay — env tint (subtle) or heat (strong).
           if (envTint !== prev.envTint || tintKind !== prev.tintKind) {
             rec.div.classList.remove("env-tinted", "heat-tinted");
@@ -597,6 +605,7 @@ export function useCanvasRenderer(
           prev.depth = depthVal;
           prev.envTint = envTint;
           prev.searchMatch = searchMatch;
+          prev.external = overlayExternal;
           // prev.tintKind is written inside the tint patch above.
         } catch (err) {
           console.error("draw node failed", r, err);
@@ -727,7 +736,10 @@ export function useCanvasRenderer(
         const midx = (p1.x + p2.x) / 2;
         const midy = (p1.y + p2.y) / 2;
         const selected = selection?.type === "edge" && selection.id === rel.id;
-        const color = selected ? "#5fbef3" : cls.color;
+        // An edge crossing the internet boundary under the network overlay reads
+        // orange ("external"); otherwise the per-class colour (or selection blue).
+        const overlayExternal = !!overlayLit?.externalEdges?.has(rel.id);
+        const color = selected ? "#5fbef3" : overlayExternal ? "#fb923c" : cls.color;
         // Dim unless the edge touches the hover focus / lies within a focused
         // container's subtree, or is filtered out by a layer.
         const hoverDim = focusId !== null && fromId !== focusId && toId !== focusId;
@@ -765,6 +777,7 @@ export function useCanvasRenderer(
               midy: NaN,
               selected: false,
               dimmed: false,
+              external: false,
             },
           };
           edges.set(rel.id, rec);
@@ -798,9 +811,11 @@ export function useCanvasRenderer(
         if (midx !== prev.midx) rec.label.setAttribute("x", String(midx));
         if (midy !== prev.midy) rec.label.setAttribute("y", String(midy - 6));
         if (labelText !== prev.labelText) rec.label.textContent = labelText;
-        if (selected !== prev.selected) {
-          rec.path.setAttribute("stroke-width", selected ? "3" : "2");
+        if (selected !== prev.selected || overlayExternal !== prev.external) {
+          rec.path.setAttribute("stroke-width", selected || overlayExternal ? "3" : "2");
         }
+        if (overlayExternal !== prev.external)
+          rec.path.classList.toggle("edge-external", overlayExternal);
         if (dimmed !== prev.dimmed) {
           rec.path.classList.toggle("dimmed", dimmed);
           rec.label.classList.toggle("dimmed", dimmed);
@@ -814,6 +829,7 @@ export function useCanvasRenderer(
         prev.midy = midy;
         prev.selected = selected;
         prev.dimmed = dimmed;
+        prev.external = overlayExternal;
       });
 
       // ---- remove edges that no longer exist ----
