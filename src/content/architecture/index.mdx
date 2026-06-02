@@ -5,19 +5,21 @@ title: Architecture — Overview
 # Architecture & Engineering
 
 Engineering documentation for contributors and maintainers of **Strata** — a
-registry-driven canvas for modeling AWS infrastructure as a typed graph of
-resources and relationships, persisted in the browser (with a swappable server
-repository retained for a future durable backend), and built to ingest live AWS
-state via Cloud Control.
+registry-driven canvas for modeling **multi-cloud (AWS, GCP, Azure)**
+infrastructure as a typed graph of resources and relationships, persisted in the
+browser (with a swappable server repository retained for a future durable
+backend), and built to ingest live cloud state via Cloud Control / Cloud Asset
+Inventory / Resource Graph.
 
-Strata exists to make AWS infrastructure **legible**: to turn a sprawling
+Strata exists to make cloud infrastructure **legible**: to turn a sprawling
 account (or many accounts) into a navigable, typed diagram that a human can read,
 reason about, and edit.
 
 ## Two design goals drive everything
 
-1. **Model the broad AWS service network, not a handful of icons.** The service
-   vocabulary lives in a single, extensible registry spanning 14 categories
+1. **Model the broad multi-cloud service network, not a handful of icons.** The
+   service vocabulary (AWS, GCP, Azure) lives in a single, extensible registry
+   spanning 14 categories
    (networking, compute, containers, storage, database, integration, security,
    identity, monitoring, analytics, ai-ml, deployment, management, edge — see
    `src/aws/categories.ts`). Resources are connected with a rich, typed
@@ -25,10 +27,10 @@ reason about, and edit.
    rather than anonymous lines.
 
 2. **Everything visual and behavioural is _derived_ from data, never hardcoded.**
-   The palette, node colours, icons, inspector forms, validation, and (future)
-   MCP import all read from the registry (`src/aws/registry.ts`). Supporting a new
-   AWS service is a one-entry data change with **no UI code change** (see
-   [Service Registry](/docs/architecture/service-registry)).
+   The palette, node colours, icons, inspector forms, validation, and the MCP
+   server's tools all read from the registry (`src/aws/registry.ts`). Supporting a
+   new service (any provider) is a one-entry data change with **no UI code change**
+   (see [Service Registry](/docs/architecture/service-registry)).
 
 The stack is intentionally boring and self-contained: a single Next.js app, a domain
 model decoupled from rendering, and browser-local persistence (`localStorage`) that
@@ -50,29 +52,33 @@ MCP-native** tool:
   read-only picture of what already exists.
 - **Local-first, zero infrastructure** — runs from a single Next.js process with a
   file store; no multi-service stack to deploy.
-- **MCP-native (as a design substrate, not a running server)** — the registry
-  (typed relationships, `cfnType` join keys, config schemas) is built so an
-  LLM/agent could reason over it. **There is no MCP server in the codebase today**:
-  `src/aws/mcp.ts` is a pure transform and live discovery is a Cloud Control SDK
-  call (see [Live Discovery & MCP](/docs/architecture/mcp-integration)). The intent
+- **MCP-native** — the registry (typed relationships, `cfnType` join keys, config
+  schemas) is built so an LLM/agent can reason over it, and a **running MCP server**
+  (`src/mcp/server.ts`, `npm run mcp`) now exposes the registry, validation, IaC
+  import/export, and cost engines as Model Context Protocol tools over stdio. The
+  separate `src/aws/mcp.ts` is an unrelated pure **discovery transform**, and live
+  discovery is a Cloud Control / CAI / Resource Graph SDK call (see
+  [Live Discovery & MCP](/docs/architecture/mcp-integration)). The discovery intent
   is to **import a slice of reality to reconcile/annotate a design**, not to be a
-  discovery platform — and to keep the ingestion shape ready for an MCP producer
-  later.
+  discovery platform.
 - **Portable diagram-as-code** — the `InfrastructureGraph` JSON is
   version-controllable and not locked in a proprietary datastore.
 
 ## Layer map
 
-| Layer                     | Location                                                                                                            | Responsibility                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Service registry / schema | `src/aws/types.ts`, `src/aws/registry.ts`, `src/aws/categories.ts`, `src/aws/services/*.ts`                         | The canonical AWS vocabulary                               |
-| Domain model              | `src/aws/model.ts`, `src/aws/regions.ts`                                                                            | Persisted environment representation                       |
-| Canvas engine             | `src/canvas/*` (`geometry.ts`, `layout.ts`), `src/aws/relationshipClasses.ts`, `src/aws/overlays.ts`                | Pure geometry, containment layout, edge encoding, overlays |
-| Visual / UI               | `src/components/*`, `src/hooks/*`                                                                                   | Palette, canvas, inspector                                 |
-| Persistence (live)        | `src/lib/localStore.ts`                                                                                             | Browser `localStorage` save/load (the active path)         |
-| Server tier (retained)    | `src/server/*`, `src/app/api/graphs/*`                                                                              | Repository + Route Handlers, kept for a future backend     |
-| Import / export           | `src/aws/mcp.ts`, `src/aws/discovery.ts`, `src/app/api/discover/route.ts`, `src/aws/iac.ts`, `src/aws/iacExport.ts` | Cloud Control discovery transform + IaC import/export      |
-| Rules engine              | `src/aws/rules.ts`                                                                                                  | Architecture validation + security-rule suggestions        |
+| Layer                     | Location                                                                                                                         | Responsibility                                              |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Service registry / schema | `src/aws/types.ts`, `src/aws/registry.ts`, `src/aws/categories.ts`, `src/aws/services/*.ts`, `src/gcp/*`, `src/azure/*`          | The canonical multi-cloud (AWS/GCP/Azure) vocabulary        |
+| Domain model              | `src/aws/model.ts`, `src/aws/regions.ts`                                                                                         | Persisted environment representation                        |
+| Canvas engine             | `src/canvas/*` (`geometry.ts`, `layout.ts`, `arrange.ts`, `navGrid.ts`), `src/aws/relationshipClasses.ts`, `src/aws/overlays.ts` | Pure geometry, containment layout, edge encoding, overlays  |
+| Visual / UI               | `src/components/*`, `src/hooks/*`                                                                                                | Palette, canvas, inspector                                  |
+| Cost estimation           | `src/aws/cost.ts`                                                                                                                | Rough monthly cost heuristic (per-service + config)         |
+| Drift detection           | `src/aws/drift.ts`                                                                                                               | Diff a diagram against a baseline (added/removed/changed)   |
+| Persistence (live)        | `src/lib/localStore.ts`                                                                                                          | Browser `localStorage` save/load (the active path)          |
+| Server tier (retained)    | `src/server/*`, `src/app/api/graphs/*`                                                                                           | Repository + Route Handlers, kept for a future backend      |
+| Import / export           | `src/aws/mcp.ts`, `src/aws/discovery.ts`, `src/app/api/discover/*`, `src/aws/iac.ts`, `src/aws/iacExport.ts`                     | Live-discovery transform + IaC import/export                |
+| Rules engine              | `src/aws/rules.ts`                                                                                                               | Architecture validation + security-rule suggestions         |
+| MCP server                | `src/mcp/server.ts`, `src/mcp/bin.ts`                                                                                            | Exposes the engines as MCP tools over stdio (`npm run mcp`) |
 
 ## Section contents
 

@@ -4,14 +4,16 @@ title: MCP Integration
 
 # Live Discovery & MCP Integration
 
-> **There is no MCP server in this codebase.** "MCP-native" describes a _design
-> substrate_ and a _future ingestion path_, not a running Model Context Protocol
-> server you can connect to. Don't go hunting for one. What exists today is:
-> (1) `src/aws/mcp.ts`, a **pure transform** (`mapDiscoveredToGraph`) whose name
-> reflects its intended upstream, and (2) live discovery implemented as a **Cloud
-> Control SDK call** in `src/app/api/discover/route.ts`. The transform is shaped
-> so that an MCP server's output could feed it unchanged once such an ingestion
-> path is built — that is the whole sense in which the project is "MCP-native".
+> **Two distinct things share the "MCP" name here — keep them separate.**
+> (1) A **running MCP server** at `src/mcp/server.ts` (entry `src/mcp/bin.ts`,
+> launched with `npm run mcp`) that exposes Strata's engines as Model Context
+> Protocol tools over stdio — see [The MCP server](#the-mcp-server) below.
+> (2) `src/aws/mcp.ts`, an unrelated **pure discovery transform**
+> (`mapDiscoveredToGraph`) that maps a flat list of discovered resources onto the
+> graph; despite the filename it is _not_ the server and does no I/O. Live
+> discovery itself is a **Cloud Control / CAI / Resource Graph SDK call** in the
+> `src/app/api/discover/*` routes. The transform is shaped so a discovery
+> producer's output feeds it unchanged.
 
 The system ingests **live cloud state** — across AWS, GCP and Azure — not only
 hand-drawn diagrams. Two layers cooperate:
@@ -193,3 +195,36 @@ of the above runs.
   provider**: GCP ADC and Azure tokens are resolved by the SDK server-side and are
   never returned to the browser or written into the graph (a credential-safety test
   asserts this for each producer).
+
+## The MCP server
+
+`src/mcp/server.ts` (entry `src/mcp/bin.ts`) is a real **Model Context Protocol
+server** that lets an agent drive Strata's engines headlessly. Run it with:
+
+```bash
+npm run mcp   # = npx -y tsx src/mcp/bin.ts
+```
+
+It speaks **JSON-RPC 2.0 over stdio** (protocol `2024-11-05`). The core,
+`handleMcpMessage`, is a **pure** dispatcher (unit-tested in
+`src/mcp/server.test.ts`) handling `initialize`, `notifications/initialized`,
+`ping`, `tools/list`, and `tools/call`; `runStdio` wires it to stdin/stdout. It is
+a thin wrapper over the same pure engines the UI uses — registry, rules, cost,
+and IaC import/export — with **no DOM, no network, and no credentials**.
+
+### Tools
+
+| Tool                    | Input                              | Backed by                                                                |
+| ----------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| `list_services`         | `{ provider?, category?, query? }` | registry (`allServices`/`searchServices`)                                |
+| `get_service`           | `{ id }`                           | registry (`getService`)                                                  |
+| `validate_architecture` | `{ graph }`                        | `validateArchitecture` ([rules engine](/docs/architecture/rules-engine)) |
+| `suggest_rules`         | `{ graph }`                        | `suggestRules`                                                           |
+| `import_iac`            | `{ content, name? }`               | `importAnyIaC` ([IaC import](/docs/architecture/iac-import))             |
+| `export_iac`            | `{ graph, format }`                | `exportIaC` (CloudFormation / Terraform)                                 |
+| `estimate_cost`         | `{ graph }`                        | `estimateMonthlyCost` / `estimateTotal`                                  |
+
+Because every tool delegates to a pure engine, the server stays in lockstep with
+the app: a new registry entry or validation rule is immediately available over MCP
+with no extra wiring. This is the running counterpart to the "MCP-native" framing
+— distinct from the `src/aws/mcp.ts` discovery transform above.

@@ -39,6 +39,25 @@ belongs to) whether that containment was drawn by hand or reconstructed from an
 import, and they validate things like CIDR ranges nesting correctly inside their
 parent network.
 
+### What gets checked
+
+Two families of checks run, across **AWS, GCP, and Azure**:
+
+- **Network topology** — subnets contained by a VPC, CIDR ranges nesting inside
+  their parent, public subnets routing to an Internet Gateway, NAT gateways in
+  public subnets, load balancers spanning multiple Availability Zones, and so on.
+- **Security & Well-Architected best practices** — read from each resource's
+  configuration, e.g. public S3 / Cloud Storage / Blob buckets, data **not
+  encrypted at rest**, **sensitive ports** (SSH/RDP/database) open to the whole
+  internet, **publicly accessible** databases, missing backups / point-in-time
+  recovery / deletion protection, IMDSv1 still allowed, and HTTP-only (unencrypted)
+  load-balancer listeners. These fire only on an explicitly insecure value, so
+  secure defaults don't create noise.
+
+A finding tied to a specific resource is also **dotted on that node on the
+canvas** (colour-coded by severity), not just listed in the panel — so you can see
+at a glance which resources need attention.
+
 > Tip: validation runs against the current state of the canvas, so re-run it after
 > making changes.
 
