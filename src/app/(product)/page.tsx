@@ -16,6 +16,7 @@ import { mapDiscoveredToGraph, unmappedTypes, type DiscoveredResource } from "..
 import type { CloudProvider } from "../../aws/types";
 import { runDiscovery, runGcpDiscovery, runAzureDiscovery } from "../../lib/api";
 import { EXAMPLES } from "../../examples";
+import { CostComingSoon } from "../../components/ComingSoon";
 
 /** Built-in coded starter templates (loadPreset ids) shown in the Start hub. */
 const TEMPLATES: { id: string; label: string; icon: string; desc: string }[] = [
@@ -550,6 +551,7 @@ function TopBar() {
         >
           {showCost ? `Cost ~${costSummary.label}` : "Cost"}
         </button>
+        <CostComingSoon />
 
         <span className="toolbar-divider" aria-hidden="true" />
 
@@ -1722,7 +1724,7 @@ function Workspace() {
           <h3>Layers &amp; Views</h3>
           <LayersPanel />
         </aside>
-        <main className="canvas-wrap" id="canvasWrap">
+        <main className="canvas-wrap" id="canvasWrap" aria-label="Diagram canvas">
           <Canvas />
           <ValidationBadge />
         </main>
