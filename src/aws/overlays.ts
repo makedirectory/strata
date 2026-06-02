@@ -74,6 +74,26 @@ function litOverClass(
   return { nodes, edges: edgeIds };
 }
 
+/**
+ * Lit set for a highlighting overlay kind, or `null` when there is nothing to
+ * highlight. Returning `null` for an empty result is important: the renderer
+ * dims everything *not* in the lit set, so an empty set would grey the entire
+ * canvas — making the overlay look broken. `null` is a clean no-op (nothing
+ * dimmed). `"none"` and `"heat"` are never highlighting overlays, so they are
+ * `null` too (heat tints via a separate channel).
+ */
+export function overlayLitFor(
+  kind: OverlayKind,
+  resources: readonly ResourceInstance[],
+  relationships: readonly Relationship[],
+  focusId?: string | null,
+): OverlayLit | null {
+  let lit: OverlayLit | null = null;
+  if (kind === "iam") lit = iamTrustOverlay(resources, relationships, focusId);
+  else if (kind === "security") lit = securityPathOverlay(resources, relationships, focusId);
+  return lit && lit.nodes.size > 0 ? lit : null;
+}
+
 /** IAM-trust neighbourhood: assume/grant/allow (permission class) reachability. */
 export function iamTrustOverlay(
   resources: readonly ResourceInstance[],

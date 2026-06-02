@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { iamTrustOverlay, securityPathOverlay, heatByDegree, heatColor } from "./overlays";
+import {
+  iamTrustOverlay,
+  securityPathOverlay,
+  overlayLitFor,
+  heatByDegree,
+  heatColor,
+} from "./overlays";
 import type { ResourceInstance, Relationship } from "./model";
 import type { RelationshipKind } from "./types";
 
@@ -47,6 +53,27 @@ describe("securityPathOverlay", () => {
   it("lights the whole network subgraph with no focus", () => {
     const lit = securityPathOverlay(resources, relationships);
     expect([...lit.edges].sort()).toEqual(["e3", "e4"]);
+  });
+});
+
+describe("overlayLitFor", () => {
+  it("returns the lit set for an overlay that has matching edges", () => {
+    const lit = overlayLitFor("security", resources, relationships);
+    expect(lit).not.toBeNull();
+    expect([...lit!.edges].sort()).toEqual(["e3", "e4"]);
+  });
+
+  it("returns null (a no-op) when the overlay would light nothing", () => {
+    // No network/permission edges → an empty lit set would dim the whole
+    // canvas; the consumer must instead treat it as 'no overlay'.
+    const noEdges = ["a", "b", "c"].map(res);
+    expect(overlayLitFor("security", noEdges, [])).toBeNull();
+    expect(overlayLitFor("iam", noEdges, [])).toBeNull();
+  });
+
+  it("returns null for non-highlighting overlay kinds", () => {
+    expect(overlayLitFor("none", resources, relationships)).toBeNull();
+    expect(overlayLitFor("heat", resources, relationships)).toBeNull();
   });
 });
 
