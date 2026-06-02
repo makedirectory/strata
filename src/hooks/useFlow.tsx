@@ -9,6 +9,7 @@ import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind } from "../aws/types";
 import { defaultConfig, getService, serviceColor, serviceIcon } from "../aws/registry";
 import { buildSvg } from "../canvas/imageExport";
+import { diffGraphs, type DriftResult } from "../aws/drift";
 import {
   validateArchitecture,
   suggestRules as suggestRulesEngine,
@@ -262,6 +263,12 @@ interface FlowContextValue {
   toggleCost: () => void;
   costSummary: { total: number; estimated: number; unknown: number; label: string };
   costMarkers: { id: string; x: number; y: number; text: string }[];
+  /** Drift detection: compare the diagram against a baseline file (non-destructive). */
+  driftResult: DriftResult | null;
+  driftBaselineName: string;
+  compareWithFile: () => void;
+  clearDrift: () => void;
+  driftMarkers: { id: string; x: number; y: number; status: "added" | "changed" }[];
   /** Structured rule suggestions, or `null` before the first run. */
   ruleSuggestions: RuleSuggestion[] | null;
   status: string;
@@ -330,6 +337,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { draw: rDraw, drawMinimap: rDrawMinimap } = renderer;
 
   const [validationResults, setValidationResults] = React.useState<ValidationResult[] | null>(null);
+  // Drift: the result of comparing the diagram against a loaded baseline, + its label.
+  const [driftResult, setDriftResult] = React.useState<DriftResult | null>(null);
+  const [driftBaselineName, setDriftBaselineName] = React.useState("");
   const [ruleSuggestions, setRuleSuggestions] = React.useState<RuleSuggestion[] | null>(null);
   const [status, setStatus] = React.useState<string>(
     "Scroll to pan · ⌘/pinch to zoom · drag empty canvas to select · Space+drag to pan · C to connect.",
@@ -511,6 +521,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return out;
   }, [showCost, store.resources, layout]);
+
+  // Drift markers (top-left corner) for nodes that are new (added) or changed vs
+  // the loaded baseline. Removed resources aren't on the canvas — the panel lists them.
+  const driftMarkers = React.useMemo(() => {
+    if (!driftResult) return [];
+    const status = new Map<string, "added" | "changed">();
+    for (const a of driftResult.added) status.set(a.id, "added");
+    for (const c of driftResult.changed) status.set(c.id, "changed");
+    const out: { id: string; x: number; y: number; status: "added" | "changed" }[] = [];
+    for (const [id, s] of status) {
+      const rect = layout.rects.get(id);
+      if (rect) out.push({ id, x: rect.x, y: rect.y, status: s });
+    }
+    return out;
+  }, [driftResult, layout]);
 
   // Environment-tint overlay: resource id → tint colour, from its account's
   // environment (or an Environment tag), null when the overlay is off.
@@ -1433,6 +1458,59 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     input.click();
   }, [storeReplaceAll, storeSetSelection, confirmReplaceIfDirty]);
 
+  // ---- Drift detection ----------------------------------------------------
+  const clearDrift = useCallback(() => {
+    setDriftResult(null);
+    setDriftBaselineName("");
+  }, []);
+  /** Compare the current diagram against a baseline loaded from a file
+   *  (a Strata JSON graph, or any importable IaC). Non-destructive. */
+  const compareWithFile = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,.yaml,.yml,.tf,.tfstate,.template";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onerror = () => setStatus("Compare failed: could not read file.");
+      reader.onload = () => {
+        try {
+          const text = String(reader.result);
+          let baseline: InfrastructureGraph;
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            parsed = undefined; // not JSON → YAML/HCL, handled below
+          }
+          if (
+            parsed &&
+            typeof parsed === "object" &&
+            Array.isArray((parsed as InfrastructureGraph).resources)
+          ) {
+            baseline = { ...emptyGraph(file.name), ...(parsed as InfrastructureGraph) };
+          } else {
+            baseline = importAnyIaC(text, { name: file.name }).graph;
+          }
+          const result = diffGraphs(buildGraph(), baseline);
+          setDriftResult(result);
+          setDriftBaselineName(file.name);
+          setStatus(
+            result.inSync
+              ? `No drift vs "${file.name}".`
+              : `Drift vs "${file.name}": +${result.added.length} / -${result.removed.length} / ~${result.changed.length}.`,
+          );
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : "unknown error";
+          setStatus(`Compare failed: ${detail}`);
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [buildGraph]);
+
   // ---- Save / load (browser-local) ----------------------------------------
   const saveGraph = useCallback(async () => {
     try {
@@ -1870,6 +1948,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       toggleCost,
       costSummary,
       costMarkers,
+      driftResult,
+      driftBaselineName,
+      compareWithFile,
+      clearDrift,
+      driftMarkers,
       ruleSuggestions,
       status,
     }),
@@ -1971,6 +2054,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       toggleCost,
       costSummary,
       costMarkers,
+      driftResult,
+      driftBaselineName,
+      compareWithFile,
+      clearDrift,
+      driftMarkers,
       ruleSuggestions,
       status,
     ],
