@@ -10,12 +10,36 @@ existing Infrastructure-as-Code — CloudFormation (JSON/YAML), Terraform
 `show -json` (AWS/GCP/Azure) and Azure ARM — into the same graph, export the graph
 back out as IaC, and ingest live cloud state via provider discovery APIs.
 
-> **On "MCP-native":** Strata is designed so an LLM/agent can reason over the
-> registry, and MCP is the intended future ingestion path — but **there is no MCP
-> server in this repo today.** `src/aws/mcp.ts` is a pure transform, and live
-> discovery currently runs through a Cloud Control SDK route
-> (`src/app/api/discover/route.ts`). See [CONTRIBUTING.md](./CONTRIBUTING.md) for
-> details.
+## MCP server
+
+An LLM/agent can drive Strata over the [Model Context Protocol](https://modelcontextprotocol.io).
+The server (`src/mcp/server.ts`) is a thin wrapper over the same pure engines the
+app uses — registry, validation, IaC import/export, and cost — so an agent can
+query and transform a graph exactly as the UI does. No DOM, network, or
+credentials.
+
+Run it (stdio transport; uses `npx tsx`, no build step):
+
+```bash
+npm run mcp
+```
+
+Then point an MCP client at that command, e.g.:
+
+```jsonc
+{
+  "mcpServers": {
+    "strata": { "command": "npm", "args": ["run", "mcp"], "cwd": "/path/to/strata" },
+  },
+}
+```
+
+**Tools:** `list_services`, `get_service`, `validate_architecture`,
+`suggest_rules`, `import_iac`, `export_iac`, `estimate_cost`.
+
+> Live cloud discovery is separate — it runs through a Cloud Control SDK route
+> (`src/app/api/discover/route.ts`); `src/aws/mcp.ts` is the pure transform behind
+> it. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the architecture.
 
 The core idea: **everything visual is derived from a data registry, not hardcoded.**
 Adding a new AWS service is a single catalog entry — no UI changes.

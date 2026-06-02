@@ -21,7 +21,8 @@
     "test:update": "vitest run -u",
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "mcp": "npx -y tsx src/mcp/bin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cloudcontrol": "^3.1058.0",
