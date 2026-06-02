@@ -9,7 +9,9 @@ before you build" half of the positioning. It is a pure module over the
 `InfrastructureGraph` (no UI, no I/O) that exposes two functions:
 
 - **`validateArchitecture(graph) → ValidationResult[]`** — checks the drawn (or
-  imported) topology against AWS networking best practices and returns findings.
+  imported) graph against both **network topology** best practices _and_
+  **config-level security / Well-Architected** best practices, across **AWS, GCP,
+  and Azure**, returning findings.
 - **`suggestRules(graph) → RuleSuggestion[]`** — proposes concrete security-group /
   route-table / NACL rules for the resources present.
 
@@ -24,6 +26,7 @@ node-type strings.
 export interface ValidationResult {
   level: "error" | "warn" | "ok";
   message: string;
+  resourceId?: string; // the resource the finding is about — lets the UI badge that node
 }
 
 export interface RuleSuggestion {
@@ -40,9 +43,13 @@ testable and keeps user-controlled names out of any HTML sink (see
 
 ## What `validateArchitecture` checks
 
-The validator is **topology-aware but not policy-aware** — it reasons over the
-modeled graph (placement + typed edges), not over real SG rules, NACL entries, or
-IAM evaluation (see [Roadmap → item 2](/docs/architecture/roadmap)). Current checks:
+The validator runs two families of checks: **network topology** (below) and
+**config-level security / Well-Architected** (further down). Topology checks are
+**topology-aware but not policy-aware** — they reason over the modeled graph
+(placement + typed edges), not over real SG rules, NACL entries, or IAM evaluation
+(see [Roadmap → item 2](/docs/architecture/roadmap)).
+
+### Network topology checks
 
 | Check                                                                   | Level |
 | ----------------------------------------------------------------------- | ----- |
@@ -60,6 +67,33 @@ IAM evaluation (see [Roadmap → item 2](/docs/architecture/roadmap)). Current c
 | A Target Group should target valid compute (ECS / EC2 / Lambda / ALB)   | warn  |
 | An ECS Service must be in subnet(s) and attached to a Security Group    | error |
 | RDS should be in **private** subnet(s) and attached to a Security Group | warn  |
+
+### Security & Well-Architected checks (AWS · GCP · Azure)
+
+These read resource **config** and fire only on an explicit, insecure value — so
+secure defaults and sparse imports don't generate noise. Matching is by registry
+`serviceId`, including the `gcp-`/`azure-` services, so coverage is multi-cloud.
+
+| Check                                                                                          | Level |
+| ---------------------------------------------------------------------------------------------- | ----- |
+| **AWS** — S3 Block Public Access disabled                                                      | warn  |
+| Encryption-at-rest off (EBS / EFS / RDS / DocumentDB / Neptune)                                | warn  |
+| Security Group exposes a sensitive port (22/3389/3306/5432/1433/6379) to `0.0.0.0/0` or `::/0` | warn  |
+| RDS publicly accessible                                                                        | error |
+| DynamoDB point-in-time recovery off                                                            | warn  |
+| RDS/Aurora deletion protection off; RDS backup retention 0                                     | warn  |
+| EC2 allows IMDSv1 (token not required)                                                         | warn  |
+| ALB has an unencrypted HTTP listener                                                           | warn  |
+| Unattached EBS volume (idle cost)                                                              | warn  |
+| **GCP** — Cloud Storage uniform bucket-level access off / public access prevention inherited   | warn  |
+| Firewall INGRESS ALLOW of a sensitive port from `0.0.0.0/0`                                    | warn  |
+| Cloud SQL public IPv4 / SSL not required                                                       | warn  |
+| **Azure** — Storage account allows public blob access / non-HTTPS / TLS < 1.2                  | warn  |
+| Redis non-SSL port enabled                                                                     | warn  |
+| SQL Server public network access enabled; SQL Database TDE disabled                            | warn  |
+
+> Each finding carries the offending resource's `resourceId`, so the UI can badge
+> that exact node (see [How results surface](#how-results-surface)).
 
 ### Direction-agnostic containment
 
@@ -113,6 +147,12 @@ The engine is invoked from the flow store and rendered by the Inspector:
 3. Because the engine returns structured objects, the Inspector builds plain-text
    React children — user-controlled names are escaped by React, so there is **no
    HTML-injection surface** even though messages embed resource names.
+4. **On-canvas badging.** Validation also runs _live_ (a `liveFindings` memo over
+   the current graph). Findings that carry a `resourceId` are dotted on that node
+   via the shared `findings-overlay` in `Canvas.tsx` — the same screen-space
+   marker pattern used by cost and drift — colour-coded by severity, with a
+   corner summary of error/warning counts. So a finding surfaces both in the
+   Inspector list and on the node it concerns.
 
 ## Authoring a new rule or suggestion
 
