@@ -46,6 +46,7 @@ export const Canvas: React.FC = () => {
     openStartHub,
     findingMarkers,
     costMarkers,
+    driftMarkers,
   } = useFlow();
 
   // Whether a minimap click-drag is in progress (window-level so the drag keeps
@@ -299,6 +300,21 @@ export const Canvas: React.FC = () => {
                 m.level === "error"
                   ? "finding-dot finding-dot--error"
                   : "finding-dot finding-dot--warn"
+              }
+            />
+          ))}
+        </svg>
+      )}
+      {driftMarkers.length > 0 && (
+        <svg className="findings-overlay" aria-hidden="true">
+          {driftMarkers.map((m) => (
+            <circle
+              key={m.id}
+              cx={viewport.x + m.x * viewport.scale}
+              cy={viewport.y + m.y * viewport.scale}
+              r={6}
+              className={
+                m.status === "added" ? "drift-dot drift-dot--added" : "drift-dot drift-dot--changed"
               }
             />
           ))}
