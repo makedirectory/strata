@@ -12,7 +12,8 @@
  * network-relationship neighbourhood; heat is a degree proxy for cost/usage.
  */
 import type { ResourceInstance, Relationship } from "./model";
-import { relationshipClassOf, type RelationshipClass } from "./relationshipClasses";
+import { relationshipClassOf } from "./relationshipClasses";
+import type { RelationshipKind } from "./types";
 
 export type OverlayKind = "none" | "iam" | "security" | "heat";
 
@@ -20,20 +21,60 @@ export type OverlayKind = "none" | "iam" | "security" | "heat";
 export interface OverlayLit {
   nodes: Set<string>;
   edges: Set<string>;
+  /** Lit nodes that are internet-facing (network overlay only). */
+  externalNodes?: Set<string>;
+  /** Lit edges that cross the internet boundary (network overlay only). */
+  externalEdges?: Set<string>;
 }
 
 /**
- * Lit set over the relationships of a given class. With a `focusId` it is the
- * connected neighbourhood reachable from that node (undirected BFS); otherwise
- * the whole class subgraph.
+ * Relationship kinds that carry traffic, for the network-path overlay. This is
+ * deliberately broader than the `network` *visual* class: `targets` (load
+ * balancer → target group → compute) reads as data flow (its colour) but is
+ * also a real network path, so the overlay traces it too.
  */
-function litOverClass(
+const NETWORK_PATH_KINDS = new Set<RelationshipKind>([
+  "routes_to",
+  "peers_with",
+  "connects_to",
+  "attached_to",
+  "targets",
+]);
+
+/**
+ * Service ids that sit on the internet boundary (the edge between a VPC and the
+ * public internet). Used to split the network overlay into internal vs external
+ * connections. `elastic-load-balancer` is conditional on its `scheme` config.
+ */
+const EXTERNAL_FACING_SERVICES = new Set([
+  "internet-gateway",
+  "nat-gateway",
+  "cloudfront",
+  "global-accelerator",
+  "api-gateway",
+]);
+
+/** Whether a resource faces the public internet (so its edges are "external"). */
+function isExternalFacing(r: ResourceInstance): boolean {
+  if (EXTERNAL_FACING_SERVICES.has(r.serviceId)) return true;
+  if (r.serviceId === "elastic-load-balancer") {
+    return String(r.config?.scheme ?? "internet-facing") === "internet-facing";
+  }
+  return false;
+}
+
+/**
+ * Lit set over the relationships matching `includeKind`. With a `focusId` it is
+ * the connected neighbourhood reachable from that node (undirected BFS);
+ * otherwise the whole matching subgraph.
+ */
+function litOverKinds(
   resources: readonly ResourceInstance[],
   relationships: readonly Relationship[],
-  cls: RelationshipClass,
+  includeKind: (kind: RelationshipKind) => boolean,
   focusId?: string | null,
 ): OverlayLit {
-  const edges = relationships.filter((r) => relationshipClassOf(r.kind) === cls);
+  const edges = relationships.filter((r) => includeKind(r.kind));
   const nodes = new Set<string>();
   const edgeIds = new Set<string>();
 
@@ -100,16 +141,40 @@ export function iamTrustOverlay(
   relationships: readonly Relationship[],
   focusId?: string | null,
 ): OverlayLit {
-  return litOverClass(resources, relationships, "permission", focusId);
+  return litOverKinds(
+    resources,
+    relationships,
+    (k) => relationshipClassOf(k) === "permission",
+    focusId,
+  );
 }
 
-/** Network-path neighbourhood: routes/connects/attaches/peers (network class). */
+/**
+ * Network-path neighbourhood: traffic-bearing edges (routes/connects/attaches/
+ * peers + load-balancer `targets`). Annotates which lit nodes/edges cross the
+ * internet boundary so the canvas can distinguish intranet from external.
+ */
 export function securityPathOverlay(
   resources: readonly ResourceInstance[],
   relationships: readonly Relationship[],
   focusId?: string | null,
 ): OverlayLit {
-  return litOverClass(resources, relationships, "network", focusId);
+  const lit = litOverKinds(resources, relationships, (k) => NETWORK_PATH_KINDS.has(k), focusId);
+  const byId = new Map(resources.map((r) => [r.id, r]));
+  const externalNodes = new Set<string>();
+  for (const id of lit.nodes) {
+    const r = byId.get(id);
+    if (r && isExternalFacing(r)) externalNodes.add(id);
+  }
+  const externalEdges = new Set<string>();
+  for (const e of relationships) {
+    if (lit.edges.has(e.id) && (externalNodes.has(e.from) || externalNodes.has(e.to))) {
+      externalEdges.add(e.id);
+    }
+  }
+  lit.externalNodes = externalNodes;
+  lit.externalEdges = externalEdges;
+  return lit;
 }
 
 /**

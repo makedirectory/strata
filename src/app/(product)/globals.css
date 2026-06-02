@@ -680,6 +680,45 @@ svg.edges {
   stroke-width: 2;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.25));
 }
+/* Network overlay: edges crossing the internet boundary get an orange glow on
+   top of the inline orange stroke set by the renderer. */
+.edge.edge-external {
+  filter: drop-shadow(0 0 4px rgba(251, 146, 60, 0.7));
+}
+/* Network overlay: internet-facing nodes get an orange boundary ring. */
+.node.node-external {
+  box-shadow:
+    0 0 0 2px #fb923c,
+    0 0 12px rgba(251, 146, 60, 0.45);
+}
+
+/* Network-paths overlay legend (left panel). */
+.overlay-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 2px 0;
+  font-size: 11px;
+  color: var(--sub);
+}
+.overlay-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.legend-line {
+  width: 18px;
+  height: 0;
+  border-top-width: 3px;
+  border-top-style: solid;
+  flex: 0 0 auto;
+}
+.legend-line--internal {
+  border-top-color: #60a5fa;
+}
+.legend-line--external {
+  border-top-color: #fb923c;
+}
 
 /* Transient alignment guides shown while dragging a node. */
 svg.guides {
