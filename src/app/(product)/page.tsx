@@ -185,6 +185,18 @@ function LayersPanel() {
         Overlays trace the relationship graph (select a node to trace from it). Heat is a degree
         proxy.
       </div>
+      {activeOverlay === "security" && (
+        <div className="overlay-legend" aria-label="Network paths legend">
+          <span className="overlay-legend-item">
+            <span className="legend-line legend-line--internal" aria-hidden="true" />
+            Internal
+          </span>
+          <span className="overlay-legend-item">
+            <span className="legend-line legend-line--external" aria-hidden="true" />
+            External (internet-facing)
+          </span>
+        </div>
+      )}
 
       <div className="layers-sub">Saved views</div>
       <div className="saved-add">
