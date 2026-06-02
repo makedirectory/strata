@@ -107,24 +107,42 @@ const BASE_MONTHLY: Record<string, number> = {
   "azure-service-bus": 10,
 };
 
-/** Config-driven refinements for big-ticket services (size/tier → monthly). */
+// Per-unit monthly USD (≈730 hrs, us-east-1 baseline) for sized/tiered services.
 const EC2_BY_TYPE: Record<string, number> = {
   "t3.micro": 8,
   "t3.small": 15,
   "t3.medium": 30,
   "t3.large": 60,
+  "t3.xlarge": 120,
+  "t3.2xlarge": 240,
   "m5.large": 70,
   "m5.xlarge": 140,
   "m5.2xlarge": 280,
+  "m5.4xlarge": 560,
   "c5.large": 62,
   "c5.xlarge": 124,
+  "c5.2xlarge": 248,
+  "r5.large": 92,
+  "r5.xlarge": 184,
 };
 const RDS_BY_CLASS: Record<string, number> = {
   "db.t3.micro": 15,
   "db.t3.small": 30,
   "db.t3.medium": 60,
+  "db.t3.large": 120,
   "db.m5.large": 125,
   "db.m5.xlarge": 250,
+  "db.m5.2xlarge": 500,
+  "db.r5.large": 175,
+  "db.r5.xlarge": 350,
+};
+const CACHE_BY_TYPE: Record<string, number> = {
+  "cache.t3.micro": 12,
+  "cache.t3.small": 24,
+  "cache.t3.medium": 50,
+  "cache.m5.large": 125,
+  "cache.m6g.large": 110,
+  "cache.r6g.large": 160,
 };
 const GCP_VM_BY_TYPE: Record<string, number> = {
   "e2-micro": 6,
@@ -132,38 +150,93 @@ const GCP_VM_BY_TYPE: Record<string, number> = {
   "e2-medium": 25,
   "n1-standard-1": 25,
   "n2-standard-2": 70,
+  "n2-standard-4": 140,
 };
 const AZURE_VM_BY_SIZE: Record<string, number> = {
   Standard_B1s: 8,
   Standard_B2s: 30,
   Standard_D2s_v3: 70,
   Standard_D4s_v3: 140,
+  Standard_D8s_v3: 280,
 };
+/** EBS $/GiB-month by volume type (gp3 default). */
+const EBS_GB_BY_TYPE: Record<string, number> = {
+  gp3: 0.08,
+  gp2: 0.1,
+  io1: 0.125,
+  io2: 0.125,
+  st1: 0.045,
+  sc1: 0.015,
+};
+const RDS_STORAGE_GB = 0.115; // gp-SSD $/GiB-month
 
-const str = (r: ResourceInstance, k: string) =>
+const str = (r: ResourceInstance, k: string): string | undefined =>
   typeof r.config[k] === "string" ? (r.config[k] as string) : undefined;
 
-/** Estimated monthly USD for a resource, or `null` when not modeled. */
+/** Read a numeric config value (number or numeric string), else `def`. */
+const num = (r: ResourceInstance, k: string, def: number): number => {
+  const v = r.config[k];
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  return def;
+};
+
+const lookup = (table: Record<string, number>, key: string | undefined, fallback: number): number =>
+  (key ? table[key] : undefined) ?? fallback;
+
+/**
+ * Estimated monthly USD for a resource, or `null` when not modeled.
+ *
+ * Beyond a flat per-service base, this factors in the config dimensions that
+ * actually move spend: instance/node **size**, **count** (ASG capacity, cache
+ * nodes, replicas), **multi-AZ** doubling, and **storage GiB**. Still a rough,
+ * us-east-1 baseline (no data-transfer, request, or commitment pricing).
+ */
 export function estimateMonthlyCost(r: ResourceInstance): number | null {
   switch (r.serviceId) {
-    case "ec2-instance": {
-      const t = str(r, "instanceType");
-      return (t ? EC2_BY_TYPE[t] : undefined) ?? BASE_MONTHLY["ec2-instance"];
+    case "ec2-instance":
+      return lookup(EC2_BY_TYPE, str(r, "instanceType"), BASE_MONTHLY["ec2-instance"]);
+
+    case "auto-scaling-group":
+      // Launch template isn't modeled; approximate per-instance × desired capacity.
+      return 50 * Math.max(1, num(r, "desiredCapacity", 2));
+
+    case "rds": {
+      const perInstance = lookup(RDS_BY_CLASS, str(r, "instanceClass"), BASE_MONTHLY["rds"]);
+      const azFactor = r.config["multiAz"] === true ? 2 : 1;
+      const storage = num(r, "allocatedStorage", 20) * RDS_STORAGE_GB;
+      return perInstance * azFactor + storage;
     }
-    case "rds":
     case "aurora": {
-      const c = str(r, "instanceClass");
-      if (c && RDS_BY_CLASS[c]) return RDS_BY_CLASS[c];
-      return BASE_MONTHLY[r.serviceId];
+      const perInstance = lookup(RDS_BY_CLASS, str(r, "instanceClass"), 100);
+      return perInstance * (num(r, "replicaCount", 1) + 1); // writer + replicas
     }
-    case "gcp-compute-engine": {
-      const t = str(r, "machineType");
-      return (t ? GCP_VM_BY_TYPE[t] : undefined) ?? BASE_MONTHLY["gcp-compute-engine"];
+    case "documentdb": {
+      const perInstance = lookup(RDS_BY_CLASS, str(r, "instanceClass"), BASE_MONTHLY["documentdb"]);
+      return perInstance * Math.max(1, num(r, "instanceCount", 1));
     }
-    case "azure-vm": {
-      const t = str(r, "vmSize");
-      return (t ? AZURE_VM_BY_SIZE[t] : undefined) ?? BASE_MONTHLY["azure-vm"];
-    }
+    case "elasticache":
+      return (
+        lookup(CACHE_BY_TYPE, str(r, "nodeType"), BASE_MONTHLY["elasticache"]) *
+        Math.max(1, num(r, "numNodes", 1))
+      );
+    case "memorydb":
+      return (
+        lookup(CACHE_BY_TYPE, str(r, "nodeType"), BASE_MONTHLY["memorydb"]) *
+        Math.max(1, num(r, "numShards", 1)) *
+        (num(r, "replicasPerShard", 1) + 1)
+      );
+
+    case "ebs-volume":
+      return num(r, "sizeGiB", 100) * lookup(EBS_GB_BY_TYPE, str(r, "volumeType"), 0.08);
+    case "fsx":
+      return num(r, "storageCapacityGiB", 1200) * 0.14;
+
+    case "gcp-compute-engine":
+      return lookup(GCP_VM_BY_TYPE, str(r, "machineType"), BASE_MONTHLY["gcp-compute-engine"]);
+    case "azure-vm":
+      return lookup(AZURE_VM_BY_SIZE, str(r, "vmSize"), BASE_MONTHLY["azure-vm"]);
+
     default: {
       const base = BASE_MONTHLY[r.serviceId];
       return base === undefined ? null : base;

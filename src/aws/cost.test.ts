@@ -19,14 +19,37 @@ describe("estimateMonthlyCost", () => {
     expect(estimateMonthlyCost(res("totally-made-up"))).toBeNull();
   });
 
-  it("estimates a NAT gateway and an RDS class", () => {
+  it("estimates a NAT gateway and an RDS class (incl. default storage)", () => {
     expect(estimateMonthlyCost(res("nat-gateway"))).toBe(32);
-    expect(estimateMonthlyCost(res("rds", { instanceClass: "db.m5.large" }))).toBe(125);
+    // db.m5.large (125) + default 20 GiB × $0.115 = 127.3
+    expect(estimateMonthlyCost(res("rds", { instanceClass: "db.m5.large" }))).toBeCloseTo(127.3);
   });
 
   it("covers GCP and Azure compute", () => {
     expect(estimateMonthlyCost(res("gcp-compute-engine", { machineType: "e2-micro" }))).toBe(6);
     expect(estimateMonthlyCost(res("azure-vm", { vmSize: "Standard_B2s" }))).toBe(30);
+  });
+
+  it("factors in multi-AZ and storage for RDS", () => {
+    // 125 × 2 (multi-AZ) + 100 GiB × $0.115 = 261.5
+    const c = estimateMonthlyCost(
+      res("rds", { instanceClass: "db.m5.large", multiAz: true, allocatedStorage: 100 }),
+    );
+    expect(c).toBeCloseTo(261.5);
+  });
+
+  it("scales by count: ASG capacity, cache nodes, Aurora replicas", () => {
+    expect(estimateMonthlyCost(res("auto-scaling-group", { desiredCapacity: 4 }))).toBe(200);
+    expect(
+      estimateMonthlyCost(res("elasticache", { nodeType: "cache.t3.medium", numNodes: 3 })),
+    ).toBe(150);
+    // writer + 2 replicas = 3 × 100 (default class price)
+    expect(estimateMonthlyCost(res("aurora", { replicaCount: 2 }))).toBe(300);
+  });
+
+  it("prices EBS by size × volume-type $/GiB", () => {
+    // 200 GiB gp3 ($0.08) = 16
+    expect(estimateMonthlyCost(res("ebs-volume", { sizeGiB: 200, volumeType: "gp3" }))).toBe(16);
   });
 });
 

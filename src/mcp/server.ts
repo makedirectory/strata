@@ -1,0 +1,311 @@
+/**
+ * Strata MCP server — exposes the registry, validation, IaC and cost engines to
+ * an LLM/agent over the Model Context Protocol.
+ *
+ * The README frames Strata as "MCP-native"; this is that server. It is a thin
+ * wrapper over the same PURE functions the app uses (registry, rules, cost,
+ * importAnyIaC, exportIaC), so an agent can reason about and transform a graph
+ * exactly as the UI does. No DOM, no network, no credentials.
+ *
+ * Transport: newline-delimited JSON-RPC 2.0 over stdio (the MCP stdio
+ * transport). `handleMcpMessage` is pure and unit-tested; `runStdio` wires it to
+ * the process streams. Run it with `npm run mcp` (which uses `npx tsx`), and
+ * point an MCP client at that command.
+ */
+import { version as SERVER_VERSION } from "../../package.json";
+import type { InfrastructureGraph } from "../aws/model";
+import { emptyGraph } from "../aws/model";
+import { allServices, getService, searchServices, serviceProvider } from "../aws/registry";
+import { validateArchitecture, suggestRules } from "../aws/rules";
+import { estimateMonthlyCost, estimateTotal } from "../aws/cost";
+import { importAnyIaC } from "../lib/importIac";
+import { exportIaC, type ExportFormat } from "../aws/iacExport";
+import type { CloudProvider } from "../aws/types";
+
+/** MCP protocol revision this server speaks. */
+const PROTOCOL_VERSION = "2024-11-05";
+
+type Args = Record<string, unknown>;
+const str = (a: Args, k: string): string | undefined =>
+  typeof a[k] === "string" ? (a[k] as string) : undefined;
+
+/** Coerce an untrusted argument into a usable InfrastructureGraph. */
+function coerceGraph(value: unknown): InfrastructureGraph {
+  const g = (
+    typeof value === "object" && value !== null ? value : {}
+  ) as Partial<InfrastructureGraph>;
+  return {
+    ...emptyGraph(typeof g.name === "string" ? g.name : "graph"),
+    ...g,
+    resources: Array.isArray(g.resources) ? g.resources : [],
+    relationships: Array.isArray(g.relationships) ? g.relationships : [],
+    accounts: Array.isArray(g.accounts) ? g.accounts : [],
+  };
+}
+
+export interface McpTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  run: (args: Args) => unknown;
+}
+
+const objectSchema = (
+  properties: Record<string, unknown>,
+  required: string[] = [],
+): Record<string, unknown> => ({ type: "object", properties, required });
+
+const GRAPH_SCHEMA = {
+  type: "object",
+  description: "An InfrastructureGraph (resources[] + relationships[] is enough for most tools).",
+  properties: {
+    resources: { type: "array", items: { type: "object" } },
+    relationships: { type: "array", items: { type: "object" } },
+  },
+};
+
+/** The tools an MCP client can list and call. */
+export const TOOLS: McpTool[] = [
+  {
+    name: "list_services",
+    description:
+      "List/search the cloud service registry (AWS, GCP, Azure). Optionally filter by provider, category, or a free-text query.",
+    inputSchema: objectSchema({
+      provider: { type: "string", enum: ["aws", "gcp", "azure"] },
+      category: { type: "string" },
+      query: { type: "string" },
+    }),
+    run: (a) => {
+      const provider = str(a, "provider") as CloudProvider | undefined;
+      const query = str(a, "query");
+      const category = str(a, "category");
+      let pool = query ? searchServices(query, provider) : [...allServices(provider)];
+      if (category) pool = pool.filter((s) => s.category === category);
+      return {
+        count: pool.length,
+        services: pool.map((s) => ({
+          id: s.id,
+          name: s.name,
+          provider: serviceProvider(s),
+          category: s.category,
+          description: s.description,
+        })),
+      };
+    },
+  },
+  {
+    name: "get_service",
+    description:
+      "Get the full definition of one service by id: config fields, suggested connections, native IaC type.",
+    inputSchema: objectSchema({ id: { type: "string" } }, ["id"]),
+    run: (a) => {
+      const id = str(a, "id");
+      const s = id ? getService(id) : undefined;
+      if (!s) throw new Error(`Unknown service id: ${id ?? "(missing)"}`);
+      return {
+        id: s.id,
+        name: s.name,
+        fullName: s.fullName,
+        provider: serviceProvider(s),
+        category: s.category,
+        description: s.description,
+        scope: s.scope,
+        isContainer: !!s.isContainer,
+        nativeType: s.nativeType ?? s.cfnType,
+        configFields: s.configFields,
+        commonConnections: s.commonConnections,
+      };
+    },
+  },
+  {
+    name: "validate_architecture",
+    description:
+      "Run Strata's architecture + Well-Architected validation over a graph. Returns findings (level, message, resourceId).",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+    run: (a) => {
+      const findings = validateArchitecture(coerceGraph(a.graph));
+      const errors = findings.filter((f) => f.level === "error").length;
+      const warnings = findings.filter((f) => f.level === "warn").length;
+      return { errors, warnings, findings };
+    },
+  },
+  {
+    name: "suggest_rules",
+    description: "Suggest security-group / route-table / NACL rules for a graph.",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+    run: (a) => ({ suggestions: suggestRules(coerceGraph(a.graph)) }),
+  },
+  {
+    name: "import_iac",
+    description:
+      "Parse Infrastructure-as-Code (CloudFormation JSON/YAML, Terraform `show -json`, or Azure ARM) into a Strata graph. Auto-detects the format.",
+    inputSchema: objectSchema({ content: { type: "string" }, name: { type: "string" } }, [
+      "content",
+    ]),
+    run: (a) => {
+      const content = str(a, "content");
+      if (!content) throw new Error("`content` (the IaC document text) is required.");
+      const r = importAnyIaC(content, { name: str(a, "name") });
+      return {
+        format: r.format,
+        resourceCount: r.graph.resources.length,
+        unmappedTypes: r.unmappedTypes,
+        warnings: r.warnings,
+        graph: r.graph,
+      };
+    },
+  },
+  {
+    name: "export_iac",
+    description:
+      "Generate IaC from a graph (a scaffold to finish). Formats: cloudformation-json, cloudformation-yaml, terraform.",
+    inputSchema: objectSchema(
+      {
+        graph: GRAPH_SCHEMA,
+        format: {
+          type: "string",
+          enum: ["cloudformation-json", "cloudformation-yaml", "terraform"],
+        },
+      },
+      ["graph", "format"],
+    ),
+    run: (a) => {
+      const format = str(a, "format") as ExportFormat | undefined;
+      if (
+        format !== "cloudformation-json" &&
+        format !== "cloudformation-yaml" &&
+        format !== "terraform"
+      ) {
+        throw new Error(`Unsupported format: ${format ?? "(missing)"}`);
+      }
+      const out = exportIaC(coerceGraph(a.graph), format);
+      return { filename: out.filename, content: out.content, report: out.report };
+    },
+  },
+  {
+    name: "estimate_cost",
+    description:
+      "Rough monthly USD estimate per resource + diagram total (us-east-1 baseline; ignores usage/transfer/discounts).",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+    run: (a) => {
+      const graph = coerceGraph(a.graph);
+      const totals = estimateTotal(graph.resources);
+      return {
+        currency: "USD/month (rough)",
+        total: Math.round(totals.total),
+        estimatedResources: totals.estimated,
+        unknownResources: totals.unknown,
+        resources: graph.resources.map((r) => ({
+          id: r.id,
+          name: r.name,
+          serviceId: r.serviceId,
+          monthly: estimateMonthlyCost(r),
+        })),
+      };
+    },
+  },
+];
+
+// ---- JSON-RPC plumbing -----------------------------------------------------
+
+interface JsonRpcRequest {
+  jsonrpc?: string;
+  id?: string | number | null;
+  method?: string;
+  params?: Args;
+}
+interface JsonRpcResponse {
+  jsonrpc: "2.0";
+  id: string | number | null;
+  result?: unknown;
+  error?: { code: number; message: string };
+}
+
+const ok = (id: string | number | null, result: unknown): JsonRpcResponse => ({
+  jsonrpc: "2.0",
+  id,
+  result,
+});
+const fail = (id: string | number | null, code: number, message: string): JsonRpcResponse => ({
+  jsonrpc: "2.0",
+  id,
+  error: { code, message },
+});
+
+/**
+ * Handle one JSON-RPC message. Returns the response, or `null` for
+ * notifications (no `id` / `notifications/*`) which must not be answered.
+ */
+export function handleMcpMessage(msg: JsonRpcRequest): JsonRpcResponse | null {
+  const id = msg.id ?? null;
+  switch (msg.method) {
+    case "initialize":
+      return ok(id, {
+        protocolVersion: PROTOCOL_VERSION,
+        capabilities: { tools: {} },
+        serverInfo: { name: "strata", version: SERVER_VERSION },
+      });
+    case "notifications/initialized":
+      return null;
+    case "ping":
+      return ok(id, {});
+    case "tools/list":
+      return ok(id, {
+        tools: TOOLS.map((t) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+        })),
+      });
+    case "tools/call": {
+      const name = typeof msg.params?.name === "string" ? msg.params.name : "";
+      const tool = TOOLS.find((t) => t.name === name);
+      if (!tool) {
+        return ok(id, {
+          content: [{ type: "text", text: `Unknown tool: ${name}` }],
+          isError: true,
+        });
+      }
+      const args = (
+        typeof msg.params?.arguments === "object" && msg.params?.arguments !== null
+          ? msg.params.arguments
+          : {}
+      ) as Args;
+      try {
+        const result = tool.run(args);
+        return ok(id, { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
+      } catch (e) {
+        return ok(id, {
+          content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }],
+          isError: true,
+        });
+      }
+    }
+    default:
+      // Unknown notification (no id) → ignore; unknown request → method-not-found.
+      return msg.id === undefined ? null : fail(id, -32601, `Method not found: ${msg.method}`);
+  }
+}
+
+/** Wire the dispatcher to stdio (newline-delimited JSON-RPC). */
+export function runStdio(): void {
+  let buffer = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk: string) => {
+    buffer += chunk;
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line) continue;
+      let msg: JsonRpcRequest;
+      try {
+        msg = JSON.parse(line) as JsonRpcRequest;
+      } catch {
+        continue; // skip malformed lines
+      }
+      const res = handleMcpMessage(msg);
+      if (res) process.stdout.write(JSON.stringify(res) + "\n");
+    }
+  });
+}
