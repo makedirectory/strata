@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-02
+
+Depth + reach: make the design _trustworthy_ (compare it against reality with
+drift detection), _legible_ to everyone (keyboard + screen-reader access to the
+canvas), _automatable_ (an MCP server), and _sharper on cost_.
+
+### Added
+
+- **Drift detection** — compare the diagram against a baseline (a live cloud
+  export, an IaC file, or a saved Strata JSON) and see what's **added / removed
+  / changed**. A pure `diffGraphs` engine (`src/aws/drift.ts`) matches resources
+  across sources by ARN — else service type + name — rather than by id, so a
+  diagram's internal ids still line up with an import's logical ids. Drifted
+  nodes are dotted on the canvas (green = added, amber = changed) with a results
+  panel; reached from **File → Compare for drift…**.
+- **Keyboard navigation & screen-reader access for the canvas** (a11y round 2).
+  The diagram now exposes an accessible `role="application"` layer: Tab in, then
+  **arrow keys** move spatially between nodes (pure `src/canvas/navGrid.ts`),
+  **Enter** opens a container or recentres a leaf, **Esc** steps out, **Home/End**
+  jump. Focus selects the node and announces its name, type, cloud provider, and
+  container.
+- **Accessibility pass (round 1)** — focus-visible rings, reduced-motion support,
+  icon-button `aria-label`s, and a labelled canvas region.
+- **MCP server** (`src/mcp/`) — exposes the registry, validation, IaC
+  import/export, and cost tools over stdio (`npm run mcp`) so agents can drive
+  Strata headlessly. Dependency-free JSON-RPC.
+- **Deeper cost estimates** — the heuristic now refines by instance size/class,
+  count/capacity, Multi-AZ, and storage for the big-ticket compute and database
+  services (`src/aws/cost.ts`), instead of a flat per-service figure.
+- **Cost-optimization "coming soon"** — an interest-capture prompt that records
+  demand (event + localStorage + optional webhook) before deeper cost
+  optimization is built.
+
+### Changed
+
+- Docs refreshed: new **Drift Detection** and **Estimated Cost** user guides, a
+  **Drift Detection Engine** architecture page, a keyboard-navigation section in
+  the shortcuts reference, and an updated roadmap.
+
 ## [0.3.0] - 2026-06-01
 
 A large usability + breadth release: get value _out_ of a diagram (images, share
@@ -98,7 +137,8 @@ more easily (tiered auto-arrange, clean templates, a first-run tour).
 - Open-source project scaffolding: CI (typecheck, lint, format, test, build),
   CodeQL analysis, Dependabot, issue/PR templates, and contributor docs.
 
-[Unreleased]: https://github.com/makedirectory/aws-flow-builder/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/makedirectory/aws-flow-builder/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/makedirectory/aws-flow-builder/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/makedirectory/aws-flow-builder/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/makedirectory/aws-flow-builder/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/makedirectory/aws-flow-builder/releases/tag/v0.2.0
