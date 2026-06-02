@@ -354,19 +354,35 @@ export const Canvas: React.FC = () => {
         </div>
       )}
       <div className="zoom-controls" role="group" aria-label="Zoom controls">
-        <button type="button" onClick={zoomIn} title="Zoom in">
+        <button type="button" onClick={zoomIn} title="Zoom in" aria-label="Zoom in">
           +
         </button>
-        <button type="button" onClick={zoomOut} title="Zoom out">
+        <button type="button" onClick={zoomOut} title="Zoom out" aria-label="Zoom out">
           −
         </button>
-        <button type="button" className="zoom-level" onClick={zoomReset} title="Reset to 100%">
+        <button
+          type="button"
+          className="zoom-level"
+          onClick={zoomReset}
+          title="Reset to 100%"
+          aria-label="Reset zoom to 100%"
+        >
           {Math.round(viewport.scale * 100)}%
         </button>
-        <button type="button" onClick={fitToView} title="Fit all to view">
+        <button
+          type="button"
+          onClick={fitToView}
+          title="Fit all to view"
+          aria-label="Fit all to view"
+        >
           Fit
         </button>
-        <button type="button" onClick={zoomToSelection} title="Zoom to selection">
+        <button
+          type="button"
+          onClick={zoomToSelection}
+          title="Zoom to selection"
+          aria-label="Zoom to selection"
+        >
           ⤢
         </button>
       </div>
