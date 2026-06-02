@@ -1192,6 +1192,28 @@ svg.guides {
   overflow: visible;
   z-index: 5;
 }
+
+/* ---- Accessible (keyboard / screen-reader) node layer ---- */
+.a11y-nodes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+.a11y-node {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  /* Keyboard-only: mouse hit-testing falls through to the real canvas nodes. */
+  pointer-events: none;
+}
+.a11y-node:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
 .finding-dot {
   stroke: #0a0f1e;
   stroke-width: 2;
