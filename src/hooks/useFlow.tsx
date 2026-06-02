@@ -50,8 +50,7 @@ import { computeLayout, summaryKey, type LayoutResult } from "../canvas/layout";
 import { arrangeTiered } from "../canvas/arrange";
 import { RELATIONSHIP_CLASS_ORDER, type RelationshipClass } from "../aws/relationshipClasses";
 import {
-  iamTrustOverlay,
-  securityPathOverlay,
+  overlayLitFor,
   heatByDegree,
   heatColor,
   type OverlayKind,
@@ -618,12 +617,16 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // aware); null for none/heat (which don't dim).
   const overlayLit = React.useMemo<OverlayLit | null>(() => {
     const focus = store.selection?.type === "node" ? store.selection.id : null;
-    if (store.activeOverlay === "iam")
-      return iamTrustOverlay(store.resources, store.relationships, focus);
-    if (store.activeOverlay === "security")
-      return securityPathOverlay(store.resources, store.relationships, focus);
-    return null;
+    return overlayLitFor(store.activeOverlay, store.resources, store.relationships, focus);
   }, [store.activeOverlay, store.resources, store.relationships, store.selection]);
+  // A highlighting overlay that lights nothing is a no-op (see overlayLitFor) —
+  // tell the user why rather than leaving them wondering if the toggle worked.
+  React.useEffect(() => {
+    if ((store.activeOverlay === "iam" || store.activeOverlay === "security") && !overlayLit) {
+      const what = store.activeOverlay === "iam" ? "IAM trust" : "network";
+      setStatus(`No ${what} relationships to highlight — connect resources to see this overlay.`);
+    }
+  }, [store.activeOverlay, overlayLit]);
   // Heat overlay tint map (degree proxy), reusing the background-tint channel.
   const overlayHeat = React.useMemo<ReadonlyMap<string, string> | null>(() => {
     if (store.activeOverlay !== "heat") return null;
