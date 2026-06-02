@@ -220,7 +220,7 @@ export const CommandPalette: React.FC = () => {
       { id: "save", title: "Save diagram", group: "Tools", run: flow.saveGraph },
       {
         id: "connect-aws",
-        title: "Connect to AWS (discover live resources)",
+        title: "Connect to cloud (discover live resources)",
         group: "Tools",
         run: flow.openConnect,
       },
