@@ -1224,6 +1224,103 @@ svg.guides {
 .finding-dot--warn {
   fill: #fbbf24;
 }
+
+/* ---- Drift detection: node dots + results panel ---- */
+.drift-dot {
+  stroke: #0a0f1e;
+  stroke-width: 2;
+}
+.drift-dot--added {
+  fill: #34d399;
+}
+.drift-dot--changed {
+  fill: #fbbf24;
+}
+.drift {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  width: min(320px, 40vw);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: #0c1426;
+  border: 1px solid #223055;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+}
+.drift-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1a2540;
+}
+.drift-head .hub-close {
+  position: static;
+}
+.drift-insync {
+  padding: 10px 12px;
+  color: #9fe6b0;
+  font-weight: 600;
+}
+.drift-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #1a2540;
+}
+.drift-c {
+  color: var(--sub);
+  font-weight: 600;
+}
+.drift-c.added {
+  color: #34d399;
+}
+.drift-c.removed {
+  color: #f87171;
+}
+.drift-c.changed {
+  color: #fbbf24;
+}
+.drift-list {
+  overflow: auto;
+  padding: 6px;
+}
+.drift-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: default;
+}
+button.drift-item {
+  cursor: pointer;
+}
+button.drift-item:hover {
+  background: #17213a;
+}
+.drift-item.added {
+  color: #9fe6b0;
+}
+.drift-item.changed {
+  color: #fde68a;
+}
+.drift-item.removed {
+  color: #fca5a5;
+}
+.drift-svc {
+  color: var(--sub);
+  font-size: 11px;
+}
 .valbadge {
   position: absolute;
   left: 16px;

@@ -1,0 +1,93 @@
+---
+title: Drift Detection Engine
+---
+
+# The Drift Detection Engine
+
+`src/aws/drift.ts` compares one `InfrastructureGraph` against another and reports
+how they differ. Like the [rules engine](/docs/architecture/rules-engine) and the
+cost estimator (`src/aws/cost.ts`), it is a **pure, framework-free module** — no
+UI, no I/O — exposing a single function:
+
+```ts
+export function diffGraphs(
+  current: InfrastructureGraph, // the diagram on the canvas
+  baseline: InfrastructureGraph, // the source of truth being compared against
+): DriftResult;
+```
+
+Drift is always expressed as **`current` relative to `baseline`**:
+
+- **added** — in `current`, missing from `baseline`
+- **removed** — in `baseline`, missing from `current`
+- **changed** — matched in both, but config differs
+- **unchanged** — matched, identical config (a count)
+
+```ts
+export interface DriftResult {
+  added: DriftRef[];
+  removed: DriftRef[];
+  changed: DriftChanged[]; // DriftRef + changes: { key, from, to }[]
+  unchanged: number;
+  inSync: boolean; // added + removed + changed are all empty
+}
+```
+
+## Cross-source identity matching
+
+The central problem is that resources **rarely share IDs across sources**: a
+hand-built diagram uses internal UUIDs, a CloudFormation import uses logical IDs,
+a Terraform import uses addresses, and a live export uses ARNs. Matching purely by
+`id` would report everything as added-and-removed.
+
+So `diffGraphs` matches each `current` resource to a `baseline` resource in
+priority order:
+
+1. **By `id`** — for the rare case where both sides genuinely share one.
+2. **By a stable identity key** otherwise — the **ARN** when present
+   (`arn:<arn>`), else **`serviceId` + lowercased name** (`<serviceId>::<name>`).
+
+Each baseline resource is consumed at most once (`matchedBaseIds`), so a match is
+never double-counted. Anything in `current` with no match is **added**; any
+baseline resource left unmatched is **removed**.
+
+## Config diffing
+
+A matched pair is **changed** if any config value differs. `diffConfig` walks the
+**union of keys** from both sides (sorted for stable output) and compares each by
+`JSON.stringify` inequality, emitting `{ key, from, to }` for every difference.
+This is deep-by-serialization — nested objects/arrays compare structurally — and
+intentionally simple: it has no notion of semantically-equivalent-but-different
+encodings, which keeps it pure and predictable.
+
+## How results surface
+
+The engine is wired through the flow store and rendered over the canvas:
+
+1. **`useFlow`** (`src/hooks/useFlow.tsx`) exposes `compareWithFile` and
+   `clearDrift`. `compareWithFile` opens a file picker
+   (`.json,.yaml,.yml,.tf,.tfstate,.template`); JSON with a `resources` array is
+   treated as a native graph, otherwise it runs through `importAnyIaC` (the same
+   path as [IaC import](/docs/architecture/iac-import)). It then calls
+   `diffGraphs(buildGraph(), baseline)` and stores `driftResult` +
+   `driftBaselineName`.
+2. A **`driftMarkers`** memo maps `added` and `changed` refs to canvas positions
+   (from the layout rects), tagging each `"added"` or `"changed"`.
+3. The **Canvas** (`src/components/Canvas.tsx`) renders an SVG overlay — using the
+   same screen-space `findings-overlay` pattern as the validation and cost markers
+   — dotting drifted nodes green (added) or amber (changed).
+4. The **DriftPanel** (in the product page) lists counts and the added / changed /
+   removed entries; clicking one calls `goToResource`. Removed resources have no
+   node on the canvas, so they appear only in the panel.
+
+## Testing
+
+`src/aws/drift.test.ts` covers the engine directly: in-sync identical graphs,
+added/removed detection, config-change detection, **cross-source matching** by
+`serviceId` + name (a diagram UUID vs an import logical ID), and matching by
+**ARN** when names differ. Because the engine is pure, each test is a small
+in-memory fixture with no setup (see [Testing](/docs/architecture/testing)).
+
+> **Roadmap:** exposing `diffGraphs` as an MCP `diff_graphs` tool would let an
+> agent compute drift headlessly against a discovered or target graph — see the
+> [roadmap](/docs/architecture/roadmap).
