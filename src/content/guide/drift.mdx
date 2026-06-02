@@ -1,0 +1,74 @@
+---
+title: Drift Detection
+---
+
+# Drift Detection
+
+A diagram is only useful if it matches reality. **Drift detection** compares the
+diagram on your canvas against a **baseline** — a snapshot of what _should_ (or
+_does_) exist — and highlights exactly what differs: resources that were
+**added**, **removed**, or **changed**.
+
+Use it to answer questions like:
+
+- _Does my design still match what's actually deployed?_ (compare against a live
+  cloud export)
+- _Have I drifted from the IaC I'm targeting?_ (compare against a Terraform or
+  CloudFormation file)
+- _What changed between this diagram and the one a teammate saved?_ (compare
+  against an exported Strata JSON)
+
+## Run a comparison
+
+1. Open the **File ▾** menu and choose **Compare for drift…**.
+2. Pick a baseline file. Strata accepts:
+   - **Strata JSON** — a diagram exported with **Export JSON** (any file with a
+     `resources` array is treated as a native graph).
+   - **Infrastructure-as-Code** — CloudFormation (`.json`, `.yaml`, `.yml`,
+     `.template`) or Terraform (`.tf`, `.tfstate`). These run through the same
+     importer as [Importing IaC](/docs/guide/importing-iac).
+3. Strata diffs the baseline against the current canvas and opens the **drift
+   results** panel.
+
+The diagram on screen is always the **current** side; the file you load is the
+**baseline**. So "added" means _on your canvas but not in the baseline_, and
+"removed" means _in the baseline but not on your canvas_.
+
+## Reading the results
+
+When there are differences, drifted nodes are dotted on the canvas:
+
+- **Green dot** — **added** (present in your diagram, missing from the baseline).
+- **Amber dot** — **changed** (matched in both, but some configuration differs).
+
+The **drift results** panel (top-right of the canvas) summarises everything:
+
+- **Counts** — added / removed / changed / in-sync.
+- **Added & changed** lists — click any entry to jump to and select that node.
+  Changed entries show _which_ configuration keys differ.
+- **Removed** list — resources in the baseline that aren't on your canvas. These
+  have no node to dot, so they only appear here.
+
+When nothing differs, the panel reads **"✓ In sync — no differences."** Close the
+panel (**✕**) to clear the dots.
+
+## How resources are matched
+
+Diagrams and imports rarely share the same identifiers — a hand-built diagram
+uses internal IDs, while an import uses logical names or addresses. So Strata
+matches a resource to its baseline counterpart in this order:
+
+1. By **ID**, when both sides happen to share one.
+2. By **ARN**, when the resource has one.
+3. By **service type + name** otherwise.
+
+This means a VPC named `Main` in your diagram matches a VPC named `Main` in the
+baseline even if their underlying IDs are completely different — and renaming a
+resource that has an ARN still matches by its ARN.
+
+Configuration is compared key by key: a resource is **changed** if any
+configuration value differs between the two sides.
+
+> Drift is a **point-in-time** comparison against the file you load — it doesn't
+> poll your cloud. To check against live state, run a
+> [discovery export](/docs/guide/connecting-aws) first, then compare against it.
