@@ -395,6 +395,7 @@ function TopBar() {
     exportJSON,
     exportImage,
     shareDiagram,
+    compareWithFile,
     importJSONDialog,
     importIaCDialog,
     clear,
@@ -526,6 +527,13 @@ function TopBar() {
             title="Generate Terraform / CloudFormation from the diagram"
           >
             Export to IaC…
+          </MenuItem>
+          <div className="menu-divider" />
+          <MenuItem
+            onClick={compareWithFile}
+            title="Compare this diagram against a baseline file (live export, IaC, or Strata JSON)"
+          >
+            Compare for drift…
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={clear} danger title="Clear the canvas">
@@ -710,6 +718,56 @@ function ValidationBadge() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** Drift results: a dismissible panel summarising how the diagram differs from a
+ *  loaded baseline (added / removed / changed). Added & changed nodes are also
+ *  dotted on the canvas; removed resources (not on the canvas) are listed here. */
+function DriftPanel() {
+  const { driftResult, driftBaselineName, clearDrift, goToResource } = useFlow();
+  if (!driftResult) return null;
+  const { added, removed, changed, unchanged, inSync } = driftResult;
+  return (
+    <div className="drift" role="region" aria-label="Drift results">
+      <div className="drift-head">
+        <strong>Drift vs {driftBaselineName || "baseline"}</strong>
+        <button className="hub-close" onClick={clearDrift} aria-label="Close drift results">
+          ✕
+        </button>
+      </div>
+      {inSync ? (
+        <div className="drift-insync">✓ In sync — no differences.</div>
+      ) : (
+        <div className="drift-counts">
+          <span className="drift-c added">+{added.length} added</span>
+          <span className="drift-c removed">−{removed.length} removed</span>
+          <span className="drift-c changed">~{changed.length} changed</span>
+          <span className="drift-c">{unchanged} in sync</span>
+        </div>
+      )}
+      <div className="drift-list">
+        {added.map((r) => (
+          <button key={`a-${r.id}`} className="drift-item added" onClick={() => goToResource(r.id)}>
+            + {r.name} <span className="drift-svc">{r.serviceId}</span>
+          </button>
+        ))}
+        {changed.map((r) => (
+          <button
+            key={`c-${r.id}`}
+            className="drift-item changed"
+            onClick={() => goToResource(r.id)}
+          >
+            ~ {r.name} <span className="drift-svc">{r.changes.map((c) => c.key).join(", ")}</span>
+          </button>
+        ))}
+        {removed.map((r) => (
+          <div key={`r-${r.id}`} className="drift-item removed">
+            − {r.name} <span className="drift-svc">{r.serviceId}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1727,6 +1785,7 @@ function Workspace() {
         <main className="canvas-wrap" id="canvasWrap" aria-label="Diagram canvas">
           <Canvas />
           <ValidationBadge />
+          <DriftPanel />
         </main>
         <aside className="right">
           <h3>Inspector</h3>
