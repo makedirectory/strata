@@ -6,6 +6,8 @@ const meta = {
   "importing-iac": "Importing & Exporting IaC",
   "connecting-aws": "Connecting to a Cloud",
   validation: "Validation & Rules",
+  drift: "Drift Detection",
+  cost: "Estimated Cost",
   saving: "Saving & Loading",
   shortcuts: "Keyboard & Commands",
   troubleshooting: "Troubleshooting",

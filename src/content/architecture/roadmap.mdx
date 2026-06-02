@@ -38,6 +38,14 @@ list:
   `src/aws/discovery.ts` (pure) plus a server-only `/api/discover` Route Handler
   over `@aws-sdk/client-cloudcontrol`, with a paste-import fallback. See
   [Live Discovery & MCP](/docs/architecture/mcp-integration).
+- **Drift detection.** `src/aws/drift.ts` diffs the canvas against a baseline
+  (live export, IaC, or Strata JSON) into added / removed / changed, matching
+  across sources by ARN — else `serviceId` + name — rather than by id. See
+  [Drift Detection Engine](/docs/architecture/drift). This is also a first step
+  toward the stable-key strategy in [§1](#1-id-strategy-uuid-vs-arn-coexistence).
+- **Cost estimation.** `src/aws/cost.ts` puts a rough monthly figure on the
+  design (per-node badges + a toolbar total), refined by size/count/multi-AZ/
+  storage for the big-ticket services. Deliberately a heuristic, not a forecast.
 
 ## Still open
 

@@ -1,0 +1,44 @@
+---
+title: Estimated Cost
+---
+
+# Estimated Cost
+
+Strata can put a **rough monthly price tag** on your design so you can compare
+options and spot the expensive pieces while you're still drawing — long before
+anything is deployed.
+
+## Turn it on
+
+Click the **Cost** toggle in the top toolbar. When it's on, the button shows the
+estimated monthly total for the whole diagram (e.g. **Cost ~$184/mo**) and each
+priced node gets a small cost badge on the canvas. Click it again to turn the
+estimate off.
+
+## What the estimate covers
+
+The figure is a **back-of-the-envelope heuristic**, not a billing forecast. Each
+resource is priced from its service type, with light refinement from its
+configuration for the big-ticket services, including:
+
+- **Instance size / class** — larger compute and database instances cost more.
+- **Count / capacity** — desired capacity, node count, replica count, and similar
+  multipliers scale the estimate.
+- **Multi-AZ** — highly-available databases roughly double.
+- **Storage** — allocated storage and disk size (GiB) are factored in.
+
+Structural, free resources (VPC, subnet, route table, security group, …) count as
+**$0**. Services Strata can't price yet show **—** and don't contribute to the
+total.
+
+> The estimate intentionally ignores data transfer, request volume, commitment
+> discounts (Reserved/Savings Plans), and regional price differences. Treat it as
+> a way to compare designs and find cost hotspots — **not** as a quote.
+
+## Deeper cost optimization
+
+Beyond this heuristic, region-aware usage-based pricing, rightsizing and idle
+recommendations, and commitment-discount awareness are on the roadmap. The
+**cost-optimization** prompt in the app lets you register interest so we can
+gauge demand before building it — see the
+[roadmap](/docs/architecture/roadmap) for where this is headed.
