@@ -32,19 +32,38 @@ import type { InfrastructureGraph } from "./model";
 /** The visual kind of an annotation. */
 export type AnnotationKind = "note" | "callout" | "zone";
 
-/** Runtime list of every valid {@link AnnotationKind}, for guard checks. */
-export const ANNOTATION_KINDS = [
-  "note",
-  "callout",
-  "zone",
-] as const satisfies readonly AnnotationKind[];
+/**
+ * Per-kind creation policy: the single source of truth for the human label, the
+ * default text and the default size used when a new annotation of a given kind
+ * is created. Consumers (the store's create helper, the Inspector label, the
+ * command palette's Add-* entries) all read from here so the three never drift.
+ */
+export interface AnnotationKindDefaults {
+  /** Human-facing label (Inspector heading, command titles). */
+  label: string;
+  /** Default `text` for a freshly created annotation of this kind. */
+  defaultText: string;
+  /** Default width (world units); zones get a sizeable backdrop, others none. */
+  defaultW?: number;
+  /** Default height (world units); zones get a sizeable backdrop, others none. */
+  defaultH?: number;
+}
 
-// Exhaustiveness guard (type-only): adding a kind to the union without adding
-// it to ANNOTATION_KINDS makes `MissingKinds` non-`never` and fails to compile.
-type MissingKinds = Exclude<AnnotationKind, (typeof ANNOTATION_KINDS)[number]>;
-type _AssertNoMissingKinds = MissingKinds extends never ? true : never;
-const _assertAllKindsCovered: _AssertNoMissingKinds = true;
-void _assertAllKindsCovered;
+/**
+ * The per-kind defaults table — the authoritative map keyed by
+ * {@link AnnotationKind}. Adding a new kind to the union forces a new entry here
+ * (the `Record` is exhaustive), which in turn flows to {@link ANNOTATION_KINDS}
+ * and every consumer.
+ */
+export const ANNOTATION_KIND_DEFAULTS: Record<AnnotationKind, AnnotationKindDefaults> = {
+  note: { label: "Note", defaultText: "Note" },
+  callout: { label: "Callout", defaultText: "Callout" },
+  // Zones default to a sizeable region (they sit behind nodes as a backdrop).
+  zone: { label: "Zone", defaultText: "Zone", defaultW: 360, defaultH: 240 },
+};
+
+/** Runtime list of every valid {@link AnnotationKind}, derived from the table. */
+export const ANNOTATION_KINDS = Object.keys(ANNOTATION_KIND_DEFAULTS) as AnnotationKind[];
 
 const ANNOTATION_KIND_SET: ReadonlySet<string> = new Set(ANNOTATION_KINDS);
 
@@ -183,6 +202,57 @@ export function clampAnnotation(a: Annotation): Annotation {
   return next;
 }
 
+// ---- array-level ops -------------------------------------------------------
+// The primitives below operate on an `Annotation[]` directly so callers that
+// already hold an annotation slice (e.g. the canvas store) don't have to wrap
+// it in a throwaway graph. The graph-shaped helpers further down are thin
+// adapters over these — behaviour is identical.
+
+/**
+ * Add `annotation` to `list`, returning a NEW array. If an entry with the same
+ * id already exists it is replaced (upsert), keeping the layer free of
+ * duplicate ids. The annotation is clamped before insertion. The input array is
+ * never mutated.
+ */
+export function addTo(list: readonly Annotation[], annotation: Annotation): Annotation[] {
+  const clamped = clampAnnotation(annotation);
+  const idx = list.findIndex((a) => a.id === clamped.id);
+  const next = list.slice();
+  if (idx >= 0) {
+    next[idx] = clamped;
+  } else {
+    next.push(clamped);
+  }
+  return next;
+}
+
+/**
+ * Apply a partial patch to the entry with the given `id`, returning a NEW array.
+ * `id` itself cannot be changed. A no-op (returns a fresh copy) when the id is
+ * not found. The patched annotation is clamped. The input array is never mutated.
+ */
+export function updateIn(
+  list: readonly Annotation[],
+  id: string,
+  patch: Partial<Omit<Annotation, "id">>,
+): Annotation[] {
+  const idx = list.findIndex((a) => a.id === id);
+  if (idx < 0) return list.slice();
+  const next = list.slice();
+  next[idx] = clampAnnotation({ ...list[idx], ...patch, id });
+  return next;
+}
+
+/**
+ * Remove the entry with the given `id`, returning a NEW array. A no-op (returns
+ * a fresh copy) when the id is not found. The input array is never mutated.
+ */
+export function removeFrom(list: readonly Annotation[], id: string): Annotation[] {
+  return list.filter((a) => a.id !== id);
+}
+
+// ---- graph-shaped ops (thin adapters over the array-level ops) -------------
+
 /**
  * Add an annotation. Returns a NEW graph. If an annotation with the same id
  * already exists it is replaced (upsert), keeping the layer free of duplicate
@@ -192,16 +262,7 @@ export function addAnnotation(
   graph: InfrastructureGraph,
   annotation: Annotation,
 ): InfrastructureGraph {
-  const clamped = clampAnnotation(annotation);
-  const current = listAnnotations(graph);
-  const idx = current.findIndex((a) => a.id === clamped.id);
-  const next = current.slice();
-  if (idx >= 0) {
-    next[idx] = clamped;
-  } else {
-    next.push(clamped);
-  }
-  return withAnnotations(graph, next);
+  return withAnnotations(graph, addTo(listAnnotations(graph), annotation));
 }
 
 /**
@@ -214,13 +275,7 @@ export function updateAnnotation(
   id: string,
   patch: Partial<Omit<Annotation, "id">>,
 ): InfrastructureGraph {
-  const current = listAnnotations(graph);
-  const idx = current.findIndex((a) => a.id === id);
-  if (idx < 0) return withAnnotations(graph, current);
-  const merged: Annotation = clampAnnotation({ ...current[idx], ...patch, id });
-  const next = current.slice();
-  next[idx] = merged;
-  return withAnnotations(graph, next);
+  return withAnnotations(graph, updateIn(listAnnotations(graph), id, patch));
 }
 
 /**
@@ -228,7 +283,5 @@ export function updateAnnotation(
  * (equivalent new graph) when the id is not found.
  */
 export function removeAnnotation(graph: InfrastructureGraph, id: string): InfrastructureGraph {
-  const current = listAnnotations(graph);
-  const next = current.filter((a) => a.id !== id);
-  return withAnnotations(graph, next);
+  return withAnnotations(graph, removeFrom(listAnnotations(graph), id));
 }

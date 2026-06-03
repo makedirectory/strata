@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFlow } from "../hooks/useFlow";
 import { searchServices, serviceIcon } from "../aws/registry";
+import { ANNOTATION_KIND_DEFAULTS, type AnnotationKind } from "../aws/annotations";
 import { collectTagKeys } from "../aws/tags";
 import { detectFixes } from "../aws/autofix";
 import { PALETTE_ADD_EVENT } from "./Palette";
@@ -18,6 +19,18 @@ interface Command {
   /** Mutates the model — hidden while presentation / read-only mode is on. */
   editing?: boolean;
 }
+
+/**
+ * Annotation kinds offered in the palette's Add-* commands, in display order,
+ * each with the glyph hint shown beside it. The command title/label is derived
+ * from {@link ANNOTATION_KIND_DEFAULTS}, so the three entries are generated
+ * (not hand-copied) from one mapping.
+ */
+const ANNOTATION_ADD_ENTRIES: ReadonlyArray<{ kind: AnnotationKind; hint: string }> = [
+  { kind: "note", hint: "🗒️" },
+  { kind: "zone", hint: "▢" },
+  { kind: "callout", hint: "💬" },
+];
 
 /**
  * ⌘K command palette — the keyboard-driven hub for actions, adding services,
@@ -214,30 +227,16 @@ export const CommandPalette: React.FC = () => {
         group: "Edit",
         run: flow.openStartHub,
       },
-      {
-        id: "ann-note",
-        title: "Add note",
-        group: "Edit",
-        run: () => flow.addAnnotationOfKind("note"),
-        editing: true,
-        hint: "🗒️",
-      },
-      {
-        id: "ann-zone",
-        title: "Add zone",
-        group: "Edit",
-        run: () => flow.addAnnotationOfKind("zone"),
-        editing: true,
-        hint: "▢",
-      },
-      {
-        id: "ann-callout",
-        title: "Add callout",
-        group: "Edit",
-        run: () => flow.addAnnotationOfKind("callout"),
-        editing: true,
-        hint: "💬",
-      },
+      ...ANNOTATION_ADD_ENTRIES.map(
+        ({ kind, hint }): Command => ({
+          id: `ann-${kind}`,
+          title: `Add ${ANNOTATION_KIND_DEFAULTS[kind].label.toLowerCase()}`,
+          group: "Edit",
+          run: () => flow.addAnnotationOfKind(kind),
+          editing: true,
+          hint,
+        }),
+      ),
       { id: "undo", title: "Undo", group: "Edit", run: flow.undo, editing: true },
       { id: "redo", title: "Redo", group: "Edit", run: flow.redo, editing: true },
       { id: "clear", title: "Clear canvas", group: "Edit", run: flow.clear, editing: true },

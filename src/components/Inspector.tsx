@@ -6,7 +6,7 @@ import { REGIONS } from "../aws/regions";
 import { RELATIONSHIPS, RELATIONSHIP_ORDER } from "../aws/categories";
 import type { ConfigField, RelationshipKind } from "../aws/types";
 import type { ResourceInstance } from "../aws/model";
-import type { Annotation } from "../aws/annotations";
+import { ANNOTATION_KIND_DEFAULTS, type Annotation } from "../aws/annotations";
 import type { ValidationResult, RuleSuggestion } from "../aws/rules";
 
 export const Inspector: React.FC = () => {
@@ -115,12 +115,6 @@ const EdgeForm: React.FC<{
   );
 };
 
-const ANNOTATION_KIND_LABEL: Record<Annotation["kind"], string> = {
-  note: "Note",
-  callout: "Callout",
-  zone: "Zone",
-};
-
 /** Inspector form for a selected annotation: edit its text + colour, delete it. */
 const AnnotationForm: React.FC<{
   annotation: Annotation;
@@ -135,7 +129,7 @@ const AnnotationForm: React.FC<{
     <div className="section">
       <div className="kv">
         <div>Type</div>
-        <div>{ANNOTATION_KIND_LABEL[annotation.kind]}</div>
+        <div>{ANNOTATION_KIND_DEFAULTS[annotation.kind].label}</div>
 
         <label htmlFor={textId}>Text</label>
         <div>
