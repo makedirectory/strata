@@ -181,6 +181,11 @@ const num = (r: ResourceInstance, k: string, def: number): number => {
   return def;
 };
 
+/** Read a numeric config value, floored at 0 — for storage/size/replica dimensions
+ *  that multiply cost, so a stray negative can't drag a resource (or the total)
+ *  below zero. */
+const nonNeg = (r: ResourceInstance, k: string, def: number): number => Math.max(0, num(r, k, def));
+
 const lookup = (table: Record<string, number>, key: string | undefined, fallback: number): number =>
   (key ? table[key] : undefined) ?? fallback;
 
@@ -204,12 +209,12 @@ export function estimateMonthlyCost(r: ResourceInstance): number | null {
     case "rds": {
       const perInstance = lookup(RDS_BY_CLASS, str(r, "instanceClass"), BASE_MONTHLY["rds"]);
       const azFactor = r.config["multiAz"] === true ? 2 : 1;
-      const storage = num(r, "allocatedStorage", 20) * RDS_STORAGE_GB;
+      const storage = nonNeg(r, "allocatedStorage", 20) * RDS_STORAGE_GB;
       return perInstance * azFactor + storage;
     }
     case "aurora": {
       const perInstance = lookup(RDS_BY_CLASS, str(r, "instanceClass"), 100);
-      return perInstance * (num(r, "replicaCount", 1) + 1); // writer + replicas
+      return perInstance * (nonNeg(r, "replicaCount", 1) + 1); // writer + replicas
     }
     case "documentdb": {
       const perInstance = lookup(RDS_BY_CLASS, str(r, "instanceClass"), BASE_MONTHLY["documentdb"]);
@@ -224,13 +229,13 @@ export function estimateMonthlyCost(r: ResourceInstance): number | null {
       return (
         lookup(CACHE_BY_TYPE, str(r, "nodeType"), BASE_MONTHLY["memorydb"]) *
         Math.max(1, num(r, "numShards", 1)) *
-        (num(r, "replicasPerShard", 1) + 1)
+        (nonNeg(r, "replicasPerShard", 1) + 1)
       );
 
     case "ebs-volume":
-      return num(r, "sizeGiB", 100) * lookup(EBS_GB_BY_TYPE, str(r, "volumeType"), 0.08);
+      return nonNeg(r, "sizeGiB", 100) * lookup(EBS_GB_BY_TYPE, str(r, "volumeType"), 0.08);
     case "fsx":
-      return num(r, "storageCapacityGiB", 1200) * 0.14;
+      return nonNeg(r, "storageCapacityGiB", 1200) * 0.14;
 
     case "gcp-compute-engine":
       return lookup(GCP_VM_BY_TYPE, str(r, "machineType"), BASE_MONTHLY["gcp-compute-engine"]);

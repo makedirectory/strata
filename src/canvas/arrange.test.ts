@@ -78,6 +78,21 @@ describe("arrangeTiered", () => {
     expect(out).toHaveLength(3);
   });
 
+  it("keeps the acyclic part in dependency order despite a back-edge", () => {
+    // a → b → c → d with a back-edge d → b. b/c/d are NOT in a true cycle from
+    // the flow's perspective except via the back-edge; breaking it must keep
+    // a < b < c < d left-to-right rather than collapsing c,d to tier 0.
+    const out = arrangeTiered(
+      [res("a"), res("b"), res("c"), res("d")],
+      [rel("a", "b"), rel("b", "c"), rel("c", "d"), rel("d", "b")],
+      isContainer,
+    );
+    const x = new Map(out.map((p) => [p.id, p.x]));
+    expect(x.get("a")!).toBeLessThan(x.get("b")!);
+    expect(x.get("b")!).toBeLessThan(x.get("c")!);
+    expect(x.get("c")!).toBeLessThan(x.get("d")!);
+  });
+
   it("grid-packs disconnected roots below the layered block", () => {
     // a→b are layered at the top; x,y,z are isolated and packed below them.
     const out = arrangeTiered(

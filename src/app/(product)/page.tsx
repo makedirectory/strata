@@ -1174,10 +1174,12 @@ function ExportDialog() {
 
   const download = () => {
     const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = filename;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0); // don't leak the object URL
   };
   const copy = () => {
     void navigator.clipboard?.writeText(content);

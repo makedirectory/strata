@@ -330,17 +330,35 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       });
     } else {
       // AWS requires an ALB to have subnets in at least two Availability Zones.
-      // Distinct AZs come from the subnet `az` config; subnets with no az are
-      // each treated as a distinct (unknown) zone so we don't under-count, but
-      // a single subnet can never satisfy the multi-AZ requirement.
-      const azs = new Set<string>();
-      publicSubs.forEach((s, i) => azs.add(cfgStr(s, "az") ?? `__unknown_${i}__`));
-      if (azs.size < 2) {
-        out.push({
-          level: "error",
-          message: `Load Balancer "${alb.name}" must have public Subnets in at least 2 Availability Zones.`,
-          resourceId: alb.id,
-        });
+      // Only count subnets that actually declare an `az`. If two or more known
+      // AZs are present we're satisfied; if some subnets declare an az but fewer
+      // than two distinct ones, that's a hard error; if NO public subnet models
+      // an az at all (common in imports), we can't verify it — warn rather than
+      // silently pass (the old code synthesised a unique az per subnet, which let
+      // a same-AZ pair pass).
+      const knownAzs = new Set<string>();
+      let anyAz = false;
+      publicSubs.forEach((s) => {
+        const az = cfgStr(s, "az");
+        if (az) {
+          anyAz = true;
+          knownAzs.add(az);
+        }
+      });
+      if (knownAzs.size < 2) {
+        out.push(
+          anyAz
+            ? {
+                level: "error",
+                message: `Load Balancer "${alb.name}" must have public Subnets in at least 2 Availability Zones.`,
+                resourceId: alb.id,
+              }
+            : {
+                level: "warn",
+                message: `Cannot verify that Load Balancer "${alb.name}" spans ≥2 Availability Zones — no public Subnet declares an \`az\`.`,
+                resourceId: alb.id,
+              },
+        );
       }
     }
     const tg = outgoing(alb.id, "targets")
@@ -491,8 +509,10 @@ export function validateArchitecture(graph: InfrastructureGraph): ValidationResu
       for (const p of SENSITIVE_PORTS) if (p >= lo && p <= hi) return true;
       return false;
     }
+    // A comma list may mix bare ports and ranges (e.g. "80,3306-3307"); evaluate
+    // each member as a full token so range members aren't silently dropped.
     if (token.includes(",")) {
-      return token.split(",").some((t) => /^\d+$/.test(t) && SENSITIVE_PORTS.has(Number(t)));
+      return token.split(",").some((t) => portTokenIsSensitive(t.trim()));
     }
     return false;
   };
