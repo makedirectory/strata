@@ -17,6 +17,7 @@ import type { CloudProvider } from "../../aws/types";
 import { runDiscovery, runGcpDiscovery, runAzureDiscovery } from "../../lib/api";
 import { EXAMPLES } from "../../examples";
 import { CostComingSoon } from "../../components/ComingSoon";
+import { useDialogA11y } from "../../components/useDialogA11y";
 
 /** Built-in coded starter templates (loadPreset ids) shown in the Start hub. */
 const TEMPLATES: { id: string; label: string; icon: string; desc: string }[] = [
@@ -837,16 +838,18 @@ const TOUR_STEPS: { icon: string; title: string; body: React.ReactNode }[] = [
  *  re-launchable from the top bar). The final step hands off to the Start hub. */
 function Tour() {
   const { tourOpen, tourStep, closeTour, setTourStep, openStartHub } = useFlow();
+  // Focus management, Tab-trap, Escape-to-close, and background inert.
+  const tourRef = useDialogA11y<HTMLDivElement>(tourOpen, closeTour);
+  // Arrow keys step the tour (Escape/Tab handled by useDialogA11y).
   React.useEffect(() => {
     if (!tourOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeTour();
       if (e.key === "ArrowRight") setTourStep(Math.min(TOUR_STEPS.length - 1, tourStep + 1));
       if (e.key === "ArrowLeft") setTourStep(tourStep - 1);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [tourOpen, tourStep, closeTour, setTourStep]);
+  }, [tourOpen, tourStep, setTourStep]);
 
   if (!tourOpen) return null;
   const step = TOUR_STEPS[Math.min(tourStep, TOUR_STEPS.length - 1)];
@@ -859,6 +862,7 @@ function Tour() {
         role="dialog"
         aria-modal="true"
         aria-label="Getting started"
+        ref={tourRef}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button className="hub-close" onClick={closeTour} aria-label="Close">
@@ -924,24 +928,7 @@ function StartHub() {
     openConnect,
     state,
   } = useFlow();
-  const dialogRef = React.useRef<HTMLDivElement>(null);
-  const prevFocusRef = React.useRef<HTMLElement | null>(null);
-
-  React.useEffect(() => {
-    if (!startHubOpen) return;
-    prevFocusRef.current = document.activeElement as HTMLElement | null;
-    requestAnimationFrame(() => {
-      dialogRef.current?.querySelector<HTMLElement>("button, [tabindex]")?.focus();
-    });
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeStartHub();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      prevFocusRef.current?.focus?.();
-    };
-  }, [startHubOpen, closeStartHub]);
+  const dialogRef = useDialogA11y<HTMLDivElement>(startHubOpen, closeStartHub);
 
   if (!startHubOpen) return null;
   const hasGraph = state.resources.length > 0;
@@ -1102,14 +1089,9 @@ function StartHub() {
  *  Renders above the hub. */
 function ReplaceConfirmDialog() {
   const { replaceConfirmOpen, resolveReplaceConfirm } = useFlow();
-  React.useEffect(() => {
-    if (!replaceConfirmOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") resolveReplaceConfirm("cancel");
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [replaceConfirmOpen, resolveReplaceConfirm]);
+  const ref = useDialogA11y<HTMLDivElement>(replaceConfirmOpen, () =>
+    resolveReplaceConfirm("cancel"),
+  );
 
   if (!replaceConfirmOpen) return null;
   return (
@@ -1122,6 +1104,7 @@ function ReplaceConfirmDialog() {
         role="alertdialog"
         aria-modal="true"
         aria-label="Unsaved changes"
+        ref={ref}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="confirm-title">Replace the current diagram?</div>
@@ -1152,16 +1135,12 @@ function ExportDialog() {
   const { exportIaCOpen, closeExportIaC, snapshotGraph } = useFlow();
   const [format, setFormat] = React.useState<ExportFormat>("cloudformation-yaml");
   const [copied, setCopied] = React.useState(false);
+  const ref = useDialogA11y<HTMLDivElement>(exportIaCOpen, closeExportIaC);
 
+  // Reset the "Copied" affordance whenever the dialog opens or the format changes.
   React.useEffect(() => {
-    if (!exportIaCOpen) return;
-    setCopied(false);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeExportIaC();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [exportIaCOpen, closeExportIaC, format]);
+    if (exportIaCOpen) setCopied(false);
+  }, [exportIaCOpen, format]);
 
   // Recompute only while open and when the format changes.
   const result = React.useMemo(
@@ -1191,6 +1170,7 @@ function ExportDialog() {
         role="dialog"
         aria-modal="true"
         aria-label="Export to IaC"
+        ref={ref}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="hub-header">
@@ -1340,14 +1320,7 @@ function ConnectDialog() {
     setFilter("");
   }, [provider]);
 
-  React.useEffect(() => {
-    if (!connectOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeConnect();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [connectOpen, closeConnect]);
+  const dialogRef = useDialogA11y<HTMLDivElement>(connectOpen, closeConnect);
 
   if (!connectOpen) return null;
 
@@ -1460,6 +1433,7 @@ function ConnectDialog() {
         role="dialog"
         aria-modal="true"
         aria-label="Connect to cloud"
+        ref={dialogRef}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="hub-header">

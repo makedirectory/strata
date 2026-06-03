@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useFlow } from "../hooks/useFlow";
 import { searchServices, serviceIcon } from "../aws/registry";
 import { PALETTE_ADD_EVENT } from "./Palette";
+import { useDialogA11y } from "./useDialogA11y";
 
 interface Command {
   id: string;
@@ -30,6 +31,9 @@ export const CommandPalette: React.FC = () => {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Tab-trap + focus restore + background inert (Escape/focus-in already handled
+  // by this component's own logic, and remain idempotent).
+  const dialogRef = useDialogA11y<HTMLDivElement>(open, () => setOpen(false));
 
   const close = useCallback(() => {
     setOpen(false);
@@ -343,6 +347,7 @@ export const CommandPalette: React.FC = () => {
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        ref={dialogRef}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <input
