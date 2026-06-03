@@ -1359,6 +1359,43 @@ svg.guides {
   flex: 0 0 auto;
 }
 
+/* Version-history rows */
+.version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid #203055;
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--text);
+}
+.version-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.version-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.version-actions button {
+  background: #17213a;
+  color: var(--text);
+  border: 1px solid #223055;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.version-actions button:hover {
+  background: #1b2644;
+}
+
 .drift {
   position: absolute;
   top: 12px;

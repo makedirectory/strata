@@ -27,6 +27,7 @@ import {
 // hosted app runs on a read-only serverless filesystem. JSON export/import is
 // the way to move a diagram between browsers.
 import { listGraphs, getGraph, createGraph, updateGraph, deleteGraph } from "../lib/localStore";
+import { saveSnapshot, getSnapshot } from "../lib/snapshots";
 import type { GraphSummary } from "../aws/model";
 import { importAnyIaC } from "../lib/importIac";
 import { getExample } from "../examples";
@@ -307,6 +308,13 @@ interface FlowContextValue {
   compareWithSaved: (id: string) => void;
   clearDrift: () => void;
   driftMarkers: { id: string; x: number; y: number; status: "added" | "changed" }[];
+  /** Local version history (snapshots): dialog state + save/restore/compare. */
+  versionsOpen: boolean;
+  openVersions: () => void;
+  closeVersions: () => void;
+  saveVersion: (label?: string) => void;
+  restoreVersion: (id: string) => void;
+  compareWithVersion: (id: string, label: string) => void;
   /** Structured rule suggestions, or `null` before the first run. */
   ruleSuggestions: RuleSuggestion[] | null;
   status: string;
@@ -1653,6 +1661,55 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [runDiff],
   );
 
+  // ---- Local version history (snapshots) ----------------------------------
+  const [versionsOpen, setVersionsOpen] = React.useState(false);
+  const openVersions = useCallback(() => setVersionsOpen(true), []);
+  const closeVersions = useCallback(() => setVersionsOpen(false), []);
+
+  /** Snapshot the current diagram into the local version ring. */
+  const saveVersion = useCallback(
+    (label?: string) => {
+      const meta = saveSnapshot(buildGraph(), label ?? "");
+      setStatus(`Saved version "${meta.label}".`);
+    },
+    [buildGraph],
+  );
+
+  /** Restore a saved version onto the canvas (guarded if there are unsaved edits). */
+  const restoreVersion = useCallback(
+    async (id: string) => {
+      const snap = getSnapshot(id);
+      if (!snap) {
+        setStatus("That version is no longer available.");
+        return;
+      }
+      if (!(await confirmReplaceIfDirty())) return;
+      storeReplaceAll({
+        resources: snap.resources,
+        relationships: snap.relationships,
+        accounts: snap.accounts ?? [],
+        graphId: "",
+      });
+      setVersionsOpen(false);
+      setStatus(`Restored version (${snap.resources.length} resource(s)).`);
+    },
+    [confirmReplaceIfDirty, storeReplaceAll],
+  );
+
+  /** Compare the current diagram against a saved version (non-destructive). */
+  const compareWithVersion = useCallback(
+    (id: string, label: string) => {
+      const snap = getSnapshot(id);
+      if (!snap) {
+        setStatus("That version is no longer available.");
+        return;
+      }
+      setVersionsOpen(false);
+      runDiff(snap, label);
+    },
+    [runDiff],
+  );
+
   // ---- Save / load (browser-local) ----------------------------------------
   const saveGraph = useCallback(async () => {
     try {
@@ -2120,6 +2177,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       closeCompare,
       compareWithFile,
       compareWithSaved,
+      versionsOpen,
+      openVersions,
+      closeVersions,
+      saveVersion,
+      restoreVersion,
+      compareWithVersion,
       clearDrift,
       driftMarkers,
       ruleSuggestions,
@@ -2236,6 +2299,12 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       closeCompare,
       compareWithFile,
       compareWithSaved,
+      versionsOpen,
+      openVersions,
+      closeVersions,
+      saveVersion,
+      restoreVersion,
+      compareWithVersion,
       clearDrift,
       driftMarkers,
       ruleSuggestions,
