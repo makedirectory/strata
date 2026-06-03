@@ -47,23 +47,29 @@ export const CostComingSoon: React.FC = () => {
                 ✕
               </button>
               <div className="soon-badge">Coming soon</div>
-              <h2 className="soon-title">Cost optimization</h2>
+              <h2 className="soon-title">Know what it costs — and how to pay less</h2>
               <p className="soon-body">
-                The current overlay is a rough, us-east-1 estimate. We&rsquo;re exploring deeper
-                cost analysis:
+                Today&rsquo;s number is a rough estimate. We want to turn it into a real cost
+                cockpit, right on your canvas:
               </p>
               <ul className="soon-list">
-                <li>Region-aware, usage-based pricing (hours, storage, requests)</li>
-                <li>Rightsizing &amp; idle-resource recommendations</li>
-                <li>Reserved / savings-plan and commitment awareness</li>
-                <li>Per-environment and per-account roll-ups</li>
+                <li>Accurate prices for your actual regions and usage — not a flat guess</li>
+                <li>
+                  &ldquo;You&rsquo;re overpaying here&rdquo; — idle and oversized resources flagged,
+                  with a cheaper size suggested
+                </li>
+                <li>
+                  Catch the savings you&rsquo;re missing — when a Reserved Instance or Savings Plan
+                  would pay off
+                </li>
+                <li>
+                  See a change&rsquo;s cost impact <em>before</em> you build it, and roll spend up
+                  by environment or team
+                </li>
               </ul>
               <p className="soon-body">
-                This will be powered by connecting Strata to <strong>Loop</strong>, our Quantum
-                Feedback System: it forecasts spend and proposes scored, reversible interventions
-                per resource — overlaid right here on the canvas, behind approval gates and a kill
-                switch. Strata stays the open-source world model; the optimization runs in Loop. The
-                forecasting and recommendation engine is part of Loop and never ships inside Strata.
+                Forecasts and money-saving fixes appear right on the diagram — each one safe to
+                preview and reversible, so you stay in control. Want this?
               </p>
               {registered ? (
                 <p className="soon-thanks">Thanks — we&rsquo;ve noted your interest. ✓</p>

@@ -23,9 +23,9 @@ cases. Check them in order:
 
 1. **No resource types selected.** The header reads **Resource types (0
    selected)**. Tick at least one type, or click **Select all**.
-2. **The required scope is empty.** AWS needs at least one region; **GCP** needs a
-   project/folder/organization; **Azure** needs a subscription id. Fill the
-   provider's scope field.
+2. **The required scope is empty.** **GCP** needs a project/folder/organization and
+   **Azure** needs a subscription id — fill the provider's scope field. (AWS Region
+   defaults to `us-east-1`, so it never disables Discover.)
 3. **A scan is already running.** The button reads **Scanning…**. Wait for it to
    finish.
 4. **Hosted install with no credentials (or no live scan for that provider).** On

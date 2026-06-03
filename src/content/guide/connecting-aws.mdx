@@ -159,6 +159,14 @@ anything touches your canvas:
 Then choose **Merge into canvas** or **Replace canvas** (swap in the discovered
 set, with an unsaved-changes guard).
 
+**Merge previews before it applies.** Choosing **Merge into canvas** opens a
+**Review merge** dialog _before anything changes_: it summarises what the merge
+will do — counts of **+N new**, **~N updated**, **N unchanged**, and **N kept**
+(resources already on your canvas that the scan didn't cover) — and lists the new
+and changed resources (with which configuration fields differ). Confirm with
+**Apply merge**, or back out with **Cancel**. (**Replace canvas** applies
+immediately, subject to the unsaved-work guard.)
+
 **Merge reconciles — it doesn't duplicate.** A merged resource that already
 exists in your diagram (matched by its **ARN**, or otherwise by service type +
 name) is **updated in place**: its configuration is refreshed from the scan while

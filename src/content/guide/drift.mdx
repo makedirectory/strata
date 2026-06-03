@@ -20,7 +20,8 @@ Use it to answer questions like:
 
 ## Run a comparison
 
-1. Open the **File ▾** menu and choose **Compare for drift…**. A picker opens.
+1. Open the **Data ▾** menu and choose **Compare for drift…** (also in the ⌘K
+   command palette). A picker opens.
 2. Choose a **baseline** to compare against — either:
    - **A saved diagram** — any diagram saved in this browser (great for comparing
      against an earlier version of the same design); or
@@ -28,8 +29,8 @@ Use it to answer questions like:
      - **Strata JSON** — a diagram exported with **Export JSON** (any file with a
        `resources` array is treated as a native graph); or
      - **Infrastructure-as-Code** — CloudFormation (`.json`, `.yaml`, `.yml`,
-       `.template`), an Azure ARM template, or Terraform (`.tf`, `.tfstate`).
-       These run through the same importer as
+       `.template`), an Azure ARM template, or Terraform / OpenTofu (`.tf`,
+       `.tofu`, `.tfstate`). These run through the same importer as
        [Importing IaC](/docs/guide/importing-iac).
 3. Strata diffs the baseline against the current canvas and opens the **drift
    results** panel.

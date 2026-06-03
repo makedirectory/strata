@@ -64,13 +64,16 @@ encodings, which keeps it pure and predictable.
 
 The engine is wired through the flow store and rendered over the canvas:
 
-1. **`useFlow`** (`src/hooks/useFlow.tsx`) exposes `compareWithFile` and
-   `clearDrift`. `compareWithFile` opens a file picker
-   (`.json,.yaml,.yml,.tf,.tfstate,.template`); JSON with a `resources` array is
-   treated as a native graph, otherwise it runs through `importAnyIaC` (the same
-   path as [IaC import](/docs/architecture/iac-import)). It then calls
-   `diffGraphs(buildGraph(), baseline)` and stores `driftResult` +
-   `driftBaselineName`.
+1. **`useFlow`** (`src/hooks/useFlow.tsx`) exposes three compare entry points, all
+   converging on a shared `runDiff(baseline, name)`: `compareWithFile` (a file
+   picker, accept `.json,.yaml,.yml,.tf,.tofu,.tfstate,.template` — `.tofu` is
+   OpenTofu), `compareWithSaved(id)` (another diagram saved in this browser), and
+   `compareWithVersion(id, label)` (a version-history snapshot). JSON with a
+   `resources` array is a native graph; otherwise it runs through `importAnyIaC`
+   (the same path as [IaC import](/docs/architecture/iac-import)). `runDiff` calls
+   `diffGraphs(buildGraph(), baseline)`, stores `driftResult` +
+   `driftBaselineName`, and captures `driftCost` (current vs baseline monthly
+   estimate). `clearDrift` resets it.
 2. A **`driftMarkers`** memo maps `added` and `changed` refs to canvas positions
    (from the layout rects), tagging each `"added"` or `"changed"`.
 3. The **Canvas** (`src/components/Canvas.tsx`) renders an SVG overlay — using the
@@ -78,7 +81,10 @@ The engine is wired through the flow store and rendered over the canvas:
    — dotting drifted nodes green (added) or amber (changed).
 4. The **DriftPanel** (in the product page) lists counts and the added / changed /
    removed entries; clicking one calls `goToResource`. Removed resources have no
-   node on the canvas, so they appear only in the panel.
+   node on the canvas, so they appear only in the panel. It also renders an
+   **Est. cost** row from `driftCost` — the baseline vs current rough monthly
+   figure (from [`src/aws/cost.ts`](/docs/architecture/index)) with a signed delta
+   (▲ + / ▼ − / no change), so a comparison answers "what does this change cost?".
 
 ## Testing
 

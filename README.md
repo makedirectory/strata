@@ -2,6 +2,8 @@
 
 **Live app: [strata.mk-dir.com](https://strata.mk-dir.com/)**
 
+![Strata — a multi-cloud architecture diagram with the service palette, layers/overlays, inspector, validation, and cost estimate](assets/strata-example.png)
+
 A registry-driven canvas for **modeling cloud infrastructure as a typed graph**.
 Drag services onto a canvas, configure them with auto-generated forms, and connect
 them with typed relationships (`contains`, `routes_to`, `invokes`, `peers_with`, …)

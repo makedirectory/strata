@@ -46,6 +46,16 @@ list:
 - **Cost estimation.** `src/aws/cost.ts` puts a rough monthly figure on the
   design (per-node badges + a toolbar total), refined by size/count/multi-AZ/
   storage for the big-ticket services. Deliberately a heuristic, not a forecast.
+- **Local version history.** `src/lib/snapshots.ts` keeps a bounded `localStorage`
+  ring of full-graph snapshots (Data ▾ → "Version history…"): save, restore, and
+  use any snapshot as a drift/cost baseline via `compareWithVersion`
+  (`src/hooks/useFlow.tsx`). The cross-device/durable version is gated on the
+  sharing backend.
+- **Accessible canvas navigation.** `src/components/AccessibleNodes.tsx` plus the
+  pure `src/canvas/navGrid.ts` (`readingOrder` / `nextInDirection`) expose the
+  imperatively-rendered canvas to keyboard and screen-reader users (roving
+  tabindex, spatial arrow keys). See the user-facing
+  [Keyboard & Commands](/docs/guide/shortcuts) guide.
 
 ## Still open
 
@@ -63,9 +73,13 @@ incoming resources are added; unmatched base resources are left untouched (a
 partial scan never deletes). The "Merge" discovery/import path routes through it,
 so re-scanning reconciles instead of duplicating.
 
+A **merge preview** now also ships: the discovery/import "Merge" path stages the
+incoming graph and shows a before-apply summary of what will be added / updated /
+unchanged / kept (`mergePreview` derived via `diffGraphs` in `useFlow.tsx`,
+`confirmMerge`/`cancelMerge`, rendered by `MergePreviewDialog`).
+
 **Still next:** make ARN a first-class stable external key end-to-end (e.g. server
-storage keyed on it), and a merge **preview** so users can review updates before
-applying.
+storage keyed on it).
 
 ### 2. Overlays are topology, not policy
 

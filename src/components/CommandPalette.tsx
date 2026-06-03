@@ -203,7 +203,7 @@ export const CommandPalette: React.FC = () => {
       { id: "export", title: "Export JSON", group: "Tools", run: flow.exportJSON },
       {
         id: "export-iac",
-        title: "Export to IaC (Terraform / CloudFormation)",
+        title: "Export to IaC (Terraform / OpenTofu / CloudFormation)",
         group: "Tools",
         run: flow.openExportIaC,
       },
@@ -216,7 +216,7 @@ export const CommandPalette: React.FC = () => {
       },
       {
         id: "import-iac",
-        title: "Import IaC (Terraform / CloudFormation)",
+        title: "Import IaC (Terraform / OpenTofu / CloudFormation / ARM)",
         group: "Tools",
         run: flow.importIaCDialog,
         editing: true,
