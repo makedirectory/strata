@@ -357,66 +357,55 @@ function ValidationAndRules({
   return (
     <>
       <div className="section">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="ins-panel-head">
           <strong>Validation</strong>
-          <button onClick={runValidateUI} style={{ padding: "6px 10px" }}>
+          <button onClick={runValidateUI} className="ins-run">
             Run
           </button>
         </div>
-        <div id="validationOut" style={{ marginTop: 8, fontSize: 13 }}>
+        <div id="validationOut" className="ins-results">
           {validationResults === null ? null : validationResults.length === 0 ? (
-            <span style={{ color: "var(--green)" }}>No issues found.</span>
+            <span className="no-issues">No issues found.</span>
           ) : (
             validationResults.map((r, i) => (
-              <div key={i} className="mt-1" style={{ marginTop: 4 }}>
+              <div key={i} className="mt-1">
                 <span
                   className="badge"
                   style={{ borderColor: levelColor(r.level), color: levelColor(r.level) }}
                 >
                   {r.level}
                 </span>
-                <span className="ml-1" style={{ marginLeft: 6 }}>
-                  {r.message}
-                </span>
+                <span className="finding-msg">{r.message}</span>
               </div>
             ))
           )}
         </div>
       </div>
       <div className="section">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="ins-panel-head">
           <strong>Rule Suggestions</strong>
-          <button onClick={runRulesUI} style={{ padding: "6px 10px" }}>
+          <button onClick={runRulesUI} className="ins-run">
             Generate
           </button>
         </div>
-        <div id="rulesOut" style={{ marginTop: 8, fontSize: 13 }}>
+        <div id="rulesOut" className="ins-results">
           {ruleSuggestions === null ? null : ruleSuggestions.length === 0 ? (
-            <span style={{ color: "var(--sub)" }}>
+            <span className="no-suggestions">
               No suggestions yet—add ALB/Service, Subnets, NACLs…
             </span>
           ) : (
             ruleSuggestions.map((block, i) => (
-              <div
-                key={i}
-                style={{
-                  margin: "6px 0 10px",
-                  padding: 8,
-                  border: "1px solid #223055",
-                  borderRadius: 10,
-                  background: "#0d1831",
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>
-                  {block.type} — <span style={{ color: "#a5b4fc" }}>{block.scope}</span>
+              <div key={i} className="rule-block">
+                <div className="rule-block-title">
+                  {block.type} — <span className="rule-scope">{block.scope}</span>
                 </div>
-                <ul style={{ margin: "6px 0 0 16px" }}>
+                <ul className="rule-list">
                   {block.rules.map((rule, j) => (
                     <li key={j}>
                       {Object.entries(rule).map(([k, v], idx) => (
                         <React.Fragment key={k}>
                           {idx > 0 ? ", " : null}
-                          <span style={{ color: "#9fb3c8" }}>{k}</span>: {String(v)}
+                          <span className="rule-kv-key">{k}</span>: {String(v)}
                         </React.Fragment>
                       ))}
                     </li>
