@@ -458,7 +458,7 @@ function TopBar() {
         Docs ↗
       </a>
       <button className="topbar-link topbar-tour" onClick={openTour} title="Show the quick tour">
-        ? Tour
+        Intro
       </button>
       <div className="status" id="status">
         {status}

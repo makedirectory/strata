@@ -1341,6 +1341,8 @@ svg.guides {
   border-radius: 10px;
   padding: 8px 10px;
   cursor: pointer;
+  /* Without this the <button> default (black) text is unreadable on the dark card. */
+  color: var(--text);
 }
 .compare-item:hover {
   background: #17213a;
@@ -1445,9 +1447,16 @@ button.drift-item:hover {
 .valbadge {
   position: absolute;
   left: 16px;
-  bottom: 16px;
+  /* Sit above the on-canvas zoom controls (also bottom-left) so the two never
+     overlap. column-reverse keeps the chip at the bottom and opens the findings
+     list UPWARD, away from the zoom bar. */
+  bottom: 68px;
   z-index: 20;
   max-width: 400px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 8px;
 }
 .valbadge-chip {
   display: inline-flex;
@@ -1477,9 +1486,11 @@ button.drift-item:hover {
 }
 .valbadge-list {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 0;
   padding: 6px;
   max-height: 300px;
+  width: 400px;
+  max-width: 60vw;
   overflow: auto;
   background: #0c1426;
   border: 1px solid #223055;
@@ -1549,6 +1560,14 @@ button.drift-item:hover {
   background: var(--accent);
   color: #0b1220;
   border-color: var(--accent);
+}
+/* The generic `.topbar button:hover` darkens the background, which would leave
+   the active toggle's dark text unreadable — keep the teal fill + dark text on
+   hover (a brighter teal gives the hover affordance instead). */
+.toolbar-toggle.active:hover {
+  background: #6ee0d6;
+  color: #0b1220;
+  border-color: #6ee0d6;
 }
 
 /* ---- "Coming soon" prompt (interest capture) ---- */
