@@ -43,8 +43,9 @@ const ref = (r: ResourceInstance): DriftRef => ({
   serviceId: r.serviceId,
 });
 
-/** Stable cross-source identity: ARN if known, else serviceId + lowercased name. */
-function identityKey(r: ResourceInstance): string {
+/** Stable cross-source identity: ARN if known, else serviceId + lowercased name.
+ *  Shared with the merge/upsert engine so both match resources the same way. */
+export function identityKey(r: ResourceInstance): string {
   if (typeof r.arn === "string" && r.arn) return `arn:${r.arn}`;
   return `${r.serviceId}::${(r.name ?? "").trim().toLowerCase()}`;
 }

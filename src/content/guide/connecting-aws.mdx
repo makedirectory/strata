@@ -156,8 +156,16 @@ anything touches your canvas:
   that relationships aren't inferred — wire them up on the canvas.
 - Any per-scan **warnings**.
 
-Then choose **Merge into canvas** (add to the current diagram) or **Replace
-canvas** (swap in the discovered set, with an unsaved-changes guard).
+Then choose **Merge into canvas** or **Replace canvas** (swap in the discovered
+set, with an unsaved-changes guard).
+
+**Merge reconciles — it doesn't duplicate.** A merged resource that already
+exists in your diagram (matched by its **ARN**, or otherwise by service type +
+name) is **updated in place**: its configuration is refreshed from the scan while
+its **canvas position and any rename you've made are preserved**. Genuinely new
+resources are added; nothing you didn't scan is removed. So re-scanning the same
+account to pick up changes keeps a single, tidy diagram instead of piling up
+duplicate nodes.
 
 ## What discovery does and doesn't do
 

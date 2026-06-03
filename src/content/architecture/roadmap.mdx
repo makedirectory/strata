@@ -52,13 +52,20 @@ list:
 ### 1. Id strategy: UUID vs ARN coexistence
 
 Manually-created resources get server-assigned UUIDs (`randomUUID()`); imported
-resources have real ARNs. `ResourceInstance` carries both (`id` + optional `arn`),
-but there is no defined policy for de-duplication, re-import/merge, or stable
-identity across imports.
+resources have real ARNs. `ResourceInstance` carries both (`id` + optional `arn`).
 
-**Next:** define ARN as the stable external key, keep UUID as the internal id, and
-build a merge/upsert path so re-importing an AWS account updates existing resources
-instead of duplicating them.
+**Largely addressed:** a **merge/upsert path now exists** — `src/aws/merge.ts`
+(`mergeGraphs`) reconciles an incoming scan/import into the current graph, keyed
+on **ARN, else `serviceId` + name** (the same `identityKey` the drift engine
+uses). Matched resources are updated in place (config refreshed, canvas position
+
+- internal id + rename preserved); unmatched ones are added; nothing is removed.
+  The "Merge" discovery/import path routes through it, so re-scanning reconciles
+  instead of duplicating.
+
+**Still next:** make ARN a first-class stable external key end-to-end (e.g. server
+storage keyed on it), and a merge **preview** so users can review updates before
+applying.
 
 ### 2. Overlays are topology, not policy
 
