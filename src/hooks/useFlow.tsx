@@ -58,6 +58,11 @@ import {
   type OverlayLit,
 } from "../aws/overlays";
 import type { ServiceCategoryId } from "../aws/types";
+import { reviewAccount, type AccountReview } from "../aws/review";
+import { mapToCloud, type CloudMapResult } from "../aws/cloudMap";
+import { applyFix } from "../aws/autofix";
+import { tagTintMap } from "../aws/tags";
+import type { Annotation } from "../aws/annotations";
 import type { LayerState } from "./useFlowStore";
 
 /** Above this many resources the renderer culls to the viewport. */
@@ -149,6 +154,21 @@ interface FlowContextValue {
   goToResource: (id: string) => void;
   /** Select a node (Inspector detail) without moving the viewport. */
   selectNode: (id: string) => void;
+  /** Account review (Explain & Clean) derived from the current graph. */
+  review: AccountReview;
+  /** Latest multi-cloud mapping result (null until `mapToTarget` is run). */
+  cloudMap: CloudMapResult | null;
+  /** Current migration target provider (drives the MigratePanel picker). */
+  cloudMapTarget: CloudProvider | null;
+  /** Run `mapToCloud(buildGraph(), target)` and stash the result for the panel. */
+  mapToTarget: (target: CloudProvider) => void;
+  /** Apply one autofix (by Fixable id) as a single, undoable history entry. */
+  applyAutofix: (fixId: string) => void;
+  /** Presentation-only annotation layer on the current graph. */
+  annotations: Annotation[];
+  addAnnotation: (annotation: Annotation) => void;
+  updateAnnotation: (id: string, patch: Partial<Omit<Annotation, "id">>) => void;
+  removeAnnotation: (id: string) => void;
   /** Visible nodes projected for the accessible keyboard/screen-reader overlay. */
   a11yNodes: A11yNode[];
   /** Setter for the live search-match highlight (read by the renderer only). */
@@ -171,6 +191,9 @@ interface FlowContextValue {
   /** Active analytical overlay (Phase 6). */
   activeOverlay: OverlayKind;
   setActiveOverlay: (o: OverlayKind) => void;
+  /** Active tag key for the "tags" tint overlay (null = none). */
+  tagTintKey: string | null;
+  setTagTintKey: (key: string | null) => void;
   toggleCategory: (id: ServiceCategoryId) => void;
   toggleRelClass: (id: RelationshipClass) => void;
   setFilterMode: (m: "dim" | "hide") => void;
@@ -750,6 +773,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       accounts: store.accounts,
       resources: store.resources,
       relationships: store.relationships,
+      annotations: store.annotations,
       // Read the live viewport so buildGraph (export/save) stays referentially
       // stable across pans — keeps the panel context from re-rendering.
       viewport: getViewport(),
@@ -760,8 +784,51 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.accounts,
     store.resources,
     store.relationships,
+    store.annotations,
     getViewport,
   ]);
+
+  // Categorical tag-tint map for the "tags" overlay; null when inactive so the
+  // separate renderer channel stays inert.
+  const tagTint = React.useMemo<ReadonlyMap<string, string> | null>(() => {
+    if (store.activeOverlay !== "tags" || !store.tagTintKey) return null;
+    return tagTintMap(buildGraph(), store.tagTintKey);
+  }, [store.activeOverlay, store.tagTintKey, buildGraph]);
+
+  // Account review (Explain & Clean) derived from the current graph.
+  const review = React.useMemo<AccountReview>(() => reviewAccount(buildGraph()), [buildGraph]);
+
+  // Multi-cloud migration mapping (view-only; not in history). `mapToTarget`
+  // stashes the latest result for the MigratePanel.
+  const [cloudMap, setCloudMap] = React.useState<CloudMapResult | null>(null);
+  const [cloudMapTarget, setCloudMapTarget] = React.useState<CloudProvider | null>(null);
+  const mapToTarget = useCallback(
+    (target: CloudProvider): void => {
+      setCloudMapTarget(target);
+      setCloudMap(mapToCloud(buildGraph(), target));
+    },
+    [buildGraph],
+  );
+
+  // Apply one autofix and commit the resulting graph as a single history entry
+  // through the existing whole-graph replace path (so undo reverts in one step).
+  const applyAutofix = useCallback(
+    (fixId: string): void => {
+      const current = buildGraph();
+      const next = applyFix(current, fixId);
+      if (next === current) return; // no-op for unknown/stale ids
+      store.replaceAll({
+        resources: next.resources,
+        relationships: next.relationships,
+        annotations: next.annotations,
+        viewport: next.viewport,
+        accounts: next.accounts,
+        graphId: store.graphId || undefined,
+        graphName: store.graphName,
+      });
+    },
+    [buildGraph, store],
+  );
 
   // Diff a staged merge against the current diagram so the preview can show what
   // would be added/updated before the user applies it. Uses the same engine and
@@ -1045,6 +1112,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.filterMode,
       overlayHeat ?? envTintById,
       store.activeOverlay === "heat" ? "heat" : "env",
+      tagTint,
       cullViewport,
       store.edgeStyle,
       store.searchMatches,
@@ -1075,6 +1143,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.filterMode,
     envTintById,
     overlayHeat,
+    tagTint,
     overlayLit,
     store.activeOverlay,
     store.edgeStyle,
@@ -2073,6 +2142,15 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       onNodeDoubleClick,
       goToResource,
       selectNode: selectSingle,
+      review,
+      cloudMap,
+      cloudMapTarget,
+      mapToTarget,
+      applyAutofix,
+      annotations: store.annotations,
+      addAnnotation: store.addAnnotation,
+      updateAnnotation: store.updateAnnotation,
+      removeAnnotation: store.removeAnnotation,
       a11yNodes,
       setSearchMatches: store.setSearchMatches,
       breadcrumb,
@@ -2088,6 +2166,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPresentation: store.setPresentation,
       activeOverlay: store.activeOverlay,
       setActiveOverlay: store.setActiveOverlay,
+      tagTintKey: store.tagTintKey,
+      setTagTintKey: store.setTagTintKey,
       toggleCategory: store.toggleCategory,
       toggleRelClass: store.toggleRelClass,
       setFilterMode: store.setFilterMode,
@@ -2202,6 +2282,15 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       onNodeDoubleClick,
       goToResource,
       selectSingle,
+      review,
+      cloudMap,
+      cloudMapTarget,
+      mapToTarget,
+      applyAutofix,
+      store.annotations,
+      store.addAnnotation,
+      store.updateAnnotation,
+      store.removeAnnotation,
       a11yNodes,
       store.setSearchMatches,
       breadcrumb,
@@ -2216,6 +2305,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.setPresentation,
       store.activeOverlay,
       store.setActiveOverlay,
+      store.tagTintKey,
+      store.setTagTintKey,
       store.toggleCategory,
       store.toggleRelClass,
       store.setFilterMode,

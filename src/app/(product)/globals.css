@@ -550,6 +550,16 @@ text.dimmed {
   background: color-mix(in srgb, var(--env-tint, #24406b) 55%, transparent);
 }
 
+/* Tag overlay: categorical tint on a separate channel (--tag-tint) so it can
+   coexist with the env/heat channel without colliding. */
+.node.tag-tinted {
+  background: color-mix(in srgb, var(--tag-tint, transparent) 24%, #0f1a31);
+  border-color: color-mix(in srgb, var(--tag-tint, #24406b) 60%, #24406b);
+}
+.node.container.tag-tinted > .node-header {
+  background: color-mix(in srgb, var(--tag-tint, #24406b) 30%, transparent);
+}
+
 /* ---- Leaf summary node ("N× service", click to expand) ---- */
 .node.summary {
   display: flex;
