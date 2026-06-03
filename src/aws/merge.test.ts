@@ -59,7 +59,7 @@ describe("mergeGraphs", () => {
     const { graph: out, updated } = mergeGraphs(base, incoming);
     expect(updated).toBe(1);
     expect(out.resources).toHaveLength(1);
-    expect(out.resources[0].name).toBe("old"); // user's name kept
+    expect(out.resources[0].name).toBe("new"); // adopts the live name
     expect(out.resources[0].region).toBe("us-east-1"); // refreshed from scan
   });
 
