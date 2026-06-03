@@ -296,6 +296,8 @@ interface FlowContextValue {
   /** Drift detection: compare the diagram against a baseline (non-destructive). */
   driftResult: DriftResult | null;
   driftBaselineName: string;
+  /** Estimated monthly cost (current vs baseline + delta) at compare time, or null. */
+  driftCost: { current: number; baseline: number; delta: number } | null;
   /** Compare picker dialog (choose a baseline: a file or a saved diagram). */
   compareOpen: boolean;
   openCompare: () => void;
@@ -376,6 +378,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Drift: the result of comparing the diagram against a loaded baseline, + its label.
   const [driftResult, setDriftResult] = React.useState<DriftResult | null>(null);
   const [driftBaselineName, setDriftBaselineName] = React.useState("");
+  // Estimated monthly cost of the diagram vs the baseline at compare time, so the
+  // drift panel can show the cost delta of the differences.
+  const [driftCost, setDriftCost] = React.useState<{
+    current: number;
+    baseline: number;
+    delta: number;
+  } | null>(null);
   // Merge preview: a discovered/imported graph awaiting confirmation. The diff of
   // what merging it would change (`mergePreview`) is derived below, once
   // `buildGraph` is in scope.
@@ -1565,15 +1574,20 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearDrift = useCallback(() => {
     setDriftResult(null);
     setDriftBaselineName("");
+    setDriftCost(null);
   }, []);
 
   /** Diff the current diagram against `baseline` and surface the result. Shared
    *  by the file and saved-diagram compare paths. Non-destructive. */
   const runDiff = useCallback(
     (baseline: InfrastructureGraph, name: string) => {
-      const result = diffGraphs(buildGraph(), baseline);
+      const current = buildGraph();
+      const result = diffGraphs(current, baseline);
       setDriftResult(result);
       setDriftBaselineName(name);
+      const curCost = estimateTotal(current.resources).total;
+      const baseCost = estimateTotal(baseline.resources).total;
+      setDriftCost({ current: curCost, baseline: baseCost, delta: curCost - baseCost });
       setCompareOpen(false);
       setStatus(
         result.inSync
@@ -2100,6 +2114,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       costMarkers,
       driftResult,
       driftBaselineName,
+      driftCost,
       compareOpen,
       openCompare,
       closeCompare,
@@ -2215,6 +2230,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       costMarkers,
       driftResult,
       driftBaselineName,
+      driftCost,
       compareOpen,
       openCompare,
       closeCompare,

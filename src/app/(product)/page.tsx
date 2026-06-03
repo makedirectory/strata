@@ -9,6 +9,7 @@ import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
 import { RELATIONSHIP_CLASSES, RELATIONSHIP_CLASS_ORDER } from "../../aws/relationshipClasses";
 import type { GraphSummary } from "../../aws/model";
 import { exportIaC, type ExportFormat } from "../../aws/iacExport";
+import { formatMonthly } from "../../aws/cost";
 import { listDiscoverableTypes, parsePastedExport } from "../../aws/discovery";
 import { listGcpDiscoverableTypes, parseGcpExport } from "../../gcp/discovery";
 import { listAzureDiscoverableTypes, parseAzureExport } from "../../azure/discovery";
@@ -739,7 +740,7 @@ function ValidationBadge() {
  *  loaded baseline (added / removed / changed). Added & changed nodes are also
  *  dotted on the canvas; removed resources (not on the canvas) are listed here. */
 function DriftPanel() {
-  const { driftResult, driftBaselineName, clearDrift, goToResource } = useFlow();
+  const { driftResult, driftBaselineName, driftCost, clearDrift, goToResource } = useFlow();
   if (!driftResult) return null;
   const { added, removed, changed, unchanged, inSync } = driftResult;
   return (
@@ -758,6 +759,27 @@ function DriftPanel() {
           <span className="drift-c removed">−{removed.length} removed</span>
           <span className="drift-c changed">~{changed.length} changed</span>
           <span className="drift-c">{unchanged} in sync</span>
+        </div>
+      )}
+      {driftCost && (
+        <div className="drift-cost" title="Rough monthly estimate — this diagram vs the baseline">
+          <span className="drift-cost-label">Est. cost</span>
+          <span>
+            {formatMonthly(driftCost.baseline)} → {formatMonthly(driftCost.current)}
+          </span>
+          <span
+            className={
+              driftCost.delta > 0
+                ? "drift-cost-delta up"
+                : driftCost.delta < 0
+                  ? "drift-cost-delta down"
+                  : "drift-cost-delta"
+            }
+          >
+            {driftCost.delta === 0
+              ? "no change"
+              : `${driftCost.delta > 0 ? "▲ +" : "▼ −"}${formatMonthly(Math.abs(driftCost.delta))}`}
+          </span>
         </div>
       )}
       <div className="drift-list">
