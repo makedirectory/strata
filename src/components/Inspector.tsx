@@ -6,6 +6,7 @@ import { REGIONS } from "../aws/regions";
 import { RELATIONSHIPS, RELATIONSHIP_ORDER } from "../aws/categories";
 import type { ConfigField, RelationshipKind } from "../aws/types";
 import type { ResourceInstance } from "../aws/model";
+import type { Annotation } from "../aws/annotations";
 import type { ValidationResult, RuleSuggestion } from "../aws/rules";
 
 export const Inspector: React.FC = () => {
@@ -13,6 +14,9 @@ export const Inspector: React.FC = () => {
     selection,
     updateResourceField,
     updateRelationshipKind,
+    annotations,
+    updateAnnotation,
+    removeSelection,
     runValidateUI,
     runRulesUI,
     validationResults,
@@ -47,6 +51,25 @@ export const Inspector: React.FC = () => {
           readOnly={presentation}
         />
         {validationAndRules}
+      </div>
+    );
+  }
+
+  if (selection.type === "annotation") {
+    const annotation = annotations.find((a) => a.id === selection.id);
+    return (
+      <div className="inspector">
+        {annotation ? (
+          <AnnotationForm
+            key={annotation.id}
+            annotation={annotation}
+            onUpdate={(patch) => updateAnnotation(annotation.id, patch)}
+            onDelete={removeSelection}
+            readOnly={presentation}
+          />
+        ) : (
+          <div className="section">This annotation no longer exists.</div>
+        )}
       </div>
     );
   }
@@ -88,6 +111,59 @@ const EdgeForm: React.FC<{
           </select>
         </div>
       </div>
+    </div>
+  );
+};
+
+const ANNOTATION_KIND_LABEL: Record<Annotation["kind"], string> = {
+  note: "Note",
+  callout: "Callout",
+  zone: "Zone",
+};
+
+/** Inspector form for a selected annotation: edit its text + colour, delete it. */
+const AnnotationForm: React.FC<{
+  annotation: Annotation;
+  onUpdate: (patch: Partial<Omit<Annotation, "id">>) => void;
+  onDelete: () => void;
+  readOnly?: boolean;
+}> = ({ annotation, onUpdate, onDelete, readOnly = false }) => {
+  const baseId = useId();
+  const textId = `${baseId}-text`;
+  const colorId = `${baseId}-color`;
+  return (
+    <div className="section">
+      <div className="kv">
+        <div>Type</div>
+        <div>{ANNOTATION_KIND_LABEL[annotation.kind]}</div>
+
+        <label htmlFor={textId}>Text</label>
+        <div>
+          <ControlledTextarea
+            id={textId}
+            resetKey={annotation.id}
+            value={annotation.text}
+            disabled={readOnly}
+            commit={(v) => onUpdate({ text: v })}
+          />
+        </div>
+
+        <label htmlFor={colorId}>Color</label>
+        <div>
+          <input
+            id={colorId}
+            type="color"
+            value={annotation.color ?? "#9fb3c8"}
+            disabled={readOnly}
+            onChange={(e) => onUpdate({ color: e.target.value })}
+          />
+        </div>
+      </div>
+      {!readOnly && (
+        <button className="ins-run" style={{ marginTop: 8 }} onClick={onDelete}>
+          Delete annotation
+        </button>
+      )}
     </div>
   );
 };

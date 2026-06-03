@@ -84,6 +84,8 @@ interface NodeRecord {
     depth: number;
     envTint: string;
     tintKind: string;
+    /** Last-applied categorical tag tint (separate channel), or null. */
+    tagTint: string | null;
     searchMatch: boolean;
     /** Internet-facing under the active network overlay (gets a boundary ring). */
     external: boolean;
@@ -135,6 +137,8 @@ interface DrawInputs {
   envTintById: ReadonlyMap<string, string> | null;
   /** Which tint is active — picks a subtle (env) vs strong (heat) style. */
   tintKind: "env" | "heat";
+  /** Per-node categorical tag tint (separate channel from env/heat), or null. */
+  tagTintById: ReadonlyMap<string, string> | null;
   /** When set (large graphs), only render nodes/edges intersecting this world
    *  rect; null keeps the small-graph viewport-only fast path. */
   cullViewport: Rect | null;
@@ -214,6 +218,7 @@ export function useCanvasRenderer(
         filterMode,
         envTintById,
         tintKind,
+        tagTintById,
         cullViewport,
         edgeStyle,
         searchMatches,
@@ -411,6 +416,7 @@ export function useCanvasRenderer(
                 depth: -1,
                 envTint: "",
                 tintKind: "env",
+                tagTint: null,
                 searchMatch: false,
                 external: false,
               },
@@ -502,6 +508,18 @@ export function useCanvasRenderer(
               rec.div.style.removeProperty("--env-tint");
             }
             prev.tintKind = tintKind;
+          }
+          // Categorical tag-tint channel (independent of env/heat above).
+          const tagTint = tagTintById?.get(r.id) ?? null;
+          if (prev.tagTint !== tagTint) {
+            prev.tagTint = tagTint;
+            if (tagTint) {
+              rec.div.style.setProperty("--tag-tint", tagTint);
+              rec.div.classList.add("tag-tinted");
+            } else {
+              rec.div.style.removeProperty("--tag-tint");
+              rec.div.classList.remove("tag-tinted");
+            }
           }
 
           // ---- container chrome (backplate header + child-count + collapse) ----
@@ -863,6 +881,7 @@ export function useCanvasRenderer(
       filterMode: "dim" | "hide",
       envTintById: ReadonlyMap<string, string> | null,
       tintKind: "env" | "heat",
+      tagTintById: ReadonlyMap<string, string> | null,
       cullViewport: Rect | null,
       edgeStyle: "curved" | "orthogonal",
       searchMatches: ReadonlySet<string>,
@@ -906,6 +925,7 @@ export function useCanvasRenderer(
         filterMode,
         envTintById,
         tintKind,
+        tagTintById,
         cullViewport,
         edgeStyle,
         searchMatches,
@@ -939,6 +959,7 @@ export function useCanvasRenderer(
         last.filterMode === filterMode &&
         last.envTintById === envTintById &&
         last.tintKind === tintKind &&
+        last.tagTintById === tagTintById &&
         last.cullViewport === cullViewport &&
         last.edgeStyle === edgeStyle &&
         last.searchMatches === searchMatches &&

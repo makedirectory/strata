@@ -8,6 +8,12 @@ import type {
   InfrastructureGraph,
 } from "../aws/model";
 import { DEFAULT_NODE_SIZE, emptyGraph } from "../aws/model";
+import {
+  addAnnotation as annAdd,
+  updateAnnotation as annUpdate,
+  removeAnnotation as annRemove,
+  type Annotation,
+} from "../aws/annotations";
 import { mergeGraphs, type MergeResult } from "../aws/merge";
 import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind, ServiceCategoryId } from "../aws/types";
@@ -39,6 +45,8 @@ function toggledSet<T>(set: ReadonlySet<T>, value: T): Set<T> {
 interface FlowState extends HistoryState {
   resources: ResourceInstance[];
   relationships: Relationship[];
+  /** Presentation-only annotation layer (notes / callouts / zones). */
+  annotations: Annotation[];
   viewport: Viewport;
   accounts: Account[];
   graphId: string;
@@ -72,6 +80,7 @@ function edgeSelection(rel: Relationship, resources: ResourceInstance[]): Select
 export function useFlowStore() {
   const [resources, setResources] = useState<ResourceInstance[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [viewport, setViewport] = useState<Viewport>({ ...DEFAULT_VIEWPORT });
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [mode, setMode] = useState<CanvasMode>("move");
@@ -102,6 +111,8 @@ export function useFlowStore() {
   const [presentation, setPresentation] = useState(false);
   // Active analytical overlay (Phase 6): none | iam | security | heat.
   const [activeOverlay, setActiveOverlay] = useState<OverlayKind>("none");
+  // Active tag-tint key (view-only; drives the "tags" tint overlay). Not in history.
+  const [tagTintKey, setTagTintKey] = useState<string | null>(null);
   // Summary group keys (`${parentId}::${serviceId}`) that are expanded (shown
   // as individual nodes rather than a single "N× …" summary). View-only.
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
@@ -132,6 +143,7 @@ export function useFlowStore() {
   const liveRef = useRef<FlowState>({
     resources,
     relationships,
+    annotations,
     viewport,
     accounts,
     graphId,
@@ -166,6 +178,7 @@ export function useFlowStore() {
     liveRef.current = next;
     setResources(next.resources);
     setRelationships(next.relationships);
+    setAnnotations(next.annotations);
     setViewport(next.viewport);
     setAccounts(next.accounts);
     setGraphId(next.graphId);
@@ -257,6 +270,11 @@ export function useFlowStore() {
       mutate((cur) => ({
         resources: cur.resources.filter((r) => r.id !== id),
         relationships: cur.relationships.filter((e) => e.from !== id && e.to !== id),
+      }));
+    } else if (selection.type === "annotation") {
+      const id = selection.id;
+      mutate((cur) => ({
+        annotations: annRemove({ ...emptyGraph(""), annotations: cur.annotations }, id).annotations,
       }));
     } else {
       const id = selection.id;
@@ -369,6 +387,49 @@ export function useFlowStore() {
   );
 
   /** Inspector field writes: name / region / config[key]. Committed. */
+  // --- Annotations (presentation-only layer; committed via mutate for undo) ---
+  // The engine helpers operate on a full graph; we thread only the annotations
+  // slice through a throwaway graph and extract the resulting array.
+  const addAnnotation = useCallback(
+    (annotation: Annotation) => {
+      mutate((cur) => ({
+        annotations: annAdd({ ...emptyGraph(""), annotations: cur.annotations }, annotation)
+          .annotations,
+      }));
+    },
+    [mutate],
+  );
+  const updateAnnotation = useCallback(
+    (id: string, patch: Partial<Omit<Annotation, "id">>) => {
+      mutate((cur) => ({
+        annotations: annUpdate({ ...emptyGraph(""), annotations: cur.annotations }, id, patch)
+          .annotations,
+      }));
+    },
+    [mutate],
+  );
+  const removeAnnotation = useCallback(
+    (id: string) => {
+      mutate((cur) => ({
+        annotations: annRemove({ ...emptyGraph(""), annotations: cur.annotations }, id).annotations,
+      }));
+    },
+    [mutate],
+  );
+
+  /** Live annotation patch during a drag/resize — writes state WITHOUT recording
+   *  history (the single entry is committed at drag end via commitCurrentState),
+   *  mirroring updateResourcePosition for nodes. */
+  const updateAnnotationLive = useCallback((id: string, patch: Partial<Omit<Annotation, "id">>) => {
+    const cur = liveRef.current;
+    // The engine always writes a fresh annotations array onto the returned
+    // graph; `?? []` only satisfies the optional-field type.
+    const nextAnnotations =
+      annUpdate({ ...emptyGraph(""), annotations: cur.annotations }, id, patch).annotations ?? [];
+    liveRef.current = { ...cur, annotations: nextAnnotations };
+    setAnnotations(nextAnnotations);
+  }, []);
+
   const updateResource = useCallback(
     (id: string, patch: { name?: string; region?: string; config?: Record<string, unknown> }) => {
       mutate((cur) => ({
@@ -442,6 +503,7 @@ export function useFlowStore() {
     mutate(() => ({
       resources: [],
       relationships: [],
+      annotations: [],
       accounts: [],
       graphId: "",
       graphName: DEFAULT_GRAPH_NAME,
@@ -460,6 +522,7 @@ export function useFlowStore() {
     (next: {
       resources: ResourceInstance[];
       relationships: Relationship[];
+      annotations?: Annotation[];
       viewport?: Viewport;
       accounts?: Account[];
       graphId?: string;
@@ -468,6 +531,7 @@ export function useFlowStore() {
       mutate((cur) => ({
         resources: next.resources,
         relationships: next.relationships,
+        annotations: next.annotations ?? [],
         viewport: next.viewport ?? { ...DEFAULT_VIEWPORT },
         accounts: next.accounts ?? [],
         graphId: next.graphId ?? cur.graphId,
@@ -563,6 +627,7 @@ export function useFlowStore() {
     // State
     resources,
     relationships,
+    annotations,
     viewport,
     accounts,
     mode,
@@ -578,6 +643,7 @@ export function useFlowStore() {
     searchMatches,
     presentation,
     activeOverlay,
+    tagTintKey,
     expandedGroups,
     selection,
     selectedIds,
@@ -605,6 +671,7 @@ export function useFlowStore() {
     setSearchMatches,
     setPresentation,
     setActiveOverlay,
+    setTagTintKey,
     setLayers,
     setSelection,
     setSelectedIds,
@@ -626,6 +693,10 @@ export function useFlowStore() {
     clear,
     replaceAll,
     mergeGraph,
+    addAnnotation,
+    updateAnnotation,
+    updateAnnotationLive,
+    removeAnnotation,
 
     // History
     undo: undoAction,

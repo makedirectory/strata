@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from "react";
 import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { PALETTE_ADD_EVENT } from "./Palette";
 import { AccessibleNodes } from "./AccessibleNodes";
+import { AnnotationLayer } from "./AnnotationLayer";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
 const GRID_MAJOR = 80;
@@ -256,6 +257,7 @@ export const Canvas: React.FC = () => {
         }}
       />
       <div className="overlay" aria-hidden="true" />
+      <AnnotationLayer />
       {(guides.length > 0 || marquee) && (
         <svg
           className="guides"

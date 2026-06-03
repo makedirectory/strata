@@ -127,6 +127,61 @@ describe("useFlowStore — dirty tracking (the unsaved-work flag the guard reads
   });
 });
 
+describe("useFlowStore — annotation layer (create / load / undo)", () => {
+  it("addAnnotation lands in state and undo reverts it in one step", () => {
+    const { result } = setup();
+    act(() => result.current.addAnnotation({ id: "a1", kind: "note", text: "hi", x: 10, y: 20 }));
+    expect(result.current.annotations).toHaveLength(1);
+    expect(result.current.annotations[0]).toMatchObject({ id: "a1", text: "hi" });
+
+    act(() => result.current.undo());
+    expect(result.current.annotations).toHaveLength(0);
+  });
+
+  it("updateAnnotation patches x/y and removeAnnotation deletes by id", () => {
+    const { result } = setup();
+    act(() =>
+      result.current.addAnnotation({
+        id: "a1",
+        kind: "zone",
+        text: "Z",
+        x: 0,
+        y: 0,
+        w: 100,
+        h: 80,
+      }),
+    );
+    act(() => result.current.updateAnnotation("a1", { x: 50, y: 60 }));
+    expect(result.current.annotations[0]).toMatchObject({ x: 50, y: 60, w: 100, h: 80 });
+
+    act(() => result.current.removeAnnotation("a1"));
+    expect(result.current.annotations).toHaveLength(0);
+  });
+
+  it("replaceAll (load) PRESERVES annotations passed in the loaded graph", () => {
+    const { result } = setup();
+    act(() =>
+      result.current.replaceAll({
+        resources: [{ id: "r1", serviceId: "lambda", name: "fn", config: {}, source: "imported" }],
+        relationships: [],
+        annotations: [{ id: "a1", kind: "note", text: "loaded note", x: 5, y: 5 }],
+        graphId: "g1",
+        graphName: "Loaded",
+      }),
+    );
+    expect(result.current.annotations).toHaveLength(1);
+    expect(result.current.annotations[0]).toMatchObject({ id: "a1", text: "loaded note" });
+  });
+
+  it("replaceAll without an annotations field clears the layer (explicit default)", () => {
+    const { result } = setup();
+    act(() => result.current.addAnnotation({ id: "a1", kind: "note", text: "x", x: 0, y: 0 }));
+    expect(result.current.annotations).toHaveLength(1);
+    act(() => result.current.replaceAll({ resources: [], relationships: [] }));
+    expect(result.current.annotations).toHaveLength(0);
+  });
+});
+
 describe("useFlowStore — diagram name", () => {
   it("defaults to a placeholder, renames, and resets on clear", () => {
     const { result } = setup();

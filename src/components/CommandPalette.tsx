@@ -2,6 +2,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFlow } from "../hooks/useFlow";
 import { searchServices, serviceIcon } from "../aws/registry";
+import { collectTagKeys } from "../aws/tags";
+import { detectFixes } from "../aws/autofix";
 import { PALETTE_ADD_EVENT } from "./Palette";
 import { useDialogA11y } from "./useDialogA11y";
 
@@ -175,6 +177,24 @@ export const CommandPalette: React.FC = () => {
         run: () => flow.setActiveOverlay("heat"),
       },
       {
+        id: "overlay-reachability",
+        title: "Overlay: Internet reachability",
+        group: "View",
+        run: () => flow.setActiveOverlay("reachability"),
+      },
+      {
+        id: "overlay-tags",
+        title: "Overlay: Tags (tint by tag)",
+        group: "View",
+        run: () => {
+          const keys = collectTagKeys(flow.snapshotGraph());
+          if (keys.length === 0) return;
+          flow.setTagTintKey(keys[0]);
+          flow.setActiveOverlay("tags");
+        },
+        hint: "tint nodes by their first tag key",
+      },
+      {
         id: "overlay-none",
         title: "Overlay: None",
         group: "View",
@@ -194,12 +214,64 @@ export const CommandPalette: React.FC = () => {
         group: "Edit",
         run: flow.openStartHub,
       },
+      {
+        id: "ann-note",
+        title: "Add note",
+        group: "Edit",
+        run: () => flow.addAnnotationOfKind("note"),
+        editing: true,
+        hint: "🗒️",
+      },
+      {
+        id: "ann-zone",
+        title: "Add zone",
+        group: "Edit",
+        run: () => flow.addAnnotationOfKind("zone"),
+        editing: true,
+        hint: "▢",
+      },
+      {
+        id: "ann-callout",
+        title: "Add callout",
+        group: "Edit",
+        run: () => flow.addAnnotationOfKind("callout"),
+        editing: true,
+        hint: "💬",
+      },
       { id: "undo", title: "Undo", group: "Edit", run: flow.undo, editing: true },
       { id: "redo", title: "Redo", group: "Edit", run: flow.redo, editing: true },
       { id: "clear", title: "Clear canvas", group: "Edit", run: flow.clear, editing: true },
 
       { id: "validate", title: "Validate architecture", group: "Tools", run: flow.runValidateUI },
       { id: "rules", title: "Suggest rules", group: "Tools", run: flow.runRulesUI },
+      {
+        id: "autofix-first",
+        title: "Autofix: apply first available fix",
+        group: "Tools",
+        editing: true,
+        run: () => {
+          const fixes = detectFixes(flow.snapshotGraph());
+          if (fixes[0]) flow.applyAutofix(fixes[0].id);
+        },
+      },
+      {
+        id: "migrate-gcp",
+        title: "Migrate diagram to Google Cloud",
+        group: "Tools",
+        run: () => flow.mapToTarget("gcp"),
+      },
+      {
+        id: "migrate-azure",
+        title: "Migrate diagram to Azure",
+        group: "Tools",
+        run: () => flow.mapToTarget("azure"),
+      },
+      {
+        id: "migrate-aws",
+        title: "Migrate diagram to AWS",
+        group: "Tools",
+        run: () => flow.mapToTarget("aws"),
+      },
       { id: "export", title: "Export JSON", group: "Tools", run: flow.exportJSON },
       {
         id: "export-iac",

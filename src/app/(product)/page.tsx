@@ -4,7 +4,10 @@ import { FlowProvider, useFlow } from "../../hooks/useFlow";
 import { Palette } from "../../components/Palette";
 import { Canvas } from "../../components/Canvas";
 import { Inspector } from "../../components/Inspector";
+import { ReviewPanel } from "../../components/ReviewPanel";
+import { MigratePanel } from "../../components/MigratePanel";
 import { CommandPalette } from "../../components/CommandPalette";
+import { collectTagKeys } from "../../aws/tags";
 import { CATEGORIES, CATEGORY_ORDER } from "../../aws/categories";
 import { RELATIONSHIP_CLASSES, RELATIONSHIP_CLASS_ORDER } from "../../aws/relationshipClasses";
 import type { GraphSummary } from "../../aws/model";
@@ -57,6 +60,8 @@ function LayersPanel() {
     setEdgeStyle,
     activeOverlay,
     setActiveOverlay,
+    setTagTintKey,
+    snapshotGraph,
     applyViewPreset,
     savedViews,
     saveView,
@@ -172,12 +177,21 @@ function LayersPanel() {
             { id: "iam", label: "IAM trust" },
             { id: "security", label: "Network paths" },
             { id: "heat", label: "Heat (degree)" },
+            { id: "reachability", label: "Reachability" },
+            { id: "tags", label: "Tags" },
           ] as const
         ).map((o) => (
           <button
             key={o.id}
             className={`chip ${activeOverlay === o.id ? "on" : "off"}`}
-            onClick={() => setActiveOverlay(o.id)}
+            onClick={() => {
+              if (o.id === "tags") {
+                const keys = collectTagKeys(snapshotGraph());
+                if (keys.length === 0) return;
+                setTagTintKey(keys[0]);
+              }
+              setActiveOverlay(o.id);
+            }}
             aria-pressed={activeOverlay === o.id}
           >
             {o.label}
@@ -2005,7 +2019,15 @@ export default function Page() {
 }
 
 function Workspace() {
-  const { presentation, setPresentation } = useFlow();
+  const {
+    presentation,
+    setPresentation,
+    review,
+    cloudMap,
+    cloudMapTarget,
+    mapToTarget,
+    goToResource,
+  } = useFlow();
   return (
     <>
       <div className={`app${presentation ? " app--present" : ""}`}>
@@ -2034,6 +2056,15 @@ function Workspace() {
         <aside className="right">
           <h3>Inspector</h3>
           <Inspector />
+          <h3>Account review</h3>
+          <ReviewPanel review={review} onSelectResource={goToResource} />
+          <h3>Migrate</h3>
+          <MigratePanel
+            onMap={mapToTarget}
+            result={cloudMap}
+            target={cloudMapTarget ?? undefined}
+            onSelectResource={goToResource}
+          />
           <FooterControls />
         </aside>
       </div>
