@@ -56,6 +56,31 @@ describe("importAnyIaC — multi-cloud routing", () => {
     expect(providersOf(r.graph)).toEqual(new Set(["gcp"]));
   });
 
+  it("imports OpenTofu `tofu show -json` output (same schema as Terraform)", () => {
+    // OpenTofu is a Terraform fork sharing the show/state JSON schema, so its
+    // output flows through the Terraform path unchanged.
+    const tofu = JSON.stringify({
+      format_version: "1.0",
+      terraform_version: "1.6.0",
+      values: {
+        root_module: {
+          resources: [
+            {
+              address: "aws_s3_bucket.assets",
+              type: "aws_s3_bucket",
+              name: "assets",
+              values: { id: "assets" },
+            },
+          ],
+        },
+      },
+    });
+    const r = importAnyIaC(tofu);
+    expect(r.format).toBe("terraform");
+    expect(r.graph.resources).toHaveLength(1);
+    expect(providersOf(r.graph)).toEqual(new Set(["aws"]));
+  });
+
   it("routes Azure Terraform (azurerm_*) via the merged type map", () => {
     const tf = JSON.stringify({
       values: {

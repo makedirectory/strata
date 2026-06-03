@@ -635,16 +635,6 @@ function DensityButtons() {
   );
 }
 
-function PresetButtons() {
-  const { loadPreset } = useFlow();
-  return (
-    <div className="palette">
-      <button onClick={() => loadPreset("aws-basic")}>Basic AWS</button>
-      <button onClick={() => loadPreset("ecs-alb")}>ECS + ALB</button>
-    </div>
-  );
-}
-
 function FooterControls() {
   const { fitToView, center, tidy } = useFlow();
   return (
@@ -1402,7 +1392,7 @@ function ReplaceConfirmDialog() {
 const EXPORT_FORMATS: { id: ExportFormat; label: string }[] = [
   { id: "cloudformation-yaml", label: "CloudFormation (YAML)" },
   { id: "cloudformation-json", label: "CloudFormation (JSON)" },
-  { id: "terraform", label: "Terraform (HCL)" },
+  { id: "terraform", label: "Terraform / OpenTofu (HCL)" },
 ];
 
 /** Export-to-IaC dialog: pick a format, preview the scaffold, see the coverage
@@ -2029,20 +2019,10 @@ function Workspace() {
             toggle Connect mode, or click a small dot on a node to start a wire, then click the
             target node.
           </div>
-          <h3>Presets</h3>
-          <PresetButtons />
           <h3>Modes</h3>
           <ModeButtons />
           <h3>Density</h3>
           <DensityButtons />
-          <h3>Shortcuts</h3>
-          <div className="help">
-            <div>Scroll: pan · ⌘/Ctrl+scroll or pinch: zoom</div>
-            <div>Drag empty canvas: marquee-select</div>
-            <div>Delete: remove selected node(s)/edge</div>
-            <div>D: duplicate selected node</div>
-            <div>G: group selected into VPC</div>
-          </div>
           <h3>Layers &amp; Views</h3>
           <LayersPanel />
         </aside>
