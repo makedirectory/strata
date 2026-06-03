@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   clampScale,
   screenToWorld,
+  worldToScreen,
+  screenDeltaToWorld,
+  snapToGrid,
+  rectEdgeTowards,
+  DRAG_THRESHOLD_PX,
   zoomAbout,
   zoomByFactor,
   normalizeRect,
@@ -45,6 +50,86 @@ describe("screenToWorld", () => {
   it("inverts pan + scale", () => {
     const pan = { x: 100, y: 50, scale: 2 };
     expect(screenToWorld({ x: 300, y: 150 }, pan)).toEqual({ x: 100, y: 50 });
+  });
+});
+
+describe("worldToScreen", () => {
+  it("is the exact inverse of screenToWorld", () => {
+    const pan = { x: 100, y: 50, scale: 2 };
+    // worldToScreen(screenToWorld(p)) === p (the documented forward transform).
+    expect(worldToScreen({ x: 100, y: 50 }, pan)).toEqual({ x: 300, y: 150 });
+  });
+
+  it("round-trips screen → world → screen across viewports and scales", () => {
+    const viewports = [
+      { x: 0, y: 0, scale: 1 },
+      { x: 100, y: 50, scale: 2 },
+      { x: -320, y: 240, scale: 0.5 },
+      { x: 17, y: -9, scale: 0.1 },
+      { x: -1000, y: 1000, scale: 3.75 },
+    ];
+    const points = [
+      { x: 0, y: 0 },
+      { x: 400, y: 300 },
+      { x: -123.5, y: 456.25 },
+      { x: 9999, y: -4242 },
+    ];
+    for (const vp of viewports) {
+      for (const p of points) {
+        const round = worldToScreen(screenToWorld(p, vp), vp);
+        expect(round.x).toBeCloseTo(p.x, 6);
+        expect(round.y).toBeCloseTo(p.y, 6);
+      }
+    }
+  });
+});
+
+describe("screenDeltaToWorld", () => {
+  it("divides the screen delta by the scale", () => {
+    expect(screenDeltaToWorld(80, 60, 2)).toEqual({ x: 40, y: 30 });
+    expect(screenDeltaToWorld(10, -20, 0.5)).toEqual({ x: 20, y: -40 });
+  });
+});
+
+describe("snapToGrid", () => {
+  it("rounds to the nearest grid step (default GRID_STEP)", () => {
+    expect(snapToGrid(103)).toBe(96); // round(103/16)*16
+    expect(snapToGrid(47)).toBe(48);
+    expect(snapToGrid(7, 10)).toBe(10);
+    expect(snapToGrid(-7)).toBeCloseTo(0, 6);
+  });
+});
+
+describe("DRAG_THRESHOLD_PX", () => {
+  it("is the shared click-vs-drag screen-pixel threshold", () => {
+    expect(DRAG_THRESHOLD_PX).toBe(3);
+  });
+});
+
+describe("rectEdgeTowards", () => {
+  const r: Rect = { x: 0, y: 0, w: 100, h: 100 }; // centre (50,50)
+
+  it("exits the right edge for a target directly to the right", () => {
+    expect(rectEdgeTowards(r, { x: 500, y: 50 })).toEqual({ x: 100, y: 50 });
+  });
+  it("exits the bottom edge for a target directly below", () => {
+    expect(rectEdgeTowards(r, { x: 50, y: 500 })).toEqual({ x: 50, y: 100 });
+  });
+  it("hits a corner for a diagonal target", () => {
+    const p = rectEdgeTowards(r, { x: 500, y: 500 });
+    expect(p.x).toBeCloseTo(100, 6);
+    expect(p.y).toBeCloseTo(100, 6);
+  });
+  it("returns a point on the box border (max axis ratio is 1)", () => {
+    const p = rectEdgeTowards(r, { x: 200, y: 90 }); // dx=150, dy=40
+    // larger ratio is |dx|/(w/2)=3 → x lands on the right edge
+    expect(p.x).toBeCloseTo(100, 6);
+    expect(p.y).toBeGreaterThan(50);
+    expect(p.y).toBeLessThan(100);
+  });
+  it("returns the centre for a degenerate rect or a centred target", () => {
+    expect(rectEdgeTowards({ x: 0, y: 0, w: 0, h: 0 }, { x: 9, y: 9 })).toEqual({ x: 0, y: 0 });
+    expect(rectEdgeTowards(r, { x: 50, y: 50 })).toEqual({ x: 50, y: 50 });
   });
 });
 

@@ -32,7 +32,7 @@ import type { GraphSummary } from "../aws/model";
 import { importAnyIaC } from "../lib/importIac";
 import { getExample } from "../examples";
 import { estimateMonthlyCost, estimateTotal, formatMonthly } from "../aws/cost";
-import { buildShareUrl, readGraphFromHash } from "../lib/shareLink";
+import { buildShareUrl, readGraphFromHash, isShareUrlTooLong } from "../lib/shareLink";
 import {
   zoomAbout,
   zoomByFactor,
@@ -62,7 +62,7 @@ import { reviewAccount, type AccountReview } from "../aws/review";
 import { mapToCloud, type CloudMapResult } from "../aws/cloudMap";
 import { applyFix } from "../aws/autofix";
 import { tagTintMap } from "../aws/tags";
-import type { Annotation } from "../aws/annotations";
+import { ANNOTATION_KIND_DEFAULTS, type Annotation } from "../aws/annotations";
 import type { LayerState } from "./useFlowStore";
 
 /** Above this many resources the renderer culls to the viewport. */
@@ -1112,20 +1112,19 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const v = viewSize();
       const center = screenToWorld({ x: v.width / 2, y: v.height / 2 }, getViewport());
       const id = storeUid();
+      const { defaultText, defaultW, defaultH } = ANNOTATION_KIND_DEFAULTS[kind];
       const base: Annotation = {
         id,
         kind,
-        text: kind === "zone" ? "Zone" : kind === "callout" ? "Callout" : "Note",
-        x: Math.round(center.x),
-        y: Math.round(center.y),
+        text: defaultText,
+        // A sized kind (e.g. a zone) is centred on the viewport centre by
+        // offsetting its top-left by half its dimensions; unsized kinds (note /
+        // callout) anchor at the centre point itself.
+        x: Math.round(center.x - (defaultW ?? 0) / 2),
+        y: Math.round(center.y - (defaultH ?? 0) / 2),
       };
-      // Zones default to a sizeable region (they sit behind nodes as a backdrop).
-      if (kind === "zone") {
-        base.w = 360;
-        base.h = 240;
-        base.x = Math.round(center.x - 180);
-        base.y = Math.round(center.y - 120);
-      }
+      if (defaultW !== undefined) base.w = defaultW;
+      if (defaultH !== undefined) base.h = defaultH;
       storeAddAnnotation(base);
       selectAnnotation(id);
       return id;
@@ -1598,6 +1597,17 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? location.origin + location.pathname
         : "https://strata.mk-dir.com/";
     const url = buildShareUrl(base, graph);
+    // A share link packs the whole diagram into the URL hash. Past the safe
+    // length budget the `#g=…` link silently fails to open (or copy) for the
+    // recipient, so don't hand out a broken link — warn and fall back to the
+    // self-contained JSON export, which has no size limit.
+    if (isShareUrlTooLong(url)) {
+      setStatus(
+        "This diagram is too large to share by link — exporting it as JSON instead. Send that file to share it.",
+      );
+      exportJSON();
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
       setStatus("Share link copied to clipboard.");
@@ -1605,7 +1615,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStatus("Couldn't copy automatically — your share link is in the address bar.");
       if (typeof location !== "undefined") location.hash = url.slice(url.indexOf("#") + 1);
     }
-  }, [buildGraph]);
+  }, [buildGraph, exportJSON]);
 
   const importJSONDialog = useCallback(() => {
     const input = document.createElement("input");

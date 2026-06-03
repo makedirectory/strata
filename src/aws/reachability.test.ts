@@ -325,6 +325,33 @@ describe("evaluateReachability — open ports", () => {
     // sensitive port 22 falls within 20-23 → note.
     expect(r.notes.some((n) => n.includes("sensitive port 22 within range 20-23"))).toBe(true);
   });
+
+  it("collapses a wide world-open range (0-65535) into ONE note listing all covered ports", () => {
+    // A wide range covers many sensitive ports; previously this emitted one
+    // near-duplicate note per port. It must now collapse to a single note that
+    // lists every covered sensitive port.
+    const igw = res("internet-gateway", "igw");
+    const ec2 = res("ec2-instance", "web");
+    const sg = res("security-group", "sg", { config: { ingress: "tcp 0-65535 0.0.0.0/0" } });
+    const g = graphOf(
+      [igw, ec2, sg],
+      [rel(igw.id, ec2.id, "connects_to"), rel(sg.id, ec2.id, "attached_to")],
+    );
+    const r = evaluateReachability(g);
+    const ex = r.exposed.find((e) => e.resourceId === ec2.id)!;
+    // the range is not enumerated into discrete OpenPorts.
+    expect(ex.openPorts).toEqual([]);
+    // exactly one range note, and it lists multiple sensitive ports.
+    const rangeNotes = r.notes.filter((n) => n.includes("wide world-open port range 0-65535"));
+    expect(rangeNotes).toHaveLength(1);
+    const note = rangeNotes[0];
+    // every sensitive port (22, 3389, 3306, 5432, 1433, 6379, 27017, 9200) is listed.
+    for (const p of [22, 3389, 3306, 5432, 1433, 6379, 27017, 9200]) {
+      expect(note).toContain(String(p));
+    }
+    // ports are listed in ascending order, comma-separated.
+    expect(note).toContain("includes sensitive ports 22, 1433, 3306");
+  });
 });
 
 describe("evaluateReachability — determinism & empty", () => {

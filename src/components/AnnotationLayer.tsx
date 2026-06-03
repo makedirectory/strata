@@ -1,6 +1,13 @@
 "use client";
 import React from "react";
 import { useFlow, useFlowCanvas } from "../hooks/useFlow";
+import {
+  worldToScreen,
+  screenDeltaToWorld,
+  snapToGrid,
+  rectEdgeTowards,
+  DRAG_THRESHOLD_PX,
+} from "../canvas/geometry";
 import type { Annotation } from "../aws/annotations";
 
 /**
@@ -31,8 +38,6 @@ const ZONE_H = 240;
 /** Smallest a zone may be resized to (world units), matching node resize feel. */
 const MIN_ZONE_W = 80;
 const MIN_ZONE_H = 60;
-/** Click-vs-drag threshold in SCREEN pixels (zoom-independent), matching nodes. */
-const DRAG_THRESHOLD_PX = 3;
 
 /** Per-kind world-unit default width for an annotation with no explicit w. */
 function defaultW(kind: Annotation["kind"]): number {
@@ -97,22 +102,23 @@ export const AnnotationLayer: React.FC = () => {
       const scale = viewportRef.current.scale;
       // Click-vs-drag decision is SCREEN-pixel based (zoom-independent) so a
       // plain click never trips `moved` → no commit, no undo entry, no dirty.
+      // Shares the threshold + screen→world conversion with the node layer.
       const dxScreen = e.clientX - d.startClientX;
       const dyScreen = e.clientY - d.startClientY;
       d.moved =
         d.moved || Math.abs(dxScreen) > DRAG_THRESHOLD_PX || Math.abs(dyScreen) > DRAG_THRESHOLD_PX;
-      // Position/size updates stay in WORLD units (screenΔ / scale).
-      const dxWorld = dxScreen / scale;
-      const dyWorld = dyScreen / scale;
+      // Position/size updates stay in WORLD units, snapped to the visible grid
+      // so annotations land on the same step nodes do (consistent feel).
+      const { x: dxWorld, y: dyWorld } = screenDeltaToWorld(dxScreen, dyScreen, scale);
       if (d.kind === "move") {
         updateAnnotationLive(d.id, {
-          x: Math.round(d.startX + dxWorld),
-          y: Math.round(d.startY + dyWorld),
+          x: snapToGrid(d.startX + dxWorld),
+          y: snapToGrid(d.startY + dyWorld),
         });
       } else {
         updateAnnotationLive(d.id, {
-          w: Math.max(MIN_ZONE_W, Math.round(d.startW + dxWorld)),
-          h: Math.max(MIN_ZONE_H, Math.round(d.startH + dyWorld)),
+          w: Math.max(MIN_ZONE_W, snapToGrid(d.startW + dxWorld)),
+          h: Math.max(MIN_ZONE_H, snapToGrid(d.startH + dyWorld)),
         });
       }
     };
@@ -160,9 +166,10 @@ export const AnnotationLayer: React.FC = () => {
     };
   };
 
-  // Screen-space helpers (world → screen for absolute positioning).
-  const sx = (worldX: number) => viewport.x + worldX * viewport.scale;
-  const sy = (worldY: number) => viewport.y + worldY * viewport.scale;
+  // Screen-space helper (world → screen for absolute positioning). Single
+  // source of truth shared with the node overlay via geometry.worldToScreen.
+  const screen = (worldX: number, worldY: number) =>
+    worldToScreen({ x: worldX, y: worldY }, viewport);
 
   return (
     <>
@@ -173,13 +180,14 @@ export const AnnotationLayer: React.FC = () => {
           const w = (a.w ?? ZONE_W) * viewport.scale;
           const h = (a.h ?? ZONE_H) * viewport.scale;
           const editing = editingId === a.id;
+          const pos = screen(a.x, a.y);
           return (
             <div
               key={a.id}
               className={`ann-zone${selected ? " selected" : ""}`}
               style={{
-                left: sx(a.x),
-                top: sy(a.y),
+                left: pos.x,
+                top: pos.y,
                 width: w,
                 height: h,
                 ...(a.color ? { ["--ann-color" as string]: a.color } : {}),
@@ -243,7 +251,11 @@ export const AnnotationLayer: React.FC = () => {
           if (!target) return null;
           const w = a.w ?? CALLOUT_W;
           const h = a.h ?? CALLOUT_H;
-          const from = { x: a.x + w / 2, y: a.y + h / 2 };
+          // Anchor the line to the callout box EDGE (intersection of the
+          // centre→target segment with the box rectangle) rather than its
+          // nominal centre, so the line stays attached to the visible border
+          // even when wrapped text grows the bubble past its nominal height.
+          const from = rectEdgeTowards({ x: a.x, y: a.y, w, h }, target);
           return (
             <line
               key={a.id}
@@ -266,13 +278,14 @@ export const AnnotationLayer: React.FC = () => {
           const w = (a.w ?? (a.kind === "callout" ? CALLOUT_W : NOTE_W)) * viewport.scale;
           const h = (a.h ?? (a.kind === "callout" ? CALLOUT_H : NOTE_H)) * viewport.scale;
           const editing = editingId === a.id;
+          const pos = screen(a.x, a.y);
           return (
             <div
               key={a.id}
               className={`ann-${a.kind}${selected ? " selected" : ""}`}
               style={{
-                left: sx(a.x),
-                top: sy(a.y),
+                left: pos.x,
+                top: pos.y,
                 width: w,
                 minHeight: h,
                 ...(a.color ? { ["--ann-color" as string]: a.color } : {}),

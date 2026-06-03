@@ -43,11 +43,44 @@ export function clampScale(scale: number, min = MIN_SCALE, max = MAX_SCALE): num
   return Math.min(max, Math.max(min, scale));
 }
 
+/**
+ * Click-vs-drag threshold in SCREEN pixels (zoom-independent). A press that
+ * moves less than this records no drag → no history entry / no dirty flag. Both
+ * the node interaction layer and the annotation overlay share this value so the
+ * two layers feel identical.
+ */
+export const DRAG_THRESHOLD_PX = 3;
+
 // ---- pan / zoom ------------------------------------------------------------
 
 /** Canvas-wrap-local point → world coordinates. */
 export function screenToWorld(point: Vec2, pan: Viewport): Vec2 {
   return { x: (point.x - pan.x) / pan.scale, y: (point.y - pan.y) / pan.scale };
+}
+
+/**
+ * World coordinates → canvas-wrap-local point. The EXACT inverse of
+ * {@link screenToWorld}: solving `worldX = (sx - pan.x) / pan.scale` for `sx`
+ * gives `sx = worldX * pan.scale + pan.x`. This is the single source of truth
+ * for the forward (world→screen) projection used by every absolutely-positioned
+ * overlay (accessible nodes, annotations, markers).
+ */
+export function worldToScreen(point: Vec2, pan: Viewport): Vec2 {
+  return { x: point.x * pan.scale + pan.x, y: point.y * pan.scale + pan.y };
+}
+
+/**
+ * Convert a SCREEN-pixel delta into a WORLD-unit delta at the given scale. Drag
+ * math (node move/resize, annotation move/resize) is decided in screen pixels
+ * but applied in world units; this is the one conversion both layers share.
+ */
+export function screenDeltaToWorld(dxScreen: number, dyScreen: number, scale: number): Vec2 {
+  return { x: dxScreen / scale, y: dyScreen / scale };
+}
+
+/** Round a single world coordinate to the nearest grid step. */
+export function snapToGrid(value: number, step = GRID_STEP): number {
+  return Math.round(value / step) * step;
 }
 
 /**
@@ -97,6 +130,27 @@ export function rectsIntersect(a: Rect, b: Rect): boolean {
 /** Grow a rect by `margin` on every side. */
 export function expandRect(r: Rect, margin: number): Rect {
   return { x: r.x - margin, y: r.y - margin, w: r.w + margin * 2, h: r.h + margin * 2 };
+}
+
+/**
+ * The point on rect `r`'s border where the segment from the rect centre toward
+ * `toward` (an external point) exits the rectangle. Used to anchor callout
+ * leader lines to the visible box edge instead of its centre, so the line stays
+ * attached when the bubble grows. Scale the centre→toward vector by the larger
+ * of `|dx|/(w/2)` and `|dy|/(h/2)` (the axis that hits an edge first); a
+ * degenerate (zero) rect or a `toward` at the centre returns the centre.
+ */
+export function rectEdgeTowards(r: Rect, toward: Vec2): Vec2 {
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const dx = toward.x - cx;
+  const dy = toward.y - cy;
+  const hw = r.w / 2;
+  const hh = r.h / 2;
+  if (hw <= 0 || hh <= 0 || (dx === 0 && dy === 0)) return { x: cx, y: cy };
+  const scale = Math.max(Math.abs(dx) / hw, Math.abs(dy) / hh);
+  if (scale === 0) return { x: cx, y: cy };
+  return { x: cx + dx / scale, y: cy + dy / scale };
 }
 
 export interface GridPackItem {

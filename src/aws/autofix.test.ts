@@ -355,6 +355,29 @@ describe("applyFix — safety / no-op", () => {
     }
     expect(snap(g)).toBe(before);
   });
+
+  it("deep-copies annotations so the returned graph is isolated from the input", () => {
+    const g: InfrastructureGraph = {
+      ...graph([
+        res({ id: "sg1", serviceId: "security-group", config: { ingress: "tcp 22 0.0.0.0/0" } }),
+      ]),
+      annotations: [{ id: "a1", kind: "note", text: "original", x: 0, y: 0 }],
+    };
+    const fix = detectFixes(g).find((f) => f.kind === "close-open-sg")!;
+    const next = applyFix(g, fix.id);
+
+    // The annotations array and its objects must not be the same references.
+    expect(next.annotations).not.toBe(g.annotations);
+    expect(next.annotations![0]).not.toBe(g.annotations![0]);
+
+    // Mutating the returned graph's annotation does NOT affect the input.
+    next.annotations![0].text = "mutated-in-next";
+    expect(g.annotations![0].text).toBe("original");
+
+    // ...and mutating the input's annotation does NOT affect the returned graph.
+    g.annotations![0].text = "mutated-in-input";
+    expect(next.annotations![0].text).toBe("mutated-in-next");
+  });
 });
 
 describe("detectFixes — determinism + ordering", () => {
