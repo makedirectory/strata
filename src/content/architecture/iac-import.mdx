@@ -14,8 +14,12 @@ formats:
 
 - **CloudFormation** templates (JSON _or_ YAML) — AWS.
 - **Azure ARM templates** (JSON, the typed `resources[]` array).
-- **Terraform** `terraform show -json` / `plan -json` for the **`aws`, `google`,
-  and `azurerm`** providers (a single state file may mix them).
+- **Terraform** (and **OpenTofu**) `terraform show -json` / `plan -json` (or `tofu
+show -json`) for the **`aws`, `google`, and `azurerm`** providers (a single state
+  file may mix them). OpenTofu is a Terraform fork emitting the identical JSON
+  schema, so it flows through `importTerraform` unchanged — which is why the
+  import/export UI labels read "Terraform / OpenTofu" and the file pickers accept
+  `.tofu`.
 
 The unified entry point **`importAnyIaC(content, opts?)`** (`src/lib/importIac.ts`)
 auto-detects format/provider and routes to the right importer; it lives in `lib/`
@@ -159,7 +163,7 @@ const result = importIaC(yamlString); // format auto-detected as "cloudformation
 Generate the JSON, then feed it to `importIaC`:
 
 ```bash
-terraform show -json > state.json
+terraform show -json > state.json   # or: tofu show -json > state.json (OpenTofu)
 ```
 
 ```json

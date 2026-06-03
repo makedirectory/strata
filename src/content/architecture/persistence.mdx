@@ -22,11 +22,24 @@ write, sorts `list()` newest-first, tolerates absent/corrupt storage as empty, a
 surfaces a quota overflow as the friendly error _"Browser storage is full — delete a
 saved diagram or export to JSON."_
 
+### Local version snapshots (`src/lib/snapshots.ts`)
+
+A second `localStorage`-backed surface keeps **version history**: `snapshots.ts`
+holds a single global ring under `strata:snapshots:v1`, capped at
+`MAX_SNAPSHOTS` (25, newest-first, oldest dropped). Each record is a
+`structuredClone` of the full graph plus a `label`, the diagram `name`, a
+`createdAt` timestamp, and `resourceCount` (`saveSnapshot` / `listSnapshots` /
+`getSnapshot` / `deleteSnapshot`). It powers Data ▾ → "Version history…" — save,
+restore, and use a snapshot as a drift/cost baseline (`compareWithVersion`) —
+surfaces its own quota error (_"Browser storage is full — delete some saved
+versions."_), and is intentionally **not cross-device** (promotable later to a
+`Repository` `versions` sub-resource — see [Roadmap §1](/docs/architecture/roadmap)).
+
 ### What's stored locally — and why it isn't encrypted
 
-`localStorage` holds **diagrams** (`strata:graphs:v1`) and **saved views**
-(layer/overlay UI state) — and nothing else. In particular it holds **no
-credentials**:
+`localStorage` holds **diagrams** (`strata:graphs:v1`), **version snapshots**
+(`strata:snapshots:v1`, above), and **saved views** (layer/overlay UI state) — and
+nothing else. In particular it holds **no credentials**:
 
 - Discovery credentials never reach the browser store. AWS keys entered in the
   Connect dialog live only in transient React state, are sent to `/api/discover`

@@ -1533,7 +1533,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const importIaCDialog = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".json,.yaml,.yml,.tf,.tfstate,.template";
+    input.accept = ".json,.yaml,.yml,.tf,.tofu,.tfstate,.template";
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return;
@@ -1611,7 +1611,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const compareWithFile = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".json,.yaml,.yml,.tf,.tfstate,.template";
+    input.accept = ".json,.yaml,.yml,.tf,.tofu,.tfstate,.template";
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return;

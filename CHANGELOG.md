@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-02
+
+Operability & polish: compare a design against any baseline (and see the cost
+delta), reconcile re-scans instead of duplicating, keep local version history,
+OpenTofu support — plus a focused-review pass over correctness, accessibility,
+and docs.
+
+### Added
+
+- **Compare for drift against more baselines.** Beyond a file, compare the canvas
+  against **a saved diagram** or a **version-history snapshot**; the drift panel
+  now also shows an **estimated monthly cost delta** (baseline → current) next to
+  the added/removed/changed counts.
+- **ARN-keyed merge-upsert** (`src/aws/merge.ts`). Re-running discovery or
+  re-importing IaC now **reconciles** into the current graph (matched by ARN, else
+  service type + name) — updating in place and preserving canvas position — instead
+  of appending duplicates. A re-scan adopts the live name.
+- **Merge preview.** "Merge into canvas" opens a **Review merge** dialog (added /
+  updated / unchanged / kept) before anything is applied.
+- **Local version history** (`src/lib/snapshots.ts`). **Data ▾ → Version history…**
+  snapshots the diagram to a bounded `localStorage` ring; restore one, or use it as
+  a drift/cost baseline. (Cross-device history is gated on the sharing backend.)
+- **OpenTofu support.** Import/compare pickers accept `.tofu`; the IaC import/export
+  labels read **Terraform / OpenTofu**; `tofu show -json` imports identically.
+- **Network-paths overlay** now traces load-balancer (`targets`) chains and
+  distinguishes **internal vs internet-facing** edges (orange), with a legend.
+- **Keyboard & screen-reader access to the canvas** (`AccessibleNodes` +
+  `navGrid.ts`): spatial arrow-key navigation, plus focus-trapped modal dialogs.
+
+### Changed
+
+- **Left panel slimmed:** removed the legacy **Presets** and **Shortcuts** sections
+  (starting points live in the Start hub; shortcuts in the **Intro**, renamed from
+  "? Tour").
+- **Cost "coming soon"** prompt rewritten to be benefit-first.
+- **Docs:** a full freshness pass — new user docs for version history, image
+  export, share links, and the merge preview; OpenTofu across the IaC guides; the
+  MCP server, cost, drift, merge, and snapshot engines reflected in the
+  architecture docs and Layer map; many stale menu/label references corrected.
+  README gains a product screenshot and live (non-localhost) doc links.
+
+### Fixed
+
+- Analytical overlays no longer grey the whole canvas when there's nothing to
+  highlight; the validation badge no longer overlaps the zoom controls; the active
+  cost toggle stays legible on hover; the compare list and a re-scan's cost no
+  longer mis-render.
+- A batch of verified engine fixes: drift N-to-N identity matching, spatial-nav
+  ordering, pan-delta accumulation, group-drag of nested children, cost clamping,
+  security-group port parsing, ALB multi-AZ checking, tiered-arrange cycles,
+  object-URL leaks, and corrupt-`localStorage` hardening.
+
 ## [0.4.0] - 2026-06-02
 
 Depth + reach: make the design _trustworthy_ (compare it against reality with
@@ -137,7 +189,8 @@ more easily (tiered auto-arrange, clean templates, a first-run tour).
 - Open-source project scaffolding: CI (typecheck, lint, format, test, build),
   CodeQL analysis, Dependabot, issue/PR templates, and contributor docs.
 
-[Unreleased]: https://github.com/makedirectory/aws-flow-builder/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/makedirectory/aws-flow-builder/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/makedirectory/aws-flow-builder/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/makedirectory/aws-flow-builder/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/makedirectory/aws-flow-builder/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/makedirectory/aws-flow-builder/compare/v0.2.0...v0.2.1
