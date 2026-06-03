@@ -4,6 +4,7 @@ import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { PALETTE_ADD_EVENT } from "./Palette";
 import { AccessibleNodes } from "./AccessibleNodes";
 import { AnnotationLayer } from "./AnnotationLayer";
+import { worldToScreen } from "../canvas/geometry";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
 const GRID_MAJOR = 80;
@@ -303,50 +304,54 @@ export const Canvas: React.FC = () => {
       )}
       {findingMarkers.length > 0 && (
         <svg className="findings-overlay" aria-hidden="true">
-          {findingMarkers.map((m) => (
-            <circle
-              key={m.id}
-              cx={viewport.x + m.x * viewport.scale}
-              cy={viewport.y + m.y * viewport.scale}
-              r={6}
-              className={
-                m.level === "error"
-                  ? "finding-dot finding-dot--error"
-                  : "finding-dot finding-dot--warn"
-              }
-            />
-          ))}
+          {findingMarkers.map((m) => {
+            const p = worldToScreen(m, viewport);
+            return (
+              <circle
+                key={m.id}
+                cx={p.x}
+                cy={p.y}
+                r={6}
+                className={
+                  m.level === "error"
+                    ? "finding-dot finding-dot--error"
+                    : "finding-dot finding-dot--warn"
+                }
+              />
+            );
+          })}
         </svg>
       )}
       {driftMarkers.length > 0 && (
         <svg className="findings-overlay" aria-hidden="true">
-          {driftMarkers.map((m) => (
-            <circle
-              key={m.id}
-              cx={viewport.x + m.x * viewport.scale}
-              cy={viewport.y + m.y * viewport.scale}
-              r={6}
-              className={
-                m.status === "added" ? "drift-dot drift-dot--added" : "drift-dot drift-dot--changed"
-              }
-            />
-          ))}
+          {driftMarkers.map((m) => {
+            const p = worldToScreen(m, viewport);
+            return (
+              <circle
+                key={m.id}
+                cx={p.x}
+                cy={p.y}
+                r={6}
+                className={
+                  m.status === "added"
+                    ? "drift-dot drift-dot--added"
+                    : "drift-dot drift-dot--changed"
+                }
+              />
+            );
+          })}
         </svg>
       )}
       {costMarkers.length > 0 && (
         <div className="cost-overlay" aria-hidden="true">
-          {costMarkers.map((m) => (
-            <span
-              key={m.id}
-              className="cost-label"
-              style={{
-                left: viewport.x + m.x * viewport.scale,
-                top: viewport.y + m.y * viewport.scale,
-              }}
-            >
-              {m.text}
-            </span>
-          ))}
+          {costMarkers.map((m) => {
+            const p = worldToScreen(m, viewport);
+            return (
+              <span key={m.id} className="cost-label" style={{ left: p.x, top: p.y }}>
+                {m.text}
+              </span>
+            );
+          })}
         </div>
       )}
       <AccessibleNodes />

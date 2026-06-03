@@ -9,9 +9,9 @@ import type {
 } from "../aws/model";
 import { DEFAULT_NODE_SIZE, emptyGraph } from "../aws/model";
 import {
-  addAnnotation as annAdd,
-  updateAnnotation as annUpdate,
-  removeAnnotation as annRemove,
+  addTo as annAddTo,
+  updateIn as annUpdateIn,
+  removeFrom as annRemoveFrom,
   type Annotation,
 } from "../aws/annotations";
 import { mergeGraphs, type MergeResult } from "../aws/merge";
@@ -273,9 +273,7 @@ export function useFlowStore() {
       }));
     } else if (selection.type === "annotation") {
       const id = selection.id;
-      mutate((cur) => ({
-        annotations: annRemove({ ...emptyGraph(""), annotations: cur.annotations }, id).annotations,
-      }));
+      mutate((cur) => ({ annotations: annRemoveFrom(cur.annotations, id) }));
     } else {
       const id = selection.id;
       mutate((cur) => ({ relationships: cur.relationships.filter((e) => e.id !== id) }));
@@ -388,31 +386,23 @@ export function useFlowStore() {
 
   /** Inspector field writes: name / region / config[key]. Committed. */
   // --- Annotations (presentation-only layer; committed via mutate for undo) ---
-  // The engine helpers operate on a full graph; we thread only the annotations
-  // slice through a throwaway graph and extract the resulting array.
+  // The array-level helpers operate on the annotations slice directly, so the
+  // store threads it through without wrapping/unwrapping a throwaway graph.
   const addAnnotation = useCallback(
     (annotation: Annotation) => {
-      mutate((cur) => ({
-        annotations: annAdd({ ...emptyGraph(""), annotations: cur.annotations }, annotation)
-          .annotations,
-      }));
+      mutate((cur) => ({ annotations: annAddTo(cur.annotations, annotation) }));
     },
     [mutate],
   );
   const updateAnnotation = useCallback(
     (id: string, patch: Partial<Omit<Annotation, "id">>) => {
-      mutate((cur) => ({
-        annotations: annUpdate({ ...emptyGraph(""), annotations: cur.annotations }, id, patch)
-          .annotations,
-      }));
+      mutate((cur) => ({ annotations: annUpdateIn(cur.annotations, id, patch) }));
     },
     [mutate],
   );
   const removeAnnotation = useCallback(
     (id: string) => {
-      mutate((cur) => ({
-        annotations: annRemove({ ...emptyGraph(""), annotations: cur.annotations }, id).annotations,
-      }));
+      mutate((cur) => ({ annotations: annRemoveFrom(cur.annotations, id) }));
     },
     [mutate],
   );
@@ -422,10 +412,7 @@ export function useFlowStore() {
    *  mirroring updateResourcePosition for nodes. */
   const updateAnnotationLive = useCallback((id: string, patch: Partial<Omit<Annotation, "id">>) => {
     const cur = liveRef.current;
-    // The engine always writes a fresh annotations array onto the returned
-    // graph; `?? []` only satisfies the optional-field type.
-    const nextAnnotations =
-      annUpdate({ ...emptyGraph(""), annotations: cur.annotations }, id, patch).annotations ?? [];
+    const nextAnnotations = annUpdateIn(cur.annotations, id, patch);
     liveRef.current = { ...cur, annotations: nextAnnotations };
     setAnnotations(nextAnnotations);
   }, []);

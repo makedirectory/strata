@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import { emptyGraph, type InfrastructureGraph } from "./model";
 import {
   ANNOTATION_KINDS,
+  ANNOTATION_KIND_DEFAULTS,
   addAnnotation,
+  addTo,
   clampAnnotation,
   isAnnotation,
   isAnnotationGraph,
@@ -10,7 +12,9 @@ import {
   isSafeAnnotationColor,
   listAnnotations,
   removeAnnotation,
+  removeFrom,
   updateAnnotation,
+  updateIn,
   type Annotation,
   type AnnotationGraph,
 } from "./annotations";
@@ -230,6 +234,78 @@ describe("removeAnnotation", () => {
     const g = addAnnotation(emptyGraph(), ann({ id: "a1" }));
     removeAnnotation(g, "a1");
     expect(listAnnotations(g).map((a) => a.id)).toEqual(["a1"]);
+  });
+});
+
+describe("ANNOTATION_KIND_DEFAULTS", () => {
+  it("has an entry for every kind, and ANNOTATION_KINDS is its key list", () => {
+    expect([...ANNOTATION_KINDS].sort()).toEqual(Object.keys(ANNOTATION_KIND_DEFAULTS).sort());
+    for (const k of ANNOTATION_KINDS) {
+      const d = ANNOTATION_KIND_DEFAULTS[k];
+      expect(typeof d.label).toBe("string");
+      expect(typeof d.defaultText).toBe("string");
+    }
+  });
+
+  it("gives zones a default backdrop size and leaves note/callout sizeless", () => {
+    expect(ANNOTATION_KIND_DEFAULTS.zone).toMatchObject({ defaultW: 360, defaultH: 240 });
+    expect(ANNOTATION_KIND_DEFAULTS.note.defaultW).toBeUndefined();
+    expect(ANNOTATION_KIND_DEFAULTS.callout.defaultW).toBeUndefined();
+  });
+});
+
+describe("addTo", () => {
+  it("appends without mutating the input array", () => {
+    const list: Annotation[] = [ann({ id: "a1" })];
+    const out = addTo(list, ann({ id: "a2" }));
+    expect(out.map((a) => a.id)).toEqual(["a1", "a2"]);
+    expect(list.map((a) => a.id)).toEqual(["a1"]); // input untouched
+    expect(out).not.toBe(list);
+  });
+
+  it("upserts on duplicate id and clamps geometry", () => {
+    let list: Annotation[] = addTo([], ann({ id: "a1", text: "v1" }));
+    list = addTo(list, ann({ id: "a1", text: "v2", x: NaN, w: -5 }));
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ text: "v2", x: 0, w: 0 });
+  });
+});
+
+describe("updateIn", () => {
+  it("applies a partial patch (clamped) without mutating the input", () => {
+    const list: Annotation[] = [ann({ id: "a1", text: "old", x: 1 })];
+    const out = updateIn(list, "a1", { text: "new", w: -3 });
+    expect(out[0]).toMatchObject({ id: "a1", text: "new", x: 1 });
+    expect(list[0].text).toBe("old");
+  });
+
+  it("cannot change the id", () => {
+    const list: Annotation[] = [ann({ id: "a1" })];
+    // @ts-expect-error id is excluded from the patch type
+    const out = updateIn(list, "a1", { id: "hacked", text: "x" });
+    expect(out[0].id).toBe("a1");
+  });
+
+  it("returns a fresh copy when id not found", () => {
+    const list: Annotation[] = [ann({ id: "a1" })];
+    const out = updateIn(list, "missing", { text: "x" });
+    expect(out).not.toBe(list);
+    expect(out.map((a) => a.id)).toEqual(["a1"]);
+  });
+});
+
+describe("removeFrom", () => {
+  it("removes by id without mutating the input", () => {
+    const list: Annotation[] = [ann({ id: "a1" }), ann({ id: "a2" })];
+    const out = removeFrom(list, "a1");
+    expect(out.map((a) => a.id)).toEqual(["a2"]);
+    expect(list.map((a) => a.id)).toEqual(["a1", "a2"]);
+  });
+
+  it("is a no-op (fresh copy) when id not found", () => {
+    const list: Annotation[] = [ann({ id: "a1" })];
+    const out = removeFrom(list, "missing");
+    expect(out.map((a) => a.id)).toEqual(["a1"]);
   });
 });
 

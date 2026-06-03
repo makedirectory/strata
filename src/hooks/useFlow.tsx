@@ -62,7 +62,7 @@ import { reviewAccount, type AccountReview } from "../aws/review";
 import { mapToCloud, type CloudMapResult } from "../aws/cloudMap";
 import { applyFix } from "../aws/autofix";
 import { tagTintMap } from "../aws/tags";
-import type { Annotation } from "../aws/annotations";
+import { ANNOTATION_KIND_DEFAULTS, type Annotation } from "../aws/annotations";
 import type { LayerState } from "./useFlowStore";
 
 /** Above this many resources the renderer culls to the viewport. */
@@ -1112,20 +1112,19 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const v = viewSize();
       const center = screenToWorld({ x: v.width / 2, y: v.height / 2 }, getViewport());
       const id = storeUid();
+      const { defaultText, defaultW, defaultH } = ANNOTATION_KIND_DEFAULTS[kind];
       const base: Annotation = {
         id,
         kind,
-        text: kind === "zone" ? "Zone" : kind === "callout" ? "Callout" : "Note",
-        x: Math.round(center.x),
-        y: Math.round(center.y),
+        text: defaultText,
+        // A sized kind (e.g. a zone) is centred on the viewport centre by
+        // offsetting its top-left by half its dimensions; unsized kinds (note /
+        // callout) anchor at the centre point itself.
+        x: Math.round(center.x - (defaultW ?? 0) / 2),
+        y: Math.round(center.y - (defaultH ?? 0) / 2),
       };
-      // Zones default to a sizeable region (they sit behind nodes as a backdrop).
-      if (kind === "zone") {
-        base.w = 360;
-        base.h = 240;
-        base.x = Math.round(center.x - 180);
-        base.y = Math.round(center.y - 120);
-      }
+      if (defaultW !== undefined) base.w = defaultW;
+      if (defaultH !== undefined) base.h = defaultH;
       storeAddAnnotation(base);
       selectAnnotation(id);
       return id;
