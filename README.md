@@ -155,13 +155,13 @@ src/
 Append one `ServiceDefinition` to the matching catalog in `src/aws/services/`
 (use `networking.ts` as the template) — the palette, colours, icons, inspector
 form, and search pick it up automatically. See the
-[Service Registry docs](http://localhost:3000/docs/architecture/service-registry).
+[Service Registry docs](https://strata.mk-dir.com/docs/architecture/service-registry).
 
 ## Architecture
 
 For the full design — registry schema, domain model, the registry-driven UI, the
 swappable persistence layer, MCP ingestion readiness, and a candid list of gaps and
-next steps — see the **[Architecture & Engineering docs](http://localhost:3000/docs/architecture)**
+next steps — see the **[Architecture & Engineering docs](https://strata.mk-dir.com/docs/architecture)**
 (`src/content/architecture/`).
 
 ## Tech Stack
