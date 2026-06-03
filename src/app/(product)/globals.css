@@ -648,6 +648,49 @@ text.dimmed {
   border: 1px solid #2a3f6a;
   color: #c3d2ea;
 }
+
+/* Validation / Rule-Suggestions panels (Inspector) — class-driven so they track
+   the theme tokens instead of hard-coded inline hex. */
+.ins-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ins-run {
+  padding: 6px 10px;
+}
+.ins-results {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.no-issues {
+  color: var(--green);
+}
+.no-suggestions {
+  color: var(--sub);
+}
+.finding-msg {
+  margin-left: 6px;
+}
+.rule-block {
+  margin: 6px 0 10px;
+  padding: 8px;
+  border: 1px solid #223055;
+  border-radius: 10px;
+  background: #0d1831;
+}
+.rule-block-title {
+  font-weight: 700;
+}
+.rule-scope {
+  color: var(--accent-2);
+}
+.rule-list {
+  margin: 6px 0 0 16px;
+}
+.rule-kv-key {
+  color: var(--sub);
+}
 .node-body {
   padding: 10px 12px;
   font-size: 12px;
