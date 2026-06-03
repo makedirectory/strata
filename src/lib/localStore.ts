@@ -21,16 +21,40 @@ import { SCHEMA_VERSION, summarize } from "../aws/model";
 /** Versioned key so a future schema migration can detect/convert old payloads. */
 const STORAGE_KEY = "strata:graphs:v1";
 
-/** Read the whole id→graph map, tolerating absent/corrupt storage as empty. */
+/**
+ * Minimal shape guard for a stored record. We only assert the fields the read
+ * path actually dereferences (id/name strings, resources/relationships arrays),
+ * so a corrupt or hand-edited entry is rejected at this boundary instead of
+ * crashing downstream in `summarize()` or the renderer.
+ */
+function isValidRecord(v: unknown): v is InfrastructureGraph {
+  if (!v || typeof v !== "object") return false;
+  const g = v as Record<string, unknown>;
+  return (
+    typeof g.id === "string" &&
+    typeof g.name === "string" &&
+    Array.isArray(g.resources) &&
+    Array.isArray(g.relationships)
+  );
+}
+
+/**
+ * Read the whole id→graph map, tolerating absent/corrupt storage as empty.
+ * Individual records that fail the shape guard are dropped, so a single bad
+ * entry can't take down listing/loading.
+ */
 function readAll(): Record<string, InfrastructureGraph> {
   if (typeof window === "undefined") return {};
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, InfrastructureGraph>)
-      : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, InfrastructureGraph> = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      if (isValidRecord(value)) out[id] = value;
+    }
+    return out;
   } catch {
     return {};
   }

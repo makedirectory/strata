@@ -72,8 +72,14 @@ export const AccessibleNodes: React.FC = () => {
     }
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (node.isContainer) focusContainer(node.id);
-      else goToResource(node.id);
+      if (node.isContainer) {
+        // Commit selection on the explicit activate (roving focus alone doesn't).
+        selectNode(node.id);
+        focusContainer(node.id);
+      } else {
+        // goToResource selects + recentres the leaf.
+        goToResource(node.id);
+      }
       return;
     }
     if (e.key === "Escape" && focusedContainerId) {
@@ -120,10 +126,10 @@ export const AccessibleNodes: React.FC = () => {
             tabIndex={n.id === tabId ? 0 : -1}
             aria-pressed={selected}
             aria-label={label}
-            onFocus={() => {
-              setActiveId(n.id);
-              selectNode(n.id);
-            }}
+            // Roving focus only — does NOT commit selection, so arrow-key
+            // exploration doesn't clobber an existing multi-selection or churn
+            // the Inspector on every keystroke. Enter/Space commits (see onKeyDown).
+            onFocus={() => setActiveId(n.id)}
             onKeyDown={(e) => onKeyDown(e, n)}
             style={{
               left: viewport.x + n.x * viewport.scale,
