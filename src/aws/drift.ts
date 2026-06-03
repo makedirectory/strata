@@ -70,10 +70,16 @@ export function diffGraphs(
   baseline: InfrastructureGraph,
 ): DriftResult {
   const baseById = new Map(baseline.resources.map((r) => [r.id, r]));
-  const baseByKey = new Map<string, ResourceInstance>();
+  // Bucket baseline resources per identity key (preserving order) so that N
+  // current resources sharing a key (e.g. two same-service, same-name nodes with
+  // no ARN) can match N baseline resources, instead of all collapsing onto the
+  // first and reporting spurious added/removed churn.
+  const baseByKey = new Map<string, ResourceInstance[]>();
   for (const r of baseline.resources) {
     const k = identityKey(r);
-    if (!baseByKey.has(k)) baseByKey.set(k, r);
+    const bucket = baseByKey.get(k);
+    if (bucket) bucket.push(r);
+    else baseByKey.set(k, [r]);
   }
 
   const added: DriftRef[] = [];
@@ -85,8 +91,9 @@ export function diffGraphs(
     let match = baseById.get(c.id);
     if (match && matchedBaseIds.has(match.id)) match = undefined;
     if (!match) {
-      const cand = baseByKey.get(identityKey(c));
-      if (cand && !matchedBaseIds.has(cand.id)) match = cand;
+      // First not-yet-matched baseline resource sharing this identity key.
+      const bucket = baseByKey.get(identityKey(c));
+      match = bucket?.find((b) => !matchedBaseIds.has(b.id));
     }
     if (!match) {
       added.push(ref(c));

@@ -851,6 +851,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       iOnMouseMove(e, {
         rects: layout.rects,
         pan: store.viewport,
+        getPan: getViewport,
         updatePositions: updateResourcePositions,
         updateSize: store.updateResourceSize,
         updatePan: storeSetViewport,
@@ -863,6 +864,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       iOnMouseMove,
       layout,
       store.viewport,
+      getViewport,
       updateResourcePositions,
       store.updateResourceSize,
       storeSetViewport,

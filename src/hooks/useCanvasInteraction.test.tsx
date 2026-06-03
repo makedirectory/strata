@@ -50,6 +50,7 @@ describe("useCanvasInteraction — presentation / read-only gating", () => {
     result.current.onMouseMove(mouseEvent({ clientX: 80, clientY: 60 }), {
       rects,
       pan,
+      getPan: () => pan,
       updatePositions,
       updateSize: vi.fn(),
       updatePan: vi.fn(),
@@ -78,6 +79,7 @@ describe("useCanvasInteraction — presentation / read-only gating", () => {
     result.current.onMouseMove(mouseEvent({ clientX: 80, clientY: 60 }), {
       rects,
       pan,
+      getPan: () => pan,
       updatePositions,
       updateSize: vi.fn(),
       updatePan: vi.fn(),
@@ -109,6 +111,7 @@ describe("useCanvasInteraction — resize", () => {
     result.current.onMouseMove(mouseEvent({ clientX: 360, clientY: 160 }), {
       rects,
       pan,
+      getPan: () => pan,
       updatePositions: vi.fn(),
       updateSize,
       updatePan: vi.fn(),
@@ -122,6 +125,7 @@ describe("useCanvasInteraction — resize", () => {
     result.current.onMouseMove(mouseEvent({ clientX: -500, clientY: -500 }), {
       rects,
       pan,
+      getPan: () => pan,
       updatePositions: vi.fn(),
       updateSize,
       updatePan: vi.fn(),
@@ -158,6 +162,7 @@ describe("useCanvasInteraction — resize", () => {
     result.current.onMouseMove(mouseEvent({ clientX: 360, clientY: 160 }), {
       rects,
       pan,
+      getPan: () => pan,
       updatePositions: vi.fn(),
       updateSize,
       updatePan: vi.fn(),

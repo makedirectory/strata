@@ -47,6 +47,11 @@ interface DragState {
   isGroup: boolean;
   /** The dragged node already had a parent — a child drag uses the layout override. */
   wasChild: boolean;
+  /** Moving ids that are nested (have a parentId). In a group drag their on-canvas
+   *  placement is owned by the layout engine, so we must NOT write their stored
+   *  position (doing so corrupts the coordinate the node falls back to once
+   *  un-nested / its container removed). */
+  childIds: Set<string>;
   /** Latest snapped top-left of the anchor (for drop reparent / free placement). */
   lastX: number;
   lastY: number;
@@ -154,6 +159,8 @@ export function useCanvasInteraction() {
         const rb = rects.get(id);
         if (rb) start.set(id, { x: rb.x, y: rb.y });
       }
+      const parentById = new Map(resources.map((r) => [r.id, r.parentId]));
+      const childIds = new Set(ids.filter((id) => !!parentById.get(id)));
       dragRef.current = {
         anchorId: resource.id,
         ids,
@@ -162,6 +169,7 @@ export function useCanvasInteraction() {
         grabDY: e.clientY - (pan.y + p.y * pan.scale),
         isGroup,
         wasChild: !!resource.parentId,
+        childIds,
         lastX: p.x,
         lastY: p.y,
         lastPointerX: p.x + p.w / 2,
@@ -250,6 +258,9 @@ export function useCanvasInteraction() {
       ctx: {
         rects: Map<string, Rect>;
         pan: Pan;
+        /** Live viewport accessor — read per-event so incremental panning never
+         *  accumulates against a stale, closed-over `pan`. */
+        getPan: () => Pan;
         updatePositions: (updates: { id: string; x: number; y: number }[]) => void;
         updateSize: (id: string, size: { w: number; h: number }) => void;
         updatePan: (newPan: Pan) => void;
@@ -261,6 +272,7 @@ export function useCanvasInteraction() {
       const {
         rects,
         pan,
+        getPan,
         updatePositions,
         updateSize,
         updatePan,
@@ -307,14 +319,20 @@ export function useCanvasInteraction() {
         drag.lastPointerX = (e.clientX - pan.x) / pan.scale;
         drag.lastPointerY = (e.clientY - pan.y) / pan.scale;
         if (drag.isGroup) {
-          // Move every selected node together (top-level stored positions).
+          // Move every selected TOP-LEVEL node together (stored positions).
+          // Nested members are skipped: the layout engine owns their placement
+          // (they move because their container moves), and writing their stored
+          // x/y here would corrupt the coordinate they fall back to when later
+          // un-nested or their container is deleted.
           const ddx = snap.x - startAnchor.x;
           const ddy = snap.y - startAnchor.y;
           updatePositions(
-            drag.ids.map((id) => {
-              const s = drag.start.get(id) ?? { x: 0, y: 0 };
-              return { id, x: s.x + ddx, y: s.y + ddy };
-            }),
+            drag.ids
+              .filter((id) => !drag.childIds.has(id))
+              .map((id) => {
+                const s = drag.start.get(id) ?? { x: 0, y: 0 };
+                return { id, x: s.x + ddx, y: s.y + ddy };
+              }),
           );
         } else if (drag.wasChild) {
           // A child detaches via the layout override and follows the cursor; its
@@ -337,7 +355,11 @@ export function useCanvasInteraction() {
         return;
       }
       if (panningRef.current) {
-        updatePan({ ...pan, x: pan.x + e.movementX, y: pan.y + e.movementY });
+        // Read the live viewport (not the closed-over `pan`) so consecutive
+        // native mousemove events within one render frame each accumulate their
+        // delta instead of all overwriting the same stale base.
+        const cur = getPan();
+        updatePan({ ...cur, x: cur.x + e.movementX, y: cur.y + e.movementY });
       }
     },
     [],
