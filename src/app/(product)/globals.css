@@ -550,6 +550,16 @@ text.dimmed {
   background: color-mix(in srgb, var(--env-tint, #24406b) 55%, transparent);
 }
 
+/* Tag overlay: categorical tint on a separate channel (--tag-tint) so it can
+   coexist with the env/heat channel without colliding. */
+.node.tag-tinted {
+  background: color-mix(in srgb, var(--tag-tint, transparent) 24%, #0f1a31);
+  border-color: color-mix(in srgb, var(--tag-tint, #24406b) 60%, #24406b);
+}
+.node.container.tag-tinted > .node-header {
+  background: color-mix(in srgb, var(--tag-tint, #24406b) 30%, transparent);
+}
+
 /* ---- Leaf summary node ("N× service", click to expand) ---- */
 .node.summary {
   display: flex;
@@ -1296,6 +1306,131 @@ svg.guides {
   outline-offset: 2px;
   border-radius: 10px;
 }
+
+/* ---- Annotation layer (notes / callouts / zones) ----
+   Presentation-only overlay drawn with the same world→screen mapping as nodes.
+   `--ann-color` is the per-annotation colour (falls back to a neutral default). */
+.annz {
+  /* Zone backdrop layer — BEHIND the nodes (.world is z-index 3). */
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.ann-leaders {
+  /* Callout leader lines — above zones, below the note/callout bubbles. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: visible;
+}
+.ann-leader {
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  opacity: 0.8;
+}
+.anno {
+  /* Note / callout layer — ABOVE the nodes, below the a11y layer (z-index 6). */
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.ann-zone,
+.ann-note,
+.ann-callout {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  font-size: 12px;
+  color: var(--text);
+}
+.ann-zone:active,
+.ann-note:active,
+.ann-callout:active {
+  cursor: grabbing;
+}
+/* Zone: translucent labelled region. */
+.ann-zone {
+  border: 1.5px dashed color-mix(in srgb, var(--ann-color, var(--accent-2)) 70%, transparent);
+  background: color-mix(in srgb, var(--ann-color, var(--accent-2)) 12%, transparent);
+  border-radius: 10px;
+}
+.ann-zone-label {
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--ann-color, var(--accent-2)) 60%, var(--text));
+  pointer-events: none;
+}
+/* Sticky-note: small wrapping box. */
+.ann-note {
+  background: color-mix(in srgb, var(--ann-color, var(--yellow)) 22%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--ann-color, var(--yellow)) 45%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+/* Callout: rounded text bubble (the leader line points at its target node). */
+.ann-callout {
+  background: color-mix(in srgb, var(--ann-color, var(--blue)) 20%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--ann-color, var(--blue)) 55%, transparent);
+  border-radius: 14px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.ann-text {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.3;
+}
+.ann-edit {
+  width: 100%;
+  min-height: 48px;
+  resize: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+/* Zone inline edit fills the region box (the label sits in a corner; the
+   editor should occupy the whole zone so it's easy to target and read). */
+.ann-zone-edit {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  font-weight: 700;
+  font-size: 11px;
+}
+.ann-zone.selected,
+.ann-note.selected,
+.ann-callout.selected {
+  outline: 2px solid #5fbef3;
+  outline-offset: 1px;
+}
+.ann-resize {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: #5fbef3;
+  cursor: nwse-resize;
+  pointer-events: auto;
+}
+
 .finding-dot {
   stroke: #0a0f1e;
   stroke-width: 2;

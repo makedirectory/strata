@@ -34,6 +34,7 @@ export interface PaletteItem {
 export type Selection =
   | { type: "node"; id: string; resource: ResourceInstance }
   | { type: "edge"; id: string; relationship: Relationship; fromName: string; toName: string }
+  | { type: "annotation"; id: string }
   | null;
 
 /** Pan/zoom alias kept for readability in interaction code. */

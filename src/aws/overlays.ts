@@ -12,10 +12,12 @@
  * network-relationship neighbourhood; heat is a degree proxy for cost/usage.
  */
 import type { ResourceInstance, Relationship } from "./model";
+import { emptyGraph } from "./model";
+import { litReachable } from "./reachability";
 import { relationshipClassOf } from "./relationshipClasses";
 import type { RelationshipKind } from "./types";
 
-export type OverlayKind = "none" | "iam" | "security" | "heat";
+export type OverlayKind = "none" | "iam" | "security" | "heat" | "reachability" | "tags";
 
 /** Emphasised node + relationship ids for an overlay. */
 export interface OverlayLit {
@@ -132,6 +134,15 @@ export function overlayLitFor(
   let lit: OverlayLit | null = null;
   if (kind === "iam") lit = iamTrustOverlay(resources, relationships, focusId);
   else if (kind === "security") lit = securityPathOverlay(resources, relationships, focusId);
+  else if (kind === "reachability") {
+    // Decoupled engine lives in ./reachability; overlays.ts only delegates.
+    const r = litReachable({
+      ...emptyGraph(""),
+      resources: [...resources],
+      relationships: [...relationships],
+    });
+    lit = { nodes: r.nodes, edges: r.edges, externalNodes: r.externalNodes };
+  }
   return lit && lit.nodes.size > 0 ? lit : null;
 }
 

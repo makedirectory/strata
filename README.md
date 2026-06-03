@@ -12,6 +12,13 @@ existing Infrastructure-as-Code — CloudFormation (JSON/YAML), Terraform
 `show -json` (AWS/GCP/Azure) and Azure ARM — into the same graph, export the graph
 back out as IaC, and ingest live cloud state via provider discovery APIs.
 
+On top of the graph sits a layer of **pure analysis engines** — validation with
+one-click autofix, true internet-reachability evaluation, an "Explain & Clean"
+account review (cost + risk + a safe-cleanup checklist), cross-cloud migration
+mapping, a change/audit receipt between any two versions, tag tinting/filtering,
+canvas annotations, and a Diagram-as-Code DSL — all exposed both in the UI and
+over MCP.
+
 ## MCP server
 
 An LLM/agent can drive Strata over the [Model Context Protocol](https://modelcontextprotocol.io).
@@ -37,7 +44,13 @@ Then point an MCP client at that command, e.g.:
 ```
 
 **Tools:** `list_services`, `get_service`, `validate_architecture`,
-`suggest_rules`, `import_iac`, `export_iac`, `estimate_cost`.
+`suggest_rules`, `import_iac`, `export_iac`, `estimate_cost`,
+`review_account` (cost + risk + safe-cleanup report), `evaluate_reachability`
+(true internet-reachability, not topology), `map_to_cloud` (cross-cloud
+equivalence), `graph_to_dsl` / `graph_from_dsl` (Diagram-as-Code round-trip),
+`list_autofixes` / `apply_autofix` (deterministic validation fixes),
+`change_receipt` (audit receipt of what changed between two graphs),
+`tag_report`.
 
 > Live cloud discovery is separate — it runs through a Cloud Control SDK route
 > (`src/app/api/discover/route.ts`); `src/aws/mcp.ts` is the pure transform behind
@@ -126,7 +139,15 @@ src/
     regions.ts          AWS region reference list
     rules.ts            Architecture validation + best-practice rule suggestions
     relationshipClasses.ts  Edge visual encoding (colour/dash/arrowhead per class)
-    overlays.ts         Topology overlays (IAM-trust, network path, heat) — pure
+    overlays.ts         Analytical overlays (IAM-trust, network path, heat, reachability, tags) — pure
+    reachability.ts     Policy-aware internet-reachability eval (subnets/routes/SG ports) — pure
+    review.ts           "Explain & Clean" account review: cost + risk + safe-cleanup checklist — pure
+    cloudMap.ts         Cross-cloud equivalence / migration (serviceId+provider rewrite) — pure
+    autofix.ts          Deterministic fixes for validation findings (detect + apply) — pure
+    receipt.ts          Change/audit receipt between two graphs (drift + cost + findings) — pure
+    tags.ts             Tag collection + tint map + tag filter — pure
+    annotations.ts      Notes / callouts / zones pinned to the canvas (excluded from rules/cost/IaC) — pure
+    dsl.ts              Diagram-as-Code: graph ⇄ YAML round-trip — pure
     iac.ts              IaC import (CloudFormation + Terraform → InfrastructureGraph)
     iacExport.ts        IaC export (InfrastructureGraph → CloudFormation / Terraform scaffold)
     mcp.ts              Pure transform: DiscoveredResource[] → graph (mapDiscoveredToGraph)
@@ -165,6 +186,11 @@ For the full design — registry schema, domain model, the registry-driven UI, t
 swappable persistence layer, MCP ingestion readiness, and a candid list of gaps and
 next steps — see the **[Architecture & Engineering docs](https://strata.mk-dir.com/docs/architecture)**
 (`src/content/architecture/`).
+
+## Roadmap
+
+What's shipped, the active follow-ups, and what's deferred until a backend exists:
+see [ROADMAP.md](./ROADMAP.md).
 
 ## Tech Stack
 
