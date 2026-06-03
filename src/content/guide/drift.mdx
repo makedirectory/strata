@@ -48,6 +48,10 @@ When there are differences, drifted nodes are dotted on the canvas:
 The **drift results** panel (top-right of the canvas) summarises everything:
 
 - **Counts** — added / removed / changed / in-sync.
+- **Estimated cost delta** — the rough monthly cost of your diagram vs the
+  baseline, with the difference (e.g. _$120/mo → $184/mo · ▲ +$64/mo_). It's the
+  same heuristic as the [cost estimate](/docs/guide/cost), so treat it as a
+  relative signal — handy for "what does this change cost?" before you build it.
 - **Added & changed** lists — click any entry to jump to and select that node.
   Changed entries show _which_ configuration keys differ.
 - **Removed** list — resources in the baseline that aren't on your canvas. These

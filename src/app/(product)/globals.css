@@ -1394,6 +1394,31 @@ svg.guides {
   padding: 10px 12px;
   border-bottom: 1px solid #1a2540;
 }
+.drift-cost {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid #1a2540;
+  color: var(--text);
+}
+.drift-cost-label {
+  color: var(--sub);
+  font-weight: 600;
+}
+.drift-cost-delta {
+  font-weight: 700;
+  margin-left: auto;
+  color: var(--sub);
+}
+.drift-cost-delta.up {
+  color: #f87171; /* costs more */
+}
+.drift-cost-delta.down {
+  color: #34d399; /* costs less */
+}
 .drift-c {
   color: var(--sub);
   font-weight: 600;
