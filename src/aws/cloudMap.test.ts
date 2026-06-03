@@ -12,7 +12,11 @@ import { emptyGraph, validateGraph } from "./model";
 import type { InfrastructureGraph, ResourceInstance, Relationship } from "./model";
 import { getService, serviceProvider } from "./registry";
 
-function res(id: string, serviceId: string, extra: Partial<ResourceInstance> = {}): ResourceInstance {
+function res(
+  id: string,
+  serviceId: string,
+  extra: Partial<ResourceInstance> = {},
+): ResourceInstance {
   return { id, serviceId, name: id, config: {}, source: "manual", ...extra };
 }
 
@@ -43,11 +47,7 @@ describe("mapToCloud — capability-aware translation", () => {
   });
 
   it("maps AWS to Azure equivalents", () => {
-    const g = graphWith([
-      res("r1", "s3-bucket"),
-      res("r2", "ec2-instance"),
-      res("r3", "dynamodb"),
-    ]);
+    const g = graphWith([res("r1", "s3-bucket"), res("r2", "ec2-instance"), res("r3", "dynamodb")]);
     const { graph } = mapToCloud(g, "azure");
     const byId = new Map(graph.resources.map((r) => [r.id, r.serviceId]));
     expect(byId.get("r1")).toBe("azure-blob-container");
@@ -56,7 +56,11 @@ describe("mapToCloud — capability-aware translation", () => {
   });
 
   it("does not treat a firewall/security-group as a VPC network container", () => {
-    const g = graphWith([res("net", "vpc"), res("sg", "security-group"), res("sub", "subnet-public")]);
+    const g = graphWith([
+      res("net", "vpc"),
+      res("sg", "security-group"),
+      res("sub", "subnet-public"),
+    ]);
     const { graph } = mapToCloud(g, "gcp");
     const byId = new Map(graph.resources.map((r) => [r.id, r.serviceId]));
     expect(byId.get("net")).toBe("gcp-vpc-network");
@@ -125,7 +129,11 @@ describe("mapToCloud — honest unmapped reporting", () => {
     const { graph, unmapped } = mapToCloud(g, "gcp");
     expect(graph.resources).toEqual([]);
     expect(unmapped).toHaveLength(1);
-    expect(unmapped[0]).toMatchObject({ resourceId: "r1", serviceId: "cloudwatch", category: "monitoring" });
+    expect(unmapped[0]).toMatchObject({
+      resourceId: "r1",
+      serviceId: "cloudwatch",
+      category: "monitoring",
+    });
     expect(unmapped[0].reason).toContain("category");
   });
 
@@ -201,10 +209,7 @@ describe("mapToCloud — relationship and parent pruning", () => {
   });
 
   it("preserves a parentId when the parent survives", () => {
-    const g = graphWith([
-      res("vpc1", "vpc"),
-      res("sub1", "subnet-public", { parentId: "vpc1" }),
-    ]);
+    const g = graphWith([res("vpc1", "vpc"), res("sub1", "subnet-public", { parentId: "vpc1" })]);
     const { graph } = mapToCloud(g, "gcp");
     const sub = graph.resources.find((r) => r.id === "sub1");
     expect(sub?.parentId).toBe("vpc1");

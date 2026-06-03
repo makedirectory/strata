@@ -143,6 +143,50 @@ describe("dslToGraph", () => {
     expect(graph.resources[0].position).toBeUndefined();
   });
 
+  it("drops a position with a non-finite field (NaN / Infinity), keeping valid ones", () => {
+    // BUG 3: parsePosition guarded with `typeof x === "number"`, which accepts
+    // NaN/Infinity; the docstring promises FINITE numbers, so such a node must
+    // stay unpositioned.
+    const dsl = [
+      "name: Test",
+      "schemaVersion: 1",
+      "resources:",
+      "  - id: a",
+      "    service: vpc",
+      "    name: vpc-a",
+      "    source: manual",
+      "    position:",
+      "      x: .nan", // NaN -> whole position discarded
+      "      y: 20",
+      "      w: 100",
+      "      h: 40",
+      "  - id: b",
+      "    service: vpc",
+      "    name: vpc-b",
+      "    source: manual",
+      "    position:",
+      "      x: 10",
+      "      y: .inf", // Infinity -> whole position discarded
+      "      w: 100",
+      "      h: 40",
+      "  - id: c",
+      "    service: vpc",
+      "    name: vpc-c",
+      "    source: manual",
+      "    position:",
+      "      x: 10",
+      "      y: 20",
+      "      w: 100",
+      "      h: 40",
+    ].join("\n");
+    const { graph, errors } = dslToGraph(dsl);
+    expect(errors).toEqual([]);
+    expect(graph.resources[0].position).toBeUndefined();
+    expect(graph.resources[1].position).toBeUndefined();
+    // A fully-finite position still round-trips.
+    expect(graph.resources[2].position).toEqual({ x: 10, y: 20, w: 100, h: 40 });
+  });
+
   it("is idempotent (dsl -> graph -> dsl -> graph)", () => {
     const first = dslToGraph(graphToDsl(sampleGraph()));
     const second = dslToGraph(graphToDsl(first.graph));

@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
+import { evaluateReachability, litReachable, isWorldCidr, type OpenPort } from "./reachability";
 import {
-  evaluateReachability,
-  litReachable,
-  isWorldCidr,
-  type OpenPort,
-} from "./reachability";
-import { emptyGraph, type InfrastructureGraph, type ResourceInstance, type Relationship } from "./model";
+  emptyGraph,
+  type InfrastructureGraph,
+  type ResourceInstance,
+  type Relationship,
+} from "./model";
 
 let seq = 0;
 function res(
@@ -258,6 +258,57 @@ describe("evaluateReachability — open ports", () => {
     expect(r.notes.some((n) => n.includes("sensitive port 3389"))).toBe(true);
   });
 
+  it("surfaces both ports of a SPACE-AFTER-COMMA world-open rule (tcp 22, 3389 0.0.0.0/0)", () => {
+    // BUG 1: tokenising on whitespace BEFORE handling commas split a
+    // space-after-comma list into "22," + "3389" and misread the CIDR, dropping
+    // a real world-open exposure. Both ports must now surface.
+    const igw = res("internet-gateway", "igw");
+    const ec2 = res("ec2-instance", "web");
+    const sg = res("security-group", "sg", { config: { ingress: "tcp 22, 3389 0.0.0.0/0" } });
+    const g = graphOf(
+      [igw, ec2, sg],
+      [rel(igw.id, ec2.id, "connects_to"), rel(sg.id, ec2.id, "attached_to")],
+    );
+    const r = evaluateReachability(g);
+    const ex = r.exposed.find((e) => e.resourceId === ec2.id)!;
+    const ports = ex.openPorts.map((p: OpenPort) => p.port);
+    expect(ports).toContain(22);
+    expect(ports).toContain(3389);
+    // each port is sourced from the world CIDR, not a misread "3389".
+    expect(ex.openPorts.every((p) => p.cidr === "0.0.0.0/0")).toBe(true);
+  });
+
+  it("still rejects a non-world CIDR in a space-after-comma rule", () => {
+    // The robust parser must not turn a private/prefix CIDR into a world hit.
+    const igw = res("internet-gateway", "igw");
+    const ec2 = res("ec2-instance", "web");
+    const sg = res("security-group", "sg", { config: { ingress: "tcp 22, 3389 10.0.0.0/8" } });
+    const g = graphOf(
+      [igw, ec2, sg],
+      [rel(igw.id, ec2.id, "connects_to"), rel(sg.id, ec2.id, "attached_to")],
+    );
+    const r = evaluateReachability(g);
+    const ex = r.exposed.find((e) => e.resourceId === ec2.id)!;
+    expect(ex.openPorts).toEqual([]);
+  });
+
+  it("parses single-port and range forms unchanged (tcp 22 / tcp 20-23)", () => {
+    const igw = res("internet-gateway", "igw");
+    const ec2 = res("ec2-instance", "web");
+    const sg = res("security-group", "sg", {
+      config: { ingress: "tcp 22 0.0.0.0/0\ntcp 20-23 0.0.0.0/0" },
+    });
+    const g = graphOf(
+      [igw, ec2, sg],
+      [rel(igw.id, ec2.id, "connects_to"), rel(sg.id, ec2.id, "attached_to")],
+    );
+    const r = evaluateReachability(g);
+    const ex = r.exposed.find((e) => e.resourceId === ec2.id)!;
+    // The single port enumerates; the range does not.
+    expect(ex.openPorts.map((p) => p.port)).toEqual([22]);
+    expect(r.notes.some((n) => n.includes("sensitive port 22 within range 20-23"))).toBe(true);
+  });
+
   it("produces a sensitive-port-in-range note for tcp 20-23 0.0.0.0/0", () => {
     // BUG 2: ranges are not enumerated, but a sensitive port inside one is noted.
     const igw = res("internet-gateway", "igw");
@@ -272,9 +323,7 @@ describe("evaluateReachability — open ports", () => {
     // range is not enumerated into discrete OpenPorts.
     expect(ex.openPorts).toEqual([]);
     // sensitive port 22 falls within 20-23 → note.
-    expect(
-      r.notes.some((n) => n.includes("sensitive port 22 within range 20-23")),
-    ).toBe(true);
+    expect(r.notes.some((n) => n.includes("sensitive port 22 within range 20-23"))).toBe(true);
   });
 });
 

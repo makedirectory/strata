@@ -68,9 +68,9 @@ describe("changeReceipt", () => {
     const r = changeReceipt(before, after);
     expect(r.findings.resolved.length).toBeGreaterThan(0);
     expect(r.findings.introduced).toEqual([]);
-    expect(r.findings.resolved.every((m) => m.startsWith("[error]") || m.startsWith("[warn]"))).toBe(
-      true,
-    );
+    expect(
+      r.findings.resolved.every((m) => m.startsWith("[error]") || m.startsWith("[warn]")),
+    ).toBe(true);
   });
 
   it("reports an introduced finding when a change adds a validation error", () => {
@@ -166,7 +166,9 @@ describe("renderMarkdown", () => {
 
   it("is deterministic for the same receipt", () => {
     const before = graph([res({ id: "a", serviceId: "rds", name: "DB" })]);
-    const after = graph([res({ id: "a", serviceId: "rds", name: "DB", config: { multiAz: true } })]);
+    const after = graph([
+      res({ id: "a", serviceId: "rds", name: "DB", config: { multiAz: true } }),
+    ]);
     const receipt = changeReceipt(before, after);
     expect(renderMarkdown(receipt)).toBe(renderMarkdown(receipt));
   });

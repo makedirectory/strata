@@ -1,13 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { InfrastructureGraph, ResourceInstance, Relationship } from "./model";
 import { SCHEMA_VERSION } from "./model";
-import {
-  collectTagKeys,
-  collectTagValues,
-  tagTintMap,
-  filterByTag,
-  tagCoverage,
-} from "./tags";
+import { collectTagKeys, collectTagValues, tagTintMap, filterByTag, tagCoverage } from "./tags";
 
 function res(
   id: string,
@@ -146,7 +140,11 @@ describe("filterByTag", () => {
     // ...so filtering on it returns nothing (not the empty-string resource).
     expect(filterByTag(g, "env", "").resources.map((r) => r.id)).toEqual([]);
     // ...and filtering on a real value matches exactly the resources that carry it.
-    expect(filterByTag(g, "env", "prod").resources.map((r) => r.id).sort()).toEqual(["a", "c"]);
+    expect(
+      filterByTag(g, "env", "prod")
+        .resources.map((r) => r.id)
+        .sort(),
+    ).toEqual(["a", "c"]);
   });
 
   it("carries through top-level fields and returns empty when nothing matches", () => {

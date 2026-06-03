@@ -187,6 +187,11 @@ swappable persistence layer, MCP ingestion readiness, and a candid list of gaps 
 next steps — see the **[Architecture & Engineering docs](https://strata.mk-dir.com/docs/architecture)**
 (`src/content/architecture/`).
 
+## Roadmap
+
+What's shipped, the active follow-ups, and what's deferred until a backend exists:
+see [ROADMAP.md](./ROADMAP.md).
+
 ## Tech Stack
 
 Next.js (App Router) · React · TypeScript · Tailwind CSS · Nextra (docs).

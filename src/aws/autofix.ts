@@ -326,11 +326,15 @@ export function detectFixes(graph: InfrastructureGraph): Fixable[] {
       const id = `add-igw-default-route:${rt.id}`;
       if (emittedIgwFixIds.has(id)) continue;
       emittedIgwFixIds.add(id);
-      const igw = igwForRouteTable(graph, topo, rt) ?? anyIgw;
-      const scoped = igw !== anyIgw || !!topo.vpcOf(rt);
+      // `scoped` (note suppression) is true only when the chosen IGW genuinely
+      // belongs to the route table's VPC. A cross-VPC fallback (no same-VPC IGW)
+      // still emits the assumption note, even when the RT's VPC IS resolved.
+      const sameVpcIgw = igwForRouteTable(graph, topo, rt);
+      const igw = sameVpcIgw ?? anyIgw;
+      const scoped = sameVpcIgw !== undefined;
       const assumption = scoped
         ? ""
-        : ` No VPC could be resolved for this route table, so the first available Internet Gateway is assumed.`;
+        : ` No Internet Gateway was found in this route table's VPC, so the first available Internet Gateway is assumed.`;
       out.push({
         id,
         kind: "add-igw-default-route",
@@ -482,8 +486,7 @@ export function applyFix(graph: InfrastructureGraph, fixId: string): Infrastruct
         const isPlacement = e.kind === "contains" || e.kind === "attached_to";
         if (!isPlacement) return true;
         const touchesNatAndSubnet =
-          (e.from === nat.id && subnetIds.has(e.to)) ||
-          (e.to === nat.id && subnetIds.has(e.from));
+          (e.from === nat.id && subnetIds.has(e.to)) || (e.to === nat.id && subnetIds.has(e.from));
         return !touchesNatAndSubnet;
       });
       nat.parentId = publicSubnet.id;

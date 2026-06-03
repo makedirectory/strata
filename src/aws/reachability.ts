@@ -86,7 +86,9 @@ const EXTERNAL_EDGE_SERVICES: ReadonlySet<string> = new Set([
 ]);
 
 /** Ports that are dangerous to expose to the world (admin/data-plane). */
-const SENSITIVE_PORTS: ReadonlySet<number> = new Set([22, 3389, 3306, 5432, 1433, 6379, 27017, 9200]);
+const SENSITIVE_PORTS: ReadonlySet<number> = new Set([
+  22, 3389, 3306, 5432, 1433, 6379, 27017, 9200,
+]);
 
 /**
  * Edge kinds that actually carry traffic from a front-door edge service to the
@@ -253,11 +255,29 @@ function securityGroupsOf(idx: Index, r: ResourceInstance): ResourceInstance[] {
 }
 
 /**
+ * Tokenise an ingress line into `{ protocol, portSpec, cidr }`, robust to spaces
+ * inside a comma-list port spec (`tcp 22, 3389 0.0.0.0/0`). `parts[0]` is the
+ * protocol, the LAST token is the CIDR, and the MIDDLE tokens are joined (spaces
+ * removed) into the port spec. Returns `null` when there are too few tokens.
+ */
+function tokenizeIngressLine(
+  raw: string,
+): { protocol: string; portSpec: string; cidr: string } | null {
+  const parts = raw.trim().split(/\s+/);
+  if (parts.length < 3) return null;
+  const protocol = parts[0];
+  const cidr = parts[parts.length - 1];
+  const portSpec = parts.slice(1, -1).join("");
+  return { protocol, portSpec, cidr };
+}
+
+/**
  * Parse a security group's `ingress` free-text into world-open ports. Each line
  * is `<proto> <port> <cidr>`; only lines whose CIDR is a world CIDR count. A
- * port token may be:
+ * port spec may be:
  *   - a single numeric port (`22`) → one `OpenPort`;
- *   - a comma-list (`22,3389`) → one `OpenPort` per numeric element;
+ *   - a comma-list (`22,3389` or `22, 3389`) → one `OpenPort` per numeric
+ *     element;
  *   - a range (`20-23`) → not enumerated into discrete `OpenPort`s (the range
  *     may be large), but a sensitive port falling inside it is surfaced via a
  *     note (see `evaluateReachability`).
@@ -267,20 +287,15 @@ function parseOpenPorts(sg: ResourceInstance): OpenPort[] {
   if (typeof ingress !== "string" || !ingress) return [];
   const out: OpenPort[] = [];
   for (const raw of ingress.split("\n")) {
-    const parts = raw.trim().split(/\s+/);
-    if (parts.length < 3) continue;
-    const [protocol, portToken, cidr] = parts;
+    const line = tokenizeIngressLine(raw);
+    if (!line) continue;
+    const { protocol, portSpec, cidr } = line;
     if (!isWorldCidr(cidr)) continue;
-    if (/^\d+$/.test(portToken)) {
-      out.push({ port: Number(portToken), protocol, cidr });
-      continue;
-    }
-    // Comma-list: emit an OpenPort for each numeric element (skip non-numeric).
-    if (portToken.includes(",")) {
-      for (const tok of portToken.split(",")) {
-        const t = tok.trim();
-        if (/^\d+$/.test(t)) out.push({ port: Number(t), protocol, cidr });
-      }
+    // Split the port spec on "," and parse each entry (single number or range).
+    for (const entry of portSpec.split(",")) {
+      const t = entry.trim();
+      if (/^\d+$/.test(t)) out.push({ port: Number(t), protocol, cidr });
+      // A range entry (`a-b`) is not enumerated here; see sensitiveRangeHits.
     }
   }
   return out;
@@ -299,17 +314,19 @@ function sensitiveRangeHits(
   if (typeof ingress !== "string" || !ingress) return [];
   const hits: { port: number; lo: number; hi: number; protocol: string }[] = [];
   for (const raw of ingress.split("\n")) {
-    const parts = raw.trim().split(/\s+/);
-    if (parts.length < 3) continue;
-    const [protocol, portToken, cidr] = parts;
+    const line = tokenizeIngressLine(raw);
+    if (!line) continue;
+    const { protocol, portSpec, cidr } = line;
     if (!isWorldCidr(cidr)) continue;
-    const m = portToken.match(/^(\d+)-(\d+)$/);
-    if (!m) continue;
-    const lo = Number(m[1]);
-    const hi = Number(m[2]);
-    if (lo > hi) continue;
-    for (const p of SENSITIVE_PORTS) {
-      if (p >= lo && p <= hi) hits.push({ port: p, lo, hi, protocol });
+    for (const entry of portSpec.split(",")) {
+      const m = entry.trim().match(/^(\d+)-(\d+)$/);
+      if (!m) continue;
+      const lo = Number(m[1]);
+      const hi = Number(m[2]);
+      if (lo > hi) continue;
+      for (const p of SENSITIVE_PORTS) {
+        if (p >= lo && p <= hi) hits.push({ port: p, lo, hi, protocol });
+      }
     }
   }
   return hits;

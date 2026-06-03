@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { reviewAccount } from "./review";
-import { emptyGraph, type InfrastructureGraph, type ResourceInstance, type Relationship } from "./model";
+import {
+  emptyGraph,
+  type InfrastructureGraph,
+  type ResourceInstance,
+  type Relationship,
+} from "./model";
 
 function res(
   over: Partial<ResourceInstance> & { id: string; serviceId: string },
@@ -79,10 +84,7 @@ describe("reviewAccount", () => {
 
   it("does not treat a resource with a relationship as an orphan", () => {
     const g = graph(
-      [
-        res({ id: "a", serviceId: "s3-bucket" }),
-        res({ id: "b", serviceId: "lambda" }),
-      ],
+      [res({ id: "a", serviceId: "s3-bucket" }), res({ id: "b", serviceId: "lambda" })],
       [{ id: "e1", from: "b", to: "a", kind: "reads_from" }],
     );
     const r = reviewAccount(g);

@@ -11,7 +11,7 @@
  * via a binary-string bridge (no Buffer, no spread-overflow on big inputs).
  */
 import type { InfrastructureGraph } from "../aws/model";
-import { isAnnotation, type Annotation } from "../aws/annotations";
+import { isAnnotation, isSafeAnnotationColor, type Annotation } from "../aws/annotations";
 
 export const SHARE_HASH_KEY = "g";
 
@@ -67,6 +67,20 @@ export function buildShareUrl(base: string, graph: InfrastructureGraph): string 
   return `${base}#${SHARE_HASH_KEY}=${encodeGraph(graph)}`;
 }
 
+/**
+ * Strip an unsafe `color` from a decoded annotation. The annotation is kept
+ * intact; only an untrusted, non-allow-listed `color` is removed so it never
+ * enters the graph (and thus never reaches a CSS custom property / SVG stroke).
+ */
+function sanitizeAnnotationColor(annotation: Annotation): Annotation {
+  if (annotation.color !== undefined && !isSafeAnnotationColor(annotation.color)) {
+    const { color: _color, ...rest } = annotation;
+    void _color;
+    return rest;
+  }
+  return annotation;
+}
+
 /** Decode a base64url value back into a partial graph, or `null` if invalid. */
 export function decodeGraph(value: string): SharePayload | null {
   try {
@@ -82,10 +96,14 @@ export function decodeGraph(value: string): SharePayload | null {
     const payload = parsed as SharePayload;
     // Defensively validate the annotation layer: keep only well-formed entries
     // (drop malformed ones) so a tampered/old link never injects bad shapes.
+    // The `color` is decoded from an untrusted link and later injected into a
+    // CSS custom property / SVG stroke; if it is present but NOT a safe color,
+    // drop ONLY the `color` field (keep the annotation) so a malicious value
+    // never reaches the DOM.
     const rawAnnotations = (payload as { annotations?: unknown }).annotations;
     if (rawAnnotations !== undefined) {
       payload.annotations = Array.isArray(rawAnnotations)
-        ? rawAnnotations.filter(isAnnotation)
+        ? rawAnnotations.filter(isAnnotation).map(sanitizeAnnotationColor)
         : [];
     }
     return payload;

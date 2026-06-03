@@ -33,7 +33,11 @@ import type { InfrastructureGraph } from "./model";
 export type AnnotationKind = "note" | "callout" | "zone";
 
 /** Runtime list of every valid {@link AnnotationKind}, for guard checks. */
-export const ANNOTATION_KINDS = ["note", "callout", "zone"] as const satisfies readonly AnnotationKind[];
+export const ANNOTATION_KINDS = [
+  "note",
+  "callout",
+  "zone",
+] as const satisfies readonly AnnotationKind[];
 
 // Exhaustiveness guard (type-only): adding a kind to the union without adding
 // it to ANNOTATION_KINDS makes `MissingKinds` non-`never` and fails to compile.
@@ -84,6 +88,27 @@ export interface AnnotationGraph extends InfrastructureGraph {
 /** A finite number (rejects NaN / ±Infinity that would corrupt canvas math). */
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * True when `value` is a CSS color safe to inject into a custom property / SVG
+ * `stroke` from an untrusted source (e.g. a share link). Allows only a tight
+ * allow-list — anything able to break out of the value (`;`, `:`, `url(`,
+ * parentheses outside an `rgb()`/`rgba()`/`var()` form, etc.) is rejected:
+ *   - a `#hex` color with 3, 6 or 8 hex digits;
+ *   - an `rgb(...)` / `rgba(...)` form (digits, commas, dots, %, spaces only);
+ *   - a CSS custom-property reference `var(--…)`;
+ *   - a plain CSS named-color token (`[A-Za-z]+`, e.g. `tomato`).
+ */
+export function isSafeAnnotationColor(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const v = value.trim();
+  if (v.length === 0) return false;
+  if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v)) return true;
+  if (/^rgba?\(\s*[0-9.,%\s/]+\)$/.test(v)) return true;
+  if (/^var\(\s*--[A-Za-z0-9_-]+\s*\)$/.test(v)) return true;
+  if (/^[A-Za-z]+$/.test(v)) return true;
+  return false;
 }
 
 /**
@@ -163,7 +188,10 @@ export function clampAnnotation(a: Annotation): Annotation {
  * already exists it is replaced (upsert), keeping the layer free of duplicate
  * ids. The annotation is clamped before insertion.
  */
-export function addAnnotation(graph: InfrastructureGraph, annotation: Annotation): InfrastructureGraph {
+export function addAnnotation(
+  graph: InfrastructureGraph,
+  annotation: Annotation,
+): InfrastructureGraph {
   const clamped = clampAnnotation(annotation);
   const current = listAnnotations(graph);
   const idx = current.findIndex((a) => a.id === clamped.id);

@@ -219,13 +219,8 @@ function parseViewport(value: unknown): Viewport | undefined {
 function parsePosition(value: unknown): CanvasPosition | undefined {
   if (!isObject(value)) return undefined;
   const { x, y, w, h } = value;
-  if (
-    typeof x === "number" &&
-    typeof y === "number" &&
-    typeof w === "number" &&
-    typeof h === "number"
-  ) {
-    return { x, y, w, h };
+  if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(w) && Number.isFinite(h)) {
+    return { x: x as number, y: y as number, w: w as number, h: h as number };
   }
   return undefined;
 }
