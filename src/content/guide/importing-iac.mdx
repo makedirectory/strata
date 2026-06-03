@@ -15,9 +15,11 @@ automatically.
   short-form intrinsic tags like `!Ref`, `!GetAtt`, and `!Sub`).
 - **Azure ARM templates** (JSON) — the typed `resources[]` array, with `dependsOn`
   and `resourceId(…)` references.
-- **Terraform**, as the JSON produced by `terraform show -json` (current state) or
-  `terraform plan -json` (planned changes), for the **`aws`, `google`, and
-  `azurerm`** providers. A single state file may mix providers.
+- **Terraform** (and **OpenTofu**), as the JSON produced by `terraform show -json`
+  / `tofu show -json` (current state) or `terraform plan -json` / `tofu show -json
+    <plan>` (planned changes), for the **`aws`, `google`, and `azurerm`** providers.
+A single state file may mix providers. OpenTofu is a drop-in Terraform fork that
+shares the same HCL and `show -json` schema, so its output imports identically.
 
 Strata auto-detects the format and provider from the document, so in most cases you
 don't need to tell it. (Resource types are provider-prefixed — `aws_*`,
@@ -26,7 +28,7 @@ namespace — so a mixed-cloud state resolves into one diagram.)
 
 ## How to import
 
-1. Open the importer — **Data ▾ → Import IaC (Terraform / CloudFormation / ARM)…**,
+1. Open the importer — **Data ▾ → Import IaC (Terraform / OpenTofu / CloudFormation / ARM)…**,
    the **Import IaC** card in the Start hub, or **Import IaC** in the ⌘K command
    palette.
 2. Select the template or state file. Strata auto-detects format and provider.
@@ -48,16 +50,18 @@ Containment is reconstructed from the source:
   `network`/`subnetwork` on GCP — matched by id, name, or self-link) nests a
   resource under its parent. `depends_on` becomes `depends_on` edges.
 
-## Generating Terraform input
+## Generating Terraform / OpenTofu input
 
-From your Terraform working directory:
+From your Terraform (or OpenTofu) working directory:
 
 ```bash
-terraform show -json > state.json
+terraform show -json > state.json   # Terraform
+tofu show -json > state.json        # OpenTofu (identical output)
 ```
 
-Then paste the contents of `state.json` into the Import IaC dialog. Nested modules
-(`child_modules`) are walked automatically.
+Then open the contents of `state.json` in the Import IaC dialog (the file picker
+also accepts `.tf` / `.tofu` / `.tfstate`). Nested modules (`child_modules`) are
+walked automatically.
 
 ## Example: a small CloudFormation template
 
@@ -102,9 +106,10 @@ catalog (see the engineering [IaC Import](/docs/architecture/iac-import) docs).
 ## Exporting to IaC
 
 The reverse direction: turn the diagram on your canvas into **CloudFormation** or
-**Terraform**. Open the **Export to IaC** dialog from **Data ▾ → Export to IaC…**,
-the **Export to IaC** card in the Start hub (shown once the canvas has resources),
-or **Export to IaC (Terraform / CloudFormation)** in the ⌘K command palette.
+**Terraform / OpenTofu** (the HCL is valid for both). Open the **Export to IaC**
+dialog from **Data ▾ → Export to IaC…**, the **Export to IaC** card in the Start
+hub (shown once the canvas has resources), or **Export to IaC** in the ⌘K command
+palette.
 
 > **Provider scope.** The export dialog currently emits **AWS** CloudFormation and
 > Terraform; GCP/Azure resources in a mixed diagram are reported as skipped. (GCP
