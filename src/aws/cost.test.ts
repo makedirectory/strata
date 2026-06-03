@@ -19,6 +19,19 @@ describe("estimateMonthlyCost", () => {
     expect(estimateMonthlyCost(res("totally-made-up"))).toBeNull();
   });
 
+  it("clamps negative count/storage config so estimates never go below zero", () => {
+    // Negative replicaCount must not zero-out or invert the writer cost.
+    expect(estimateMonthlyCost(res("aurora", { replicaCount: -5 }))!).toBeGreaterThan(0);
+    // Negative storage must not subtract from the instance cost.
+    const rds = estimateMonthlyCost(res("rds", { allocatedStorage: -100 }))!;
+    expect(rds).toBeGreaterThan(0);
+    // Storage-only services floor at 0, never negative.
+    expect(estimateMonthlyCost(res("ebs-volume", { sizeGiB: -50 }))).toBe(0);
+    expect(estimateMonthlyCost(res("fsx", { storageCapacityGiB: -10 }))).toBe(0);
+    // And a bad-config resource can't drag the diagram total negative.
+    expect(estimateTotal([res("ebs-volume", { sizeGiB: -9999 })]).total).toBeGreaterThanOrEqual(0);
+  });
+
   it("estimates a NAT gateway and an RDS class (incl. default storage)", () => {
     expect(estimateMonthlyCost(res("nat-gateway"))).toBe(32);
     // db.m5.large (125) + default 20 GiB × $0.115 = 127.3

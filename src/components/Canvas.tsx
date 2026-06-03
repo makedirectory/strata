@@ -147,15 +147,25 @@ export const Canvas: React.FC = () => {
     el.style.backgroundPosition = images.map(() => `${x}px ${y}px`).join(", ");
   }, [viewport]);
 
-  // Mouse events
+  // Mouse events. The handler identities change frequently (they depend on
+  // layout/viewport, which change on every drag frame and pan), so binding the
+  // window listeners to them directly would tear down and re-add the listeners
+  // constantly — including mid-drag, where a swap could fall between a mousedown
+  // and its mouseup. Indirect through refs so the listeners install exactly once.
+  const onMoveRef = useRef(onMouseMove);
+  const onUpRef = useRef(onMouseUp);
+  onMoveRef.current = onMouseMove;
+  onUpRef.current = onMouseUp;
   useEffect(() => {
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    const move = (e: MouseEvent) => onMoveRef.current(e);
+    const up = () => onUpRef.current();
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
     };
-  }, [onMouseMove, onMouseUp]);
+  }, []);
 
   // Minimap drag-to-navigate: while the pointer is down on the minimap, keep
   // recentring on each move (window listeners so it survives leaving the box).

@@ -300,6 +300,31 @@ describe("validateArchitecture", () => {
       const albMsgs = messages(out).filter((m) => m.includes("Load Balancer"));
       expect(albMsgs).toEqual([]);
     });
+
+    it("warns (not silently passes) when public Subnets declare no AZ", () => {
+      // Two public subnets, neither with an `az` — can't confirm multi-AZ.
+      const pubA = res("subnet-public", { id: "snA" });
+      const pubB = res("subnet-public", { id: "snB" });
+      const alb = res("elastic-load-balancer", { id: "alb", name: "lb" });
+      const tg = res("target-group", { id: "tg" });
+      const ec2 = res("ec2-instance", { id: "ec2" });
+      const out = validateArchitecture(
+        graph(
+          [pubA, pubB, alb, tg, ec2],
+          [
+            rel("alb", "snA", "attached_to"),
+            rel("alb", "snB", "attached_to"),
+            rel("alb", "tg", "targets"),
+            rel("tg", "ec2", "targets"),
+          ],
+        ),
+      );
+      expect(messages(out).some((m) => m.includes("Cannot verify") && m.includes("lb"))).toBe(true);
+      // It's a soft warning, not a hard error, since we genuinely can't tell.
+      expect(levels(out, "error").some((r) => r.message.includes("Availability Zones"))).toBe(
+        false,
+      );
+    });
   });
 
   describe("target group", () => {
@@ -625,6 +650,16 @@ describe("validateArchitecture", () => {
       });
       const out = validateArchitecture(graph([sg]));
       expect(messages(out).some((m) => m.includes("exposes sensitive port"))).toBe(false);
+    });
+
+    it("detects a sensitive port inside a mixed comma+range token (80,3306-3307)", () => {
+      const sg = res("security-group", {
+        id: "sg",
+        name: "web",
+        config: { ingress: "tcp 80,3306-3307 0.0.0.0/0" },
+      });
+      const out = validateArchitecture(graph([sg]));
+      expect(messages(out).some((m) => m.includes("exposes sensitive port"))).toBe(true);
     });
   });
 

@@ -749,14 +749,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (rel) {
         const from = storeResources.find((x) => x.id === rel.from);
         const to = storeResources.find((x) => x.id === rel.to);
-        if (rel !== sel.relationship) {
-          setSelection({
-            type: "edge",
-            id: rel.id,
-            relationship: rel,
-            fromName: from?.name ?? rel.from,
-            toName: to?.name ?? rel.to,
-          });
+        const fromName = from?.name ?? rel.from;
+        const toName = to?.name ?? rel.to;
+        // Refresh when the relationship object changes OR when a connected node
+        // was renamed (the relationship identity is unchanged, but the cached
+        // endpoint names the Inspector shows would otherwise go stale).
+        if (rel !== sel.relationship || fromName !== sel.fromName || toName !== sel.toName) {
+          setSelection({ type: "edge", id: rel.id, relationship: rel, fromName, toName });
         }
       }
     }
@@ -1332,16 +1331,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [buildGraph]);
 
   // ---- Export / Import ----------------------------------------------------
-  const exportJSON = useCallback(() => {
-    const graph = buildGraph();
-    const blob = new Blob([JSON.stringify(graph, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "aws-architecture.json";
-    a.click();
-  }, [buildGraph]);
-
-  /** Download a blob with a given filename (shared by the image exporters). */
+  /** Download a blob with a given filename (revokes the object URL after). */
   const downloadBlob = useCallback((blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1350,6 +1340,15 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }, []);
+
+  const exportJSON = useCallback(() => {
+    const graph = buildGraph();
+    // Route through downloadBlob so the object URL is revoked (was leaking).
+    downloadBlob(
+      new Blob([JSON.stringify(graph, null, 2)], { type: "application/json" }),
+      "aws-architecture.json",
+    );
+  }, [buildGraph, downloadBlob]);
 
   /** Export the diagram as an SVG (vector) or PNG (rasterised from the SVG). */
   const exportImage = useCallback(
@@ -1374,10 +1373,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setStatus("Exported SVG.");
         return;
       }
-      // PNG: rasterise the SVG at 2× via an offscreen canvas.
+      // PNG: rasterise the SVG at 2× via an offscreen canvas. The object URL is
+      // revoked in `finally` so it doesn't leak on a decode/encode failure path.
+      const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
       try {
         const img = new Image();
-        const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve();
           img.onerror = () => reject(new Error("decode failed"));
@@ -1391,13 +1391,14 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!ctx) throw new Error("no 2d context");
         ctx.scale(scale, scale);
         ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(svgUrl);
         const png = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
         if (!png) throw new Error("encode failed");
         downloadBlob(png, `${base}.png`);
         setStatus("Exported PNG.");
       } catch {
         setStatus("PNG export failed — try SVG instead.");
+      } finally {
+        URL.revokeObjectURL(svgUrl);
       }
     },
     [store.resources, store.relationships, store.graphName, layout, downloadBlob],
@@ -1879,21 +1880,38 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const canRedo = store.canRedo();
 
   // The Canvas-only, high-churn slice (viewport, transient drag visuals, and the
-  // imperative draw/pointer handlers). Plain object: the Canvas re-renders on
-  // pan anyway, and no panel consumes this context — so panels are insulated.
-  const canvasValue: FlowCanvasContextValue = {
-    viewport: store.viewport,
-    guides,
-    marquee,
-    draw,
-    drawMinimap,
-    onCanvasMouseDown,
-    onMouseMove,
-    onMouseUp,
-    onWheelZoom,
-    addResourceFromPalette,
-    minimapNavigate,
-  };
+  // imperative draw/pointer handlers). Memoized for reference stability so light
+  // consumers (e.g. AccessibleNodes, which reads only `viewport`) don't re-render
+  // on provider renders unrelated to the canvas slice; the Canvas still redraws on
+  // pan because `viewport`/`draw` are dependencies here.
+  const canvasValue = React.useMemo<FlowCanvasContextValue>(
+    () => ({
+      viewport: store.viewport,
+      guides,
+      marquee,
+      draw,
+      drawMinimap,
+      onCanvasMouseDown,
+      onMouseMove,
+      onMouseUp,
+      onWheelZoom,
+      addResourceFromPalette,
+      minimapNavigate,
+    }),
+    [
+      store.viewport,
+      guides,
+      marquee,
+      draw,
+      drawMinimap,
+      onCanvasMouseDown,
+      onMouseMove,
+      onMouseUp,
+      onWheelZoom,
+      addResourceFromPalette,
+      minimapNavigate,
+    ],
+  );
 
   // Memoized so panels only re-render when something they read actually changes
   // — NOT on every pan/zoom/hover (those live in FlowCanvasContext).
