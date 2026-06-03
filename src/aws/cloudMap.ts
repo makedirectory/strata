@@ -20,7 +20,10 @@
  * graph's `resources` and recorded in `unmapped[]` with a human reason.
  * Relationships that reference an unmapped (dropped) resource are likewise
  * dropped (they would be dangling refs) and noted. A resource already on the
- * target provider is kept verbatim.
+ * target provider is kept verbatim. A resource whose category exists in the
+ * target but has no capability-token match is also recorded in `unmapped[]`,
+ * but is kept UNCHANGED in the output graph (never force-mapped onto an
+ * arbitrary same-category service), so its relationships stay valid.
  *
  * Pure and framework-free: no DOM, no network, no credentials, no mutation of
  * the input graph (a fresh graph object is always returned). Candidate
@@ -123,25 +126,33 @@ function capabilityOf(service: ServiceDefinition): Capability {
   return "generic";
 }
 
+/** Why a candidate could not be picked, distinguishing the two failure modes. */
+type NoCandidate = "no-category" | "no-capability-match";
+
 /**
  * Pick the best target-provider service for a source service.
  *
- * Candidate pool = all target-provider services in the same category. Among
- * them, a service sharing the source's capability token is preferred; ties (and
- * the no-token-match fallback) break by stable ascending service id, so the
- * choice is deterministic. Returns `undefined` when the target provider has no
- * service in the source's category at all.
+ * Candidate pool = all target-provider services in the same category. A service
+ * sharing the source's capability token is required: among the matches, the
+ * lowest service id wins (stable, deterministic). When NO candidate shares the
+ * source's capability token the choice is ambiguous — rather than force a wrong
+ * mapping onto an arbitrary same-category service (e.g. a DNS service onto a
+ * random networking service), we return a typed failure so the caller can leave
+ * the resource UNCHANGED and report it as unmapped. Returns:
+ *   - a `ServiceDefinition` on a confident capability-token match;
+ *   - `"no-category"` when the target has no service in the source's category;
+ *   - `"no-capability-match"` when the category exists but no token matches.
  */
-function pickCandidate(source: ServiceDefinition, target: CloudProvider): ServiceDefinition | undefined {
+function pickCandidate(source: ServiceDefinition, target: CloudProvider): ServiceDefinition | NoCandidate {
   const category: ServiceCategoryId = source.category;
   const pool = allServices(target)
     .filter((s) => s.category === category)
     .slice()
     .sort((a, b) => a.id.localeCompare(b.id));
-  if (pool.length === 0) return undefined;
+  if (pool.length === 0) return "no-category";
   const wanted = capabilityOf(source);
   const tokenMatch = pool.find((s) => capabilityOf(s) === wanted);
-  return tokenMatch ?? pool[0];
+  return tokenMatch ?? "no-capability-match";
 }
 
 /** Shallow-clone a resource with a (possibly) new serviceId. */
@@ -162,6 +173,10 @@ function rewriteResource(resource: ResourceInstance, newServiceId: string): Reso
  * - A resource whose service is unknown to the registry, or whose category has
  *   no equivalent in `target`, is dropped from the rewritten graph and recorded
  *   in `unmapped[]` with a reason.
+ * - A resource whose category exists in `target` but has no capability-token
+ *   match is reported in `unmapped[]` yet kept UNCHANGED (original
+ *   serviceId/provider preserved) — never force-rewritten onto an arbitrary
+ *   same-category service. It survives, so its relationships stay valid.
  * - Relationships are retained only when both endpoints survive; otherwise they
  *   are dropped (avoiding dangling refs).
  *
@@ -194,7 +209,7 @@ export function mapToCloud(graph: InfrastructureGraph, target: CloudProvider): C
     }
 
     const candidate = pickCandidate(source, target);
-    if (!candidate) {
+    if (candidate === "no-category") {
       unmapped.push({
         resourceId: resource.id,
         serviceId: resource.serviceId,
@@ -202,6 +217,23 @@ export function mapToCloud(graph: InfrastructureGraph, target: CloudProvider): C
         category: source.category,
         reason: `${target.toUpperCase()} has no service in category "${source.category}" to map ${source.name} onto.`,
       });
+      continue;
+    }
+    if (candidate === "no-capability-match") {
+      // No confident capability-token match in the target category. Rather than
+      // force a wrong rewrite onto an arbitrary same-category service, leave the
+      // resource UNCHANGED (original serviceId/provider preserved) and report it
+      // as unmapped. It still "survives" so its relationships stay valid — this
+      // keeps the output graph free of dangling refs.
+      unmapped.push({
+        resourceId: resource.id,
+        serviceId: resource.serviceId,
+        name: resource.name,
+        category: source.category,
+        reason: `${target.toUpperCase()} has no capability-equivalent for ${source.name} in category "${source.category}"; left unchanged.`,
+      });
+      mappedResources.push(rewriteResource(resource, resource.serviceId));
+      survived.add(resource.id);
       continue;
     }
 

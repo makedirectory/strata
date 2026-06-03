@@ -88,6 +88,21 @@ const EXTERNAL_EDGE_SERVICES: ReadonlySet<string> = new Set([
 /** Ports that are dangerous to expose to the world (admin/data-plane). */
 const SENSITIVE_PORTS: ReadonlySet<number> = new Set([22, 3389, 3306, 5432, 1433, 6379, 27017, 9200]);
 
+/**
+ * Edge kinds that actually carry traffic from a front-door edge service to the
+ * resource it fronts. Only these "front" a resource onto the public internet —
+ * a structural/logical edge (contains, depends_on, monitors, grants, assumes,
+ * reads_from, writes_to, invokes, publishes_to, subscribes_to, allows) to an
+ * edge service does NOT expose the resource. Mirrors the NETWORK_PATH spirit.
+ */
+const TRAFFIC_BEARING_KINDS: ReadonlySet<RelationshipKind> = new Set([
+  "routes_to",
+  "attached_to",
+  "targets",
+  "connects_to",
+  "peers_with",
+]);
+
 // ----- CIDR math (local; rules.ts helpers are private) ----------------------
 
 /** Parse a dotted-quad IPv4 address to a uint32, or `null` if malformed. */
@@ -239,10 +254,13 @@ function securityGroupsOf(idx: Index, r: ResourceInstance): ResourceInstance[] {
 
 /**
  * Parse a security group's `ingress` free-text into world-open ports. Each line
- * is `<proto> <port> <cidr>`; only lines whose CIDR is a world CIDR count. Port
- * tokens that are ranges/comma-lists are skipped here (a single numeric port is
- * required for a precise `OpenPort`), but they are still surfaced via notes when
- * sensitive (see `evaluateReachability`).
+ * is `<proto> <port> <cidr>`; only lines whose CIDR is a world CIDR count. A
+ * port token may be:
+ *   - a single numeric port (`22`) → one `OpenPort`;
+ *   - a comma-list (`22,3389`) → one `OpenPort` per numeric element;
+ *   - a range (`20-23`) → not enumerated into discrete `OpenPort`s (the range
+ *     may be large), but a sensitive port falling inside it is surfaced via a
+ *     note (see `evaluateReachability`).
  */
 function parseOpenPorts(sg: ResourceInstance): OpenPort[] {
   const ingress = sg.config?.["ingress"];
@@ -253,10 +271,48 @@ function parseOpenPorts(sg: ResourceInstance): OpenPort[] {
     if (parts.length < 3) continue;
     const [protocol, portToken, cidr] = parts;
     if (!isWorldCidr(cidr)) continue;
-    if (!/^\d+$/.test(portToken)) continue;
-    out.push({ port: Number(portToken), protocol, cidr });
+    if (/^\d+$/.test(portToken)) {
+      out.push({ port: Number(portToken), protocol, cidr });
+      continue;
+    }
+    // Comma-list: emit an OpenPort for each numeric element (skip non-numeric).
+    if (portToken.includes(",")) {
+      for (const tok of portToken.split(",")) {
+        const t = tok.trim();
+        if (/^\d+$/.test(t)) out.push({ port: Number(t), protocol, cidr });
+      }
+    }
   }
   return out;
+}
+
+/**
+ * World-open sensitive ports surfaced by a security group purely as *notes*
+ * (not discrete `OpenPort`s): the sensitive ports that fall inside a world-open
+ * range token (`20-23`). Returns `{ port, lo, hi, protocol }` per hit so the
+ * caller can phrase a note tying the port to the range.
+ */
+function sensitiveRangeHits(
+  sg: ResourceInstance,
+): { port: number; lo: number; hi: number; protocol: string }[] {
+  const ingress = sg.config?.["ingress"];
+  if (typeof ingress !== "string" || !ingress) return [];
+  const hits: { port: number; lo: number; hi: number; protocol: string }[] = [];
+  for (const raw of ingress.split("\n")) {
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length < 3) continue;
+    const [protocol, portToken, cidr] = parts;
+    if (!isWorldCidr(cidr)) continue;
+    const m = portToken.match(/^(\d+)-(\d+)$/);
+    if (!m) continue;
+    const lo = Number(m[1]);
+    const hi = Number(m[2]);
+    if (lo > hi) continue;
+    for (const p of SENSITIVE_PORTS) {
+      if (p >= lo && p <= hi) hits.push({ port: p, lo, hi, protocol });
+    }
+  }
+  return hits;
 }
 
 /** Deterministic resource sort: name then id. */
@@ -272,7 +328,9 @@ function byNameThenId(a: ExposedResource, b: ExposedResource): number {
  *   - it is itself an external-facing edge service (IGW/CloudFront/API-GW/
  *     Global Accelerator/internet-facing ELB);
  *   - it sits in a public subnet that is routed to an IGW (default route);
- *   - it is connected (any edge) to an external-facing edge service.
+ *   - it is fronted by an external-facing edge service via a *traffic-bearing*
+ *     edge (routes_to/attached_to/targets/connects_to/peers_with) — a purely
+ *     structural/logical edge (contains, depends_on, monitors, …) does not.
  *
  * `openPorts` are gathered from attached security groups; a resource with
  * world-open ports but no internet path is NOT marked exposed (its ports are
@@ -316,15 +374,25 @@ export function evaluateReachability(graph: InfrastructureGraph): ReachabilityRe
       }
     }
 
-    // 3) connected to an external-facing edge service.
-    for (const e of idx.incoming(r.id)) {
-      if (edgeIds.has(e.from)) {
-        addVia(r.id, `fronted by ${idx.byId.get(e.from)?.name ?? e.from}`);
+    // 3) fronted by an external-facing edge service via a *traffic-bearing*
+    // edge. A structural/logical edge (contains, depends_on, monitors, …) to an
+    // edge service does not place the resource on the internet front door. An
+    // edge service is never reported as "fronted by" via its own edges. A
+    // `routes_to` edge is directional egress plumbing — a resource that routes
+    // *to* an edge service (e.g. a route table → IGW) is not fronted by it; only
+    // an edge service that routes *to* the resource counts.
+    if (!edgeIds.has(r.id)) {
+      for (const e of idx.incoming(r.id)) {
+        if (edgeIds.has(e.from) && TRAFFIC_BEARING_KINDS.has(e.kind)) {
+          addVia(r.id, `fronted by ${idx.byId.get(e.from)?.name ?? e.from}`);
+        }
       }
-    }
-    for (const e of idx.outgoing(r.id)) {
-      if (edgeIds.has(e.to)) {
-        addVia(r.id, `fronted by ${idx.byId.get(e.to)?.name ?? e.to}`);
+      for (const e of idx.outgoing(r.id)) {
+        // Skip the egress direction of routes_to (resource → edge service).
+        if (e.kind === "routes_to") continue;
+        if (edgeIds.has(e.to) && TRAFFIC_BEARING_KINDS.has(e.kind)) {
+          addVia(r.id, `fronted by ${idx.byId.get(e.to)?.name ?? e.to}`);
+        }
       }
     }
   }
@@ -340,6 +408,15 @@ export function evaluateReachability(graph: InfrastructureGraph): ReachabilityRe
         if (SENSITIVE_PORTS.has(p.port) && internetReachableIds.has(r.id)) {
           notes.push(
             `"${r.name}" exposes sensitive port ${p.port}/${p.protocol} to the world (${p.cidr}).`,
+          );
+        }
+      }
+      // Sensitive ports inside a world-open range token: surfaced as notes only
+      // (the range itself is not enumerated into discrete open ports).
+      if (internetReachableIds.has(r.id)) {
+        for (const hit of sensitiveRangeHits(sg)) {
+          notes.push(
+            `Security group "${sg.name}" exposes sensitive port ${hit.port} within range ${hit.lo}-${hit.hi} to the world.`,
           );
         }
       }

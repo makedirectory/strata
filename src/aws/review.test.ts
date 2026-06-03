@@ -108,6 +108,21 @@ describe("reviewAccount", () => {
     expect(vol?.reason).toContain("EBS"); // service name resolved via registry into the reason
   });
 
+  it("labels unknown-cost cleanup candidates as unknown, not free", () => {
+    // An unconnected, non-container resource whose serviceId has no cost model
+    // yields a null estimate. The reason must flag this as UNKNOWN/verify rather
+    // than implying it is free/safe to delete.
+    const g = graph([res({ id: "mystery", serviceId: "made-up-service", name: "Mystery" })]);
+    const r = reviewAccount(g);
+    const candidate = r.cleanup.find((c) => c.resourceId === "mystery");
+    expect(candidate).toBeDefined();
+    expect(candidate?.monthlyCost).toBe(0); // numeric coercion is fine...
+    // ...but the reason must not claim the cost is known/free.
+    expect(candidate?.reason).not.toContain("no known recurring cost");
+    expect(candidate?.reason).toMatch(/unknown/i);
+    expect(candidate?.reason).toMatch(/verify/i);
+  });
+
   it("scores risk deterministically (error=3, warn=1, info=0)", () => {
     // a public subnet with no route to an IGW -> rules.ts emits an error.
     const g = graph([res({ id: "sn", serviceId: "subnet-public", name: "Public" })]);

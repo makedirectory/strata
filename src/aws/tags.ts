@@ -128,9 +128,12 @@ export function tagTintMap(graph: InfrastructureGraph, key: string): Map<string,
 }
 
 /**
- * A NEW graph containing only the resources whose `tags[key] === value`, with
- * relationships pruned to those whose `from` AND `to` both survive — never
- * leaving a dangling edge reference. Accounts, viewport, and other top-level
+ * A NEW graph containing only the resources whose `tags[key]` is a non-empty
+ * string equal to `value`, with relationships pruned to those whose `from` AND
+ * `to` both survive — never leaving a dangling edge reference. The non-empty
+ * string guard mirrors `hasTag`/`collectTagValues`/`tagTintMap`, so the filter
+ * matches exactly the values the UI lists for a key (empty-string and
+ * non-string smuggled values never match). Accounts, viewport, and other top-level
  * fields are carried through unchanged. The input graph is never mutated; the
  * returned `resources`/`relationships` are fresh arrays (the element objects are
  * shared by reference, so callers must treat them as read-only, matching the
@@ -141,7 +144,9 @@ export function filterByTag(
   key: string,
   value: string,
 ): InfrastructureGraph {
-  const resources: ResourceInstance[] = graph.resources.filter((r) => r.tags?.[key] === value);
+  const resources: ResourceInstance[] = graph.resources.filter(
+    (r) => hasTag(r, key) && r.tags![key] === value,
+  );
   const surviving = new Set(resources.map((r) => r.id));
   const relationships: Relationship[] = graph.relationships.filter(
     (e) => surviving.has(e.from) && surviving.has(e.to),

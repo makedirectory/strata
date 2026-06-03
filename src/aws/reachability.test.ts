@@ -81,6 +81,50 @@ describe("evaluateReachability — edge services", () => {
     const r = evaluateReachability(g);
     expect(r.internetReachableIds.has(alb.id)).toBe(true);
   });
+
+  it("does NOT mark a route-table joined to an IGW by routes_to as exposed", () => {
+    // BUG 1: a routes_to edge from a route table to an IGW is structural plumbing
+    // for the route table, not a front door onto the route table itself.
+    const igw = res("internet-gateway", "igw");
+    const rt = res("route-table", "rt");
+    const g = graphOf([igw, rt], [rel(rt.id, igw.id, "routes_to")]);
+    const r = evaluateReachability(g);
+    // The IGW is itself an edge service, but the route table is not "fronted".
+    expect(r.internetReachableIds.has(rt.id)).toBe(false);
+    expect(r.exposed.some((e) => e.resourceId === rt.id)).toBe(false);
+  });
+
+  it("does NOT mark a private resource exposed via a depends_on edge to an edge service", () => {
+    // BUG 1: depends_on is logical, not traffic-bearing — no exposure.
+    const igw = res("internet-gateway", "igw");
+    const db = res("rds", "db");
+    const g = graphOf([igw, db], [rel(db.id, igw.id, "depends_on")]);
+    const r = evaluateReachability(g);
+    expect(r.internetReachableIds.has(db.id)).toBe(false);
+  });
+
+  it("marks a resource behind an internet-facing ELB via a traffic edge exposed", () => {
+    // BUG 1: targets is traffic-bearing — the backend IS fronted.
+    const alb = res("elastic-load-balancer", "alb");
+    const ec2 = res("ec2-instance", "web");
+    const g = graphOf([alb, ec2], [rel(alb.id, ec2.id, "targets")]);
+    const r = evaluateReachability(g);
+    expect(r.internetReachableIds.has(ec2.id)).toBe(true);
+    const ex = r.exposed.find((e) => e.resourceId === ec2.id);
+    expect(ex?.via.some((v) => v.includes("fronted by"))).toBe(true);
+  });
+
+  it("does NOT report an edge service as fronted-by via its own structural edges", () => {
+    // BUG 1: an IGW with a contains edge to another edge service is exposed only
+    // as an edge service itself, never "fronted by" its own edge.
+    const igw = res("internet-gateway", "igw");
+    const cf = res("cloudfront", "cdn");
+    const g = graphOf([igw, cf], [rel(igw.id, cf.id, "attached_to")]);
+    const r = evaluateReachability(g);
+    const exIgw = r.exposed.find((e) => e.resourceId === igw.id);
+    expect(exIgw?.via.some((v) => v.includes("fronted by"))).toBe(false);
+    expect(exIgw?.via).toContain("internet-facing edge service");
+  });
 });
 
 describe("evaluateReachability — public subnet routing", () => {
@@ -189,8 +233,48 @@ describe("evaluateReachability — open ports", () => {
     );
     const r = evaluateReachability(g);
     const ex = r.exposed.find((e) => e.resourceId === ec2.id)!;
-    // only the well-formed single-port world line (80) survives.
+    // only the well-formed single-port world line (80) survives as a discrete port.
     expect(ex.openPorts.map((p) => p.port)).toEqual([80]);
+    // but 22-25 covers sensitive port 22 → surfaced as a range note.
+    expect(r.notes.some((n) => n.includes("within range 22-25"))).toBe(true);
+  });
+
+  it("surfaces each port of a comma-listed world-open rule (tcp 22,3389 0.0.0.0/0)", () => {
+    // BUG 2: comma-lists were dropped entirely; now each port is an OpenPort.
+    const igw = res("internet-gateway", "igw");
+    const ec2 = res("ec2-instance", "web");
+    const sg = res("security-group", "sg", { config: { ingress: "tcp 22,3389 0.0.0.0/0" } });
+    const g = graphOf(
+      [igw, ec2, sg],
+      [rel(igw.id, ec2.id, "connects_to"), rel(sg.id, ec2.id, "attached_to")],
+    );
+    const r = evaluateReachability(g);
+    const ex = r.exposed.find((e) => e.resourceId === ec2.id)!;
+    const ports = ex.openPorts.map((p: OpenPort) => p.port);
+    expect(ports).toContain(22);
+    expect(ports).toContain(3389);
+    // both comma-listed sensitive ports fire the existing per-port note logic.
+    expect(r.notes.some((n) => n.includes("sensitive port 22"))).toBe(true);
+    expect(r.notes.some((n) => n.includes("sensitive port 3389"))).toBe(true);
+  });
+
+  it("produces a sensitive-port-in-range note for tcp 20-23 0.0.0.0/0", () => {
+    // BUG 2: ranges are not enumerated, but a sensitive port inside one is noted.
+    const igw = res("internet-gateway", "igw");
+    const ec2 = res("ec2-instance", "web");
+    const sg = res("security-group", "sg", { config: { ingress: "tcp 20-23 0.0.0.0/0" } });
+    const g = graphOf(
+      [igw, ec2, sg],
+      [rel(igw.id, ec2.id, "connects_to"), rel(sg.id, ec2.id, "attached_to")],
+    );
+    const r = evaluateReachability(g);
+    const ex = r.exposed.find((e) => e.resourceId === ec2.id)!;
+    // range is not enumerated into discrete OpenPorts.
+    expect(ex.openPorts).toEqual([]);
+    // sensitive port 22 falls within 20-23 → note.
+    expect(
+      r.notes.some((n) => n.includes("sensitive port 22 within range 20-23")),
+    ).toBe(true);
   });
 });
 

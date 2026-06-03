@@ -123,6 +123,22 @@ describe("changeReceipt", () => {
     expect(JSON.stringify(after)).toBe(afterSnap);
   });
 
+  it("matches findings on their full identity tuple (delimiter cannot be forged)", () => {
+    // Two distinct subnet resources whose names, if naively joined by a single
+    // delimiter, could collide. A printable JSON-tuple key keeps them distinct,
+    // so resolving one finding does not mask the other.
+    const before = graph([
+      res({ id: "s1", serviceId: "subnet-public", name: "A" }),
+      res({ id: "s2", serviceId: "subnet-public", name: "B" }),
+    ]);
+    const after = graph([res({ id: "s2", serviceId: "subnet-public", name: "B" })]);
+    const r = changeReceipt(before, after);
+    // Exactly the s1 finding(s) resolve; the s2 finding(s) remain unchanged.
+    expect(r.findings.resolved.length).toBeGreaterThan(0);
+    expect(r.findings.unchanged).toBeGreaterThan(0);
+    expect(r.findings.introduced).toEqual([]);
+  });
+
   it("handles two empty graphs gracefully", () => {
     const r = changeReceipt(emptyGraph(), emptyGraph());
     expect(r.drift.inSync).toBe(true);

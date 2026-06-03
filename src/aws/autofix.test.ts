@@ -138,6 +138,60 @@ describe("detect/apply — add-igw-default-route", () => {
     expect(detectFixes(g)).toHaveLength(0);
   });
 
+  it("emits exactly ONE fix when two public subnets share one route table", () => {
+    // BUG 3: per-subnet iteration pushed a duplicate `add-igw-default-route:rt1`
+    // for each public subnet backed by the same route table.
+    const g = graph(
+      [
+        res({ id: "snA", serviceId: "subnet-public", name: "Public A" }),
+        res({ id: "snB", serviceId: "subnet-public", name: "Public B" }),
+        res({ id: "rt1", serviceId: "route-table", name: "RT" }),
+        res({ id: "igw1", serviceId: "internet-gateway", name: "IGW" }),
+      ],
+      [
+        rel({ id: "e1", from: "rt1", to: "snA", kind: "attached_to" }),
+        rel({ id: "e2", from: "rt1", to: "snB", kind: "attached_to" }),
+      ],
+    );
+    const fixes = detectFixes(g).filter((f) => f.kind === "add-igw-default-route");
+    expect(fixes).toHaveLength(1);
+    expect(fixes[0].id).toBe("add-igw-default-route:rt1");
+  });
+
+  it("binds the route to the IGW in the SAME VPC (multi-VPC)", () => {
+    // BUG 4: cross-VPC selection used the first IGW globally. Each VPC's route
+    // table must route to its own IGW.
+    const g = graph(
+      [
+        res({ id: "vpcA", serviceId: "vpc", name: "VPC A" }),
+        res({ id: "snA", serviceId: "subnet-public", name: "Pub A", parentId: "vpcA" }),
+        res({ id: "rtA", serviceId: "route-table", name: "RT A" }),
+        res({ id: "igwA", serviceId: "internet-gateway", name: "IGW A" }),
+        res({ id: "vpcB", serviceId: "vpc", name: "VPC B" }),
+        res({ id: "snB", serviceId: "subnet-public", name: "Pub B", parentId: "vpcB" }),
+        res({ id: "rtB", serviceId: "route-table", name: "RT B" }),
+        res({ id: "igwB", serviceId: "internet-gateway", name: "IGW B" }),
+      ],
+      [
+        rel({ id: "ea", from: "rtA", to: "snA", kind: "attached_to" }),
+        rel({ id: "eb", from: "rtB", to: "snB", kind: "attached_to" }),
+        rel({ id: "ga", from: "igwA", to: "vpcA", kind: "attached_to" }),
+        rel({ id: "gb", from: "igwB", to: "vpcB", kind: "attached_to" }),
+      ],
+    );
+    const fixA = detectFixes(g).find((f) => f.resourceId === "rtA")!;
+    const fixB = detectFixes(g).find((f) => f.resourceId === "rtB")!;
+    expect(fixA.detail).toContain("IGW A");
+    expect(fixB.detail).toContain("IGW B");
+
+    const nextA = applyFix(g, fixA.id);
+    const addedA = nextA.relationships.find((e) => e.kind === "routes_to" && e.from === "rtA")!;
+    expect(addedA.to).toBe("igwA");
+    const nextB = applyFix(g, fixB.id);
+    const addedB = nextB.relationships.find((e) => e.kind === "routes_to" && e.from === "rtB")!;
+    expect(addedB.to).toBe("igwB");
+  });
+
   it("does not fire when the default route already exists", () => {
     const g = graph(
       [
@@ -185,6 +239,25 @@ describe("detect/apply — move-nat-to-public-subnet", () => {
     expect(next.relationships.some((e) => e.to === "priv" && e.from === "nat1")).toBe(false);
     expect(next.resources.find((r) => r.id === "nat1")!.parentId).toBe("pub");
     expect(detectFixes(next)).toHaveLength(0);
+  });
+
+  it("repoints the NAT to a public subnet in the SAME VPC (multi-VPC)", () => {
+    // BUG 4: cross-VPC selection used the first public subnet globally. The NAT
+    // must move into a public subnet within its own VPC.
+    const g = graph([
+      res({ id: "vpcA", serviceId: "vpc", name: "VPC A" }),
+      res({ id: "pubA", serviceId: "subnet-public", name: "Pub A", parentId: "vpcA" }),
+      res({ id: "privA", serviceId: "subnet-private", name: "Priv A", parentId: "vpcA" }),
+      res({ id: "natA", serviceId: "nat-gateway", name: "NAT A", parentId: "privA" }),
+      res({ id: "vpcB", serviceId: "vpc", name: "VPC B" }),
+      res({ id: "pubB", serviceId: "subnet-public", name: "Pub B", parentId: "vpcB" }),
+      res({ id: "privB", serviceId: "subnet-private", name: "Priv B", parentId: "vpcB" }),
+      res({ id: "natB", serviceId: "nat-gateway", name: "NAT B", parentId: "privB" }),
+    ]);
+    const nextA = applyFix(g, "move-nat-to-public-subnet:natA");
+    expect(nextA.resources.find((r) => r.id === "natA")!.parentId).toBe("pubA");
+    const nextB = applyFix(g, "move-nat-to-public-subnet:natB");
+    expect(nextB.resources.find((r) => r.id === "natB")!.parentId).toBe("pubB");
   });
 
   it("does not fire when the NAT is already in a public subnet", () => {

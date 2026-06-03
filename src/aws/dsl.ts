@@ -28,6 +28,7 @@ import {
   SCHEMA_VERSION,
   validateGraph,
   type Account,
+  type CanvasPosition,
   type InfrastructureGraph,
   type Relationship,
   type ResourceInstance,
@@ -66,6 +67,8 @@ interface DslResource {
   source: ResourceInstance["source"];
   config?: Record<string, unknown>;
   tags?: Record<string, string>;
+  /** Canvas placement (`{x,y,w,h}`), preserved so a laid-out graph round-trips. */
+  position?: CanvasPosition;
 }
 
 /** A relationship as it appears in the DSL document. */
@@ -127,6 +130,7 @@ function resourceToDsl(r: ResourceInstance): DslResource {
     source: r.source,
     config,
     tags,
+    position: r.position,
   });
 }
 
@@ -207,6 +211,25 @@ function parseViewport(value: unknown): Viewport | undefined {
   return undefined;
 }
 
+/**
+ * Read a canvas `position` (`{x,y,w,h}`) defensively. Every field must be a
+ * finite number; a malformed or partial position is ignored (returns undefined)
+ * rather than reconstructing a half-laid-out node.
+ */
+function parsePosition(value: unknown): CanvasPosition | undefined {
+  if (!isObject(value)) return undefined;
+  const { x, y, w, h } = value;
+  if (
+    typeof x === "number" &&
+    typeof y === "number" &&
+    typeof w === "number" &&
+    typeof h === "number"
+  ) {
+    return { x, y, w, h };
+  }
+  return undefined;
+}
+
 function parseAccount(value: unknown, index: number, errors: string[]): Account | null {
   if (!isObject(value)) {
     errors.push(`Account entry #${index} is not an object`);
@@ -255,6 +278,7 @@ function parseResource(value: unknown, index: number, errors: string[]): Resourc
     source: parseSource(value.source),
     config: asConfig(value.config),
     tags: asStringRecord(value.tags),
+    position: parsePosition(value.position),
   });
 }
 

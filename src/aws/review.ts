@@ -90,9 +90,11 @@ function isUnconnected(graph: InfrastructureGraph, r: ResourceInstance): boolean
 }
 
 /**
- * Treat a missing estimate (`null`) as 0 for cleanup-eligibility: an unmodeled
- * service we can't price is, for cleanup purposes, "no known recurring spend".
- * The headline cost map still reports it under `unknownCount` (never hidden).
+ * Coerce a missing estimate (`null`) to 0 so cleanup candidates remain sortable
+ * by reclaimable spend. This is a numeric convenience ONLY: a null estimate means
+ * the cost is UNKNOWN, never that the resource is free — callers must distinguish
+ * the two (see the cleanup reason text) and the headline cost map still reports
+ * unpriced resources under `unknownCount` (never hidden).
  */
 function monthlyOrZero(r: ResourceInstance): number {
   const c = estimateMonthlyCost(r);
@@ -209,10 +211,15 @@ export function reviewAccount(graph: InfrastructureGraph): AccountReview {
     if (isContainer(r.serviceId)) continue;
     const monthlyCost = monthlyOrZero(r);
     const name = getService(r.serviceId) ? requireService(r.serviceId).name : r.serviceId;
-    const reason =
-      monthlyCost > 0
+    // Three honest cases. A null estimate means UNKNOWN, not free — never imply
+    // it's safe/free to delete (the module header promises unknown != free). We
+    // keep `monthlyCost` numeric (0 for unknown), but the reason must say so.
+    const costUnknown = estimateMonthlyCost(r) === null;
+    const reason = costUnknown
+      ? `Unconnected ${name} (recurring cost unknown — verify before deleting).`
+      : monthlyCost > 0
         ? `Unconnected ${name}; deleting reclaims ~$${Math.round(monthlyCost)}/mo.`
-        : `Unconnected ${name} with no known recurring cost.`;
+        : `Unconnected ${name} with no recurring cost.`;
     cleanup.push({
       resourceId: r.id,
       serviceId: r.serviceId,

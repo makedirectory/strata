@@ -111,6 +111,38 @@ describe("dslToGraph", () => {
     expect(graph.resources).toEqual(original.resources);
   });
 
+  it("round-trips each resource's canvas position (graph -> dsl -> graph)", () => {
+    const original = sampleGraph();
+    original.resources[0].position = { x: 10, y: 20, w: 200, h: 120 };
+    original.resources[1].position = { x: -5, y: 0, w: 64, h: 64 };
+    // resources[2] intentionally has no position.
+    const { graph, errors } = dslToGraph(graphToDsl(original));
+    expect(errors).toEqual([]);
+    expect(graph.resources[0].position).toEqual({ x: 10, y: 20, w: 200, h: 120 });
+    expect(graph.resources[1].position).toEqual({ x: -5, y: 0, w: 64, h: 64 });
+    expect(graph.resources[2].position).toBeUndefined();
+  });
+
+  it("ignores a malformed position (missing/non-number fields)", () => {
+    const dsl = [
+      "name: Test",
+      "schemaVersion: 1",
+      "resources:",
+      "  - id: a",
+      "    service: vpc",
+      "    name: vpc-a",
+      "    source: manual",
+      "    position:",
+      "      x: 10",
+      "      y: 20",
+      "      w: oops", // non-number -> whole position discarded
+      "      h: 40",
+    ].join("\n");
+    const { graph, errors } = dslToGraph(dsl);
+    expect(errors).toEqual([]);
+    expect(graph.resources[0].position).toBeUndefined();
+  });
+
   it("is idempotent (dsl -> graph -> dsl -> graph)", () => {
     const first = dslToGraph(graphToDsl(sampleGraph()));
     const second = dslToGraph(graphToDsl(first.graph));

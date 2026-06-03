@@ -135,6 +135,20 @@ describe("filterByTag", () => {
     expect(out.resources).not.toBe(g.resources);
   });
 
+  it("does not match empty-string tag values and stays consistent with collectTagValues", () => {
+    const g = graph([
+      res("a", { env: "prod" }),
+      res("b", { env: "" }), // empty value -> not a listed value, must not match
+      res("c", { env: "prod" }),
+    ]);
+    // "" is never offered as a value by the UI...
+    expect(collectTagValues(g, "env")).toEqual(["prod"]);
+    // ...so filtering on it returns nothing (not the empty-string resource).
+    expect(filterByTag(g, "env", "").resources.map((r) => r.id)).toEqual([]);
+    // ...and filtering on a real value matches exactly the resources that carry it.
+    expect(filterByTag(g, "env", "prod").resources.map((r) => r.id).sort()).toEqual(["a", "c"]);
+  });
+
   it("carries through top-level fields and returns empty when nothing matches", () => {
     const g = graph([res("a", { env: "prod" })]);
     const out = filterByTag(g, "env", "nope");

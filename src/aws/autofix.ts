@@ -53,6 +53,7 @@ const INTERNET_GATEWAY = "internet-gateway";
 const NAT_GATEWAY = "nat-gateway";
 const SUBNET_PUBLIC = "subnet-public";
 const SUBNET_PRIVATE = "subnet-private";
+const VPC = "vpc";
 
 /** Resource serviceId -> the boolean config key that flags storage encryption. */
 const ENCRYPTION_KEYS: Readonly<Record<string, string>> = {
@@ -152,6 +153,13 @@ interface Topo {
   subnetsOf: (r: ResourceInstance) => ResourceInstance[];
   /** The route table associated with a subnet, either edge direction. */
   routeTableFor: (sn: ResourceInstance) => ResourceInstance | undefined;
+  /**
+   * The VPC a resource belongs to, resolved via the parent chain plus
+   * contains/attached_to edges (either direction). For a route table or NAT
+   * that sits in a subnet, this walks subnet → VPC; for an IGW it follows its
+   * `attached_to` VPC edge. Returns `undefined` when no enclosing VPC is found.
+   */
+  vpcOf: (r: ResourceInstance) => ResourceInstance | undefined;
 }
 
 function buildTopo(graph: InfrastructureGraph): Topo {
@@ -194,7 +202,38 @@ function buildTopo(graph: InfrastructureGraph): Topo {
     (sn.parentId && isRouteTable(get(sn.parentId)) ? get(sn.parentId) : undefined) ??
     childrenOf(graph, sn.id).find(isRouteTable);
 
-  return { get, subnetsOf, routeTableFor };
+  const isVpc = (r: ResourceInstance | undefined): r is ResourceInstance =>
+    !!r && r.serviceId === VPC;
+
+  /** Direct VPC neighbours of `r` via parentId / contains / attached_to (either way). */
+  const directVpc = (r: ResourceInstance): ResourceInstance | undefined => {
+    if (r.parentId) {
+      const p = get(r.parentId);
+      if (isVpc(p)) return p;
+    }
+    const candidates = [
+      ...incoming(r.id, "contains").map((e) => get(e.from)),
+      ...outgoing(r.id, "contains").map((e) => get(e.to)),
+      ...incoming(r.id, "attached_to").map((e) => get(e.from)),
+      ...outgoing(r.id, "attached_to").map((e) => get(e.to)),
+    ];
+    return candidates.find(isVpc);
+  };
+
+  const vpcOf = (r: ResourceInstance): ResourceInstance | undefined => {
+    // Direct enclosing VPC (parent / contains / attached_to).
+    const direct = directVpc(r);
+    if (direct) return direct;
+    // Otherwise resolve via the subnet(s) the resource sits in (route tables,
+    // NAT gateways, etc. live in a subnet which lives in a VPC).
+    for (const sn of subnetsOf(r)) {
+      const v = directVpc(sn);
+      if (v) return v;
+    }
+    return undefined;
+  };
+
+  return { get, subnetsOf, routeTableFor, vpcOf };
 }
 
 /** True when a route table has a default `routes_to` edge to an internet gateway. */
@@ -206,6 +245,45 @@ function rtRoutesToIgw(graph: InfrastructureGraph, rt: ResourceInstance, topo: T
       topo.get(e.to)?.serviceId === INTERNET_GATEWAY &&
       isDefaultRoute(e),
   );
+}
+
+/**
+ * The internet gateway in the SAME VPC as `rt`, resolved via the parent chain.
+ * Returns `undefined` when the route table's VPC is unknown or that VPC has no
+ * IGW (the caller falls back to the first IGW globally and notes the
+ * assumption). Determinism: lowest IGW id wins among same-VPC candidates.
+ */
+function igwForRouteTable(
+  graph: InfrastructureGraph,
+  topo: Topo,
+  rt: ResourceInstance,
+): ResourceInstance | undefined {
+  const vpc = topo.vpcOf(rt);
+  if (!vpc) return undefined;
+  return graph.resources
+    .filter((r) => r.serviceId === INTERNET_GATEWAY && topo.vpcOf(r)?.id === vpc.id)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+}
+
+/**
+ * A public subnet in the SAME VPC as `nat`, resolved via the parent chain.
+ * `subnet` is the chosen target (lowest subnet id among same-VPC candidates);
+ * it is `undefined` when no scoped subnet exists (the caller falls back to the
+ * first public subnet globally and notes the assumption).
+ */
+function publicSubnetForNat(
+  graph: InfrastructureGraph,
+  topo: Topo,
+  nat: ResourceInstance,
+): { subnet: ResourceInstance | undefined } {
+  const vpc = topo.vpcOf(nat);
+  if (vpc) {
+    const scoped = graph.resources
+      .filter((r) => r.serviceId === SUBNET_PUBLIC && topo.vpcOf(r)?.id === vpc.id)
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+    if (scoped) return { subnet: scoped };
+  }
+  return { subnet: undefined };
 }
 
 // ---- detection --------------------------------------------------------------
@@ -234,19 +312,32 @@ export function detectFixes(graph: InfrastructureGraph): Fixable[] {
 
   // (2) add-igw-default-route: a public subnet whose route table lacks a default
   // route to an internet gateway, where an internet gateway exists to route to.
-  const igw = graph.resources.find((r) => r.serviceId === INTERNET_GATEWAY);
-  if (igw) {
+  // The IGW is scoped to the SAME VPC as the route table (a global "first IGW"
+  // would be wrong in multi-VPC graphs); when the route table's VPC can't be
+  // determined we fall back to the first IGW and state the assumption. The same
+  // route table can back several public subnets — de-duplicate by fix id so it
+  // is only emitted once.
+  const anyIgw = graph.resources.find((r) => r.serviceId === INTERNET_GATEWAY);
+  if (anyIgw) {
+    const emittedIgwFixIds = new Set<string>();
     for (const sn of graph.resources.filter((r) => r.serviceId === SUBNET_PUBLIC)) {
       const rt = topo.routeTableFor(sn);
-      if (rt && !rtRoutesToIgw(graph, rt, topo)) {
-        out.push({
-          id: `add-igw-default-route:${rt.id}`,
-          kind: "add-igw-default-route",
-          resourceId: rt.id,
-          title: `Add internet route to "${rt.name}"`,
-          detail: `Route Table "${rt.name}" (public subnet "${sn.name}") has no default route to an Internet Gateway. Apply to add a 0.0.0.0/0 route to "${igw.name}".`,
-        });
-      }
+      if (!rt || rtRoutesToIgw(graph, rt, topo)) continue;
+      const id = `add-igw-default-route:${rt.id}`;
+      if (emittedIgwFixIds.has(id)) continue;
+      emittedIgwFixIds.add(id);
+      const igw = igwForRouteTable(graph, topo, rt) ?? anyIgw;
+      const scoped = igw !== anyIgw || !!topo.vpcOf(rt);
+      const assumption = scoped
+        ? ""
+        : ` No VPC could be resolved for this route table, so the first available Internet Gateway is assumed.`;
+      out.push({
+        id,
+        kind: "add-igw-default-route",
+        resourceId: rt.id,
+        title: `Add internet route to "${rt.name}"`,
+        detail: `Route Table "${rt.name}" (public subnet "${sn.name}") has no default route to an Internet Gateway. Apply to add a 0.0.0.0/0 route to "${igw.name}".${assumption}`,
+      });
     }
   }
 
@@ -266,21 +357,28 @@ export function detectFixes(graph: InfrastructureGraph): Fixable[] {
   }
 
   // (4) move-nat-to-public-subnet: a NAT gateway not in a public subnet, where a
-  // public subnet exists to move it into.
+  // public subnet exists to move it into. The target public subnet is scoped to
+  // the SAME VPC as the NAT (a global "first public subnet" would be wrong in
+  // multi-VPC graphs); when the NAT's VPC can't be determined we fall back to
+  // the first public subnet and state the assumption.
   const hasPublicSubnet = graph.resources.some((r) => r.serviceId === SUBNET_PUBLIC);
   if (hasPublicSubnet) {
     for (const nat of graph.resources.filter((r) => r.serviceId === NAT_GATEWAY)) {
       const subs = topo.subnetsOf(nat);
       const inPublic = subs.some((s) => s.serviceId === SUBNET_PUBLIC);
-      if (!inPublic) {
-        out.push({
-          id: `move-nat-to-public-subnet:${nat.id}`,
-          kind: "move-nat-to-public-subnet",
-          resourceId: nat.id,
-          title: `Move "${nat.name}" to a public subnet`,
-          detail: `NAT Gateway "${nat.name}" is not placed in a public Subnet. Apply to repoint its placement to an available public Subnet.`,
-        });
-      }
+      if (inPublic) continue;
+      const target = publicSubnetForNat(graph, topo, nat);
+      const scoped = !!target.subnet && !!topo.vpcOf(nat);
+      const assumption = scoped
+        ? ""
+        : ` No VPC could be resolved for this NAT Gateway, so the first available public Subnet is assumed.`;
+      out.push({
+        id: `move-nat-to-public-subnet:${nat.id}`,
+        kind: "move-nat-to-public-subnet",
+        resourceId: nat.id,
+        title: `Move "${nat.name}" to a public subnet`,
+        detail: `NAT Gateway "${nat.name}" is not placed in a public Subnet. Apply to repoint its placement to an available public Subnet.${assumption}`,
+      });
     }
   }
 
@@ -344,7 +442,11 @@ export function applyFix(graph: InfrastructureGraph, fixId: string): Infrastruct
 
     case "add-igw-default-route": {
       const rt = next.resources.find((r) => r.id === fix.resourceId);
-      const igw = next.resources.find((r) => r.serviceId === INTERNET_GATEWAY);
+      // Scope the IGW to the route table's VPC; fall back to the first IGW
+      // globally only when the VPC can't be resolved (matches detection).
+      const igw =
+        (rt ? igwForRouteTable(next, topo, rt) : undefined) ??
+        next.resources.find((r) => r.serviceId === INTERNET_GATEWAY);
       if (rt && igw) {
         next.relationships.push({
           id: `autofix-route-${rt.id}-${igw.id}`,
@@ -361,7 +463,12 @@ export function applyFix(graph: InfrastructureGraph, fixId: string): Infrastruct
 
     case "move-nat-to-public-subnet": {
       const nat = next.resources.find((r) => r.id === fix.resourceId);
-      const publicSubnet = next.resources.find((r) => r.serviceId === SUBNET_PUBLIC);
+      // Scope the target public subnet to the NAT's VPC; fall back to the first
+      // public subnet globally only when the VPC can't be resolved (matches
+      // detection).
+      const publicSubnet =
+        (nat ? publicSubnetForNat(next, topo, nat).subnet : undefined) ??
+        next.resources.find((r) => r.serviceId === SUBNET_PUBLIC);
       if (!nat || !publicSubnet) return next;
       // Repoint placement: drop any existing subnet attachment/containment edges
       // (either direction) and any subnet parentId, then attach to the public

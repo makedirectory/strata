@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { mapToCloud } from "./cloudMap";
-import { emptyGraph } from "./model";
+import { emptyGraph, validateGraph } from "./model";
 import type { InfrastructureGraph, ResourceInstance, Relationship } from "./model";
 import { getService, serviceProvider } from "./registry";
 
@@ -127,6 +127,39 @@ describe("mapToCloud — honest unmapped reporting", () => {
     expect(unmapped).toHaveLength(1);
     expect(unmapped[0]).toMatchObject({ resourceId: "r1", serviceId: "cloudwatch", category: "monitoring" });
     expect(unmapped[0].reason).toContain("category");
+  });
+
+  it("leaves a no-capability-match resource UNCHANGED and reports it, keeping relationships intact", () => {
+    // BUG 5: route53 (networking, DNS) has no capability-equivalent in GCP's
+    // networking pool, so pickCandidate previously forced it onto an arbitrary
+    // same-category service. It must instead stay unchanged and be reported.
+    const dns = getService("route53");
+    expect(dns?.category).toBe("networking");
+    const g = graphWith(
+      [res("vm", "ec2-instance"), res("dns", "route53")],
+      [{ id: "e1", from: "vm", to: "dns", kind: "depends_on" }],
+    );
+    const { graph, unmapped } = mapToCloud(g, "gcp");
+
+    // Reported as unmapped.
+    const u = unmapped.find((x) => x.resourceId === "dns");
+    expect(u).toBeDefined();
+    expect(u!.serviceId).toBe("route53");
+    expect(u!.category).toBe("networking");
+    expect(u!.reason).toContain("no capability-equivalent");
+
+    // Left UNCHANGED in the output graph (original serviceId/provider preserved).
+    const out = graph.resources.find((r) => r.id === "dns");
+    expect(out).toBeDefined();
+    expect(out!.serviceId).toBe("route53");
+    expect(serviceProvider(getService(out!.serviceId)!)).toBe("aws");
+
+    // Relationship stays valid (no dangling edge) — the dns endpoint survived.
+    expect(graph.relationships).toHaveLength(1);
+    expect(graph.relationships[0]).toMatchObject({ from: "vm", to: "dns" });
+
+    // The whole output graph is structurally valid (no dangling refs/serviceIds).
+    expect(validateGraph(graph)).toEqual([]);
   });
 
   it("sorts unmapped entries deterministically by resourceId", () => {

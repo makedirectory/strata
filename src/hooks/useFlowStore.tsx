@@ -271,6 +271,11 @@ export function useFlowStore() {
         resources: cur.resources.filter((r) => r.id !== id),
         relationships: cur.relationships.filter((e) => e.from !== id && e.to !== id),
       }));
+    } else if (selection.type === "annotation") {
+      const id = selection.id;
+      mutate((cur) => ({
+        annotations: annRemove({ ...emptyGraph(""), annotations: cur.annotations }, id).annotations,
+      }));
     } else {
       const id = selection.id;
       mutate((cur) => ({ relationships: cur.relationships.filter((e) => e.id !== id) }));
@@ -410,6 +415,22 @@ export function useFlowStore() {
       }));
     },
     [mutate],
+  );
+
+  /** Live annotation patch during a drag/resize — writes state WITHOUT recording
+   *  history (the single entry is committed at drag end via commitCurrentState),
+   *  mirroring updateResourcePosition for nodes. */
+  const updateAnnotationLive = useCallback(
+    (id: string, patch: Partial<Omit<Annotation, "id">>) => {
+      const cur = liveRef.current;
+      // The engine always writes a fresh annotations array onto the returned
+      // graph; `?? []` only satisfies the optional-field type.
+      const nextAnnotations =
+        annUpdate({ ...emptyGraph(""), annotations: cur.annotations }, id, patch).annotations ?? [];
+      liveRef.current = { ...cur, annotations: nextAnnotations };
+      setAnnotations(nextAnnotations);
+    },
+    [],
   );
 
   const updateResource = useCallback(
@@ -677,6 +698,7 @@ export function useFlowStore() {
     mergeGraph,
     addAnnotation,
     updateAnnotation,
+    updateAnnotationLive,
     removeAnnotation,
 
     // History

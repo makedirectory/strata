@@ -242,7 +242,7 @@ export const TOOLS: McpTool[] = [
         graph: GRAPH_SCHEMA,
         target: { type: "string", enum: ["aws", "gcp", "azure"] },
       },
-      ["target"],
+      ["graph", "target"],
     ),
     run: (a) => {
       const target = (str(a, "target") ?? "aws") as CloudProvider;

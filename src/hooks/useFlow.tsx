@@ -3,7 +3,7 @@ import React, { createContext, useContext, useRef, useCallback, useEffect } from
 import { useFlowStore } from "./useFlowStore";
 import { useCanvasInteraction } from "./useCanvasInteraction";
 import { useCanvasRenderer } from "./useCanvasRenderer";
-import type { ResourceInstance, Relationship, InfrastructureGraph } from "../aws/model";
+import type { ResourceInstance, Relationship, InfrastructureGraph, Viewport } from "../aws/model";
 import { emptyGraph, DEFAULT_NODE_SIZE } from "../aws/model";
 import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind } from "../aws/types";
@@ -169,6 +169,16 @@ interface FlowContextValue {
   addAnnotation: (annotation: Annotation) => void;
   updateAnnotation: (id: string, patch: Partial<Omit<Annotation, "id">>) => void;
   removeAnnotation: (id: string) => void;
+  /** Create a note/zone/callout at the viewport centre, select it, return its id. */
+  addAnnotationOfKind: (kind: Annotation["kind"]) => string;
+  /** Select an annotation by id (distinct from node/edge selection). */
+  selectAnnotation: (id: string) => void;
+  /** Live annotation move/resize during a drag (not committed to history). */
+  updateAnnotationLive: (id: string, patch: Partial<Omit<Annotation, "id">>) => void;
+  /** Commit the live annotation drag/resize state to history (call at drag end). */
+  commitAnnotationDrag: () => void;
+  /** Convert canvas-wrap-local screen coords → world coords (for the layer). */
+  screenToWorld: (pt: { x: number; y: number }, pan: Viewport) => { x: number; y: number };
   /** Visible nodes projected for the accessible keyboard/screen-reader overlay. */
   a11yNodes: A11yNode[];
   /** Setter for the live search-match highlight (read by the renderer only). */
@@ -490,6 +500,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         storeReplaceAll({
           resources: graph.resources,
           relationships: graph.relationships,
+          // Carry any annotation layer on the discovered graph (normally none).
+          annotations: (graph as { annotations?: Annotation[] }).annotations,
           accounts: graph.accounts ?? [],
           graphId: "",
         });
@@ -1082,6 +1094,47 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { width: r?.width ?? window.innerWidth, height: r?.height ?? window.innerHeight };
   }, []);
 
+  // ---- annotation create / select / drag-commit -------------------------
+  const { addAnnotation: storeAddAnnotation } = store;
+  /** Select an annotation (clears any node/edge multi-selection). */
+  const selectAnnotation = useCallback(
+    (id: string) => {
+      storeSetSelectedIds([]);
+      storeSetSelection({ type: "annotation", id });
+      setFocusedContainerId(null);
+    },
+    [storeSetSelectedIds, storeSetSelection, setFocusedContainerId],
+  );
+  /** Create a note/zone/callout at the current viewport centre (world coords),
+   *  route it through the store add action (undo + dirty), and select it. */
+  const addAnnotationOfKind = useCallback(
+    (kind: Annotation["kind"]) => {
+      const v = viewSize();
+      const center = screenToWorld({ x: v.width / 2, y: v.height / 2 }, getViewport());
+      const id = storeUid();
+      const base: Annotation = {
+        id,
+        kind,
+        text: kind === "zone" ? "Zone" : kind === "callout" ? "Callout" : "Note",
+        x: Math.round(center.x),
+        y: Math.round(center.y),
+      };
+      // Zones default to a sizeable region (they sit behind nodes as a backdrop).
+      if (kind === "zone") {
+        base.w = 360;
+        base.h = 240;
+        base.x = Math.round(center.x - 180);
+        base.y = Math.round(center.y - 120);
+      }
+      storeAddAnnotation(base);
+      selectAnnotation(id);
+      return id;
+    },
+    [viewSize, screenToWorld, getViewport, storeUid, storeAddAnnotation, selectAnnotation],
+  );
+  /** Commit the live annotation drag/resize as a single history entry. */
+  const commitAnnotationDrag = useCallback(() => commitCurrentState(), [commitCurrentState]);
+
   const { toggleExpandedGroup: storeToggleExpandedGroup } = store;
   const onExpandGroup = useCallback(
     (parentId: string, serviceId: string) =>
@@ -1582,6 +1635,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           storeReplaceAll({
             resources: g.resources ?? [],
             relationships: g.relationships ?? [],
+            // A Strata JSON export carries its annotation layer on the graph.
+            annotations: (g as { annotations?: Annotation[] }).annotations,
             viewport: g.viewport,
             accounts: g.accounts ?? [],
             graphId: g.id ?? "",
@@ -1620,6 +1675,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           storeReplaceAll({
             resources: graph.resources ?? [],
             relationships: graph.relationships ?? [],
+            // IaC formats (Terraform / CloudFormation / ARM) have no annotation
+            // concept, so an IaC import legitimately starts with an empty layer.
+            annotations: [],
             viewport: graph.viewport,
             accounts: graph.accounts ?? [],
             graphId: graph.id ?? "",
@@ -1756,6 +1814,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storeReplaceAll({
         resources: snap.resources,
         relationships: snap.relationships,
+        // Annotations ride on the snapshot graph — restore them too.
+        annotations: (snap as { annotations?: Annotation[] }).annotations,
         accounts: snap.accounts ?? [],
         graphId: "",
       });
@@ -1817,6 +1877,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         storeReplaceAll({
           resources: g.resources ?? [],
           relationships: g.relationships ?? [],
+          // Annotations persist on the saved graph — restore them on load.
+          annotations: (g as { annotations?: Annotation[] }).annotations,
           viewport: g.viewport,
           accounts: g.accounts ?? [],
           graphId: g.id,
@@ -1975,6 +2037,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storeReplaceAll({
         resources,
         relationships,
+        // Coded starter templates carry no annotations — start with an empty layer.
+        annotations: [],
         viewport: { x: 120, y: 80, scale: 0.85 },
         accounts: [],
         graphId: "",
@@ -2002,6 +2066,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storeReplaceAll({
         resources: g.resources ?? [],
         relationships: g.relationships ?? [],
+        // Bundled examples may ship an annotation layer on the graph.
+        annotations: (g as { annotations?: Annotation[] }).annotations,
         viewport: g.viewport,
         accounts: g.accounts ?? [],
         graphId: "",
@@ -2058,6 +2124,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       storeReplaceAll({
         resources: shared.resources ?? [],
         relationships: shared.relationships ?? [],
+        // The share-link codec round-trips (and validates) the annotation layer.
+        annotations: shared.annotations,
         viewport: shared.viewport,
         accounts: shared.accounts ?? [],
         graphId: "",
@@ -2151,6 +2219,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addAnnotation: store.addAnnotation,
       updateAnnotation: store.updateAnnotation,
       removeAnnotation: store.removeAnnotation,
+      addAnnotationOfKind,
+      selectAnnotation,
+      updateAnnotationLive: store.updateAnnotationLive,
+      commitAnnotationDrag,
+      screenToWorld,
       a11yNodes,
       setSearchMatches: store.setSearchMatches,
       breadcrumb,
@@ -2291,6 +2364,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.addAnnotation,
       store.updateAnnotation,
       store.removeAnnotation,
+      store.updateAnnotationLive,
+      addAnnotationOfKind,
+      selectAnnotation,
+      commitAnnotationDrag,
+      screenToWorld,
       a11yNodes,
       store.setSearchMatches,
       breadcrumb,
