@@ -413,6 +413,11 @@ function cloneGraph(graph: InfrastructureGraph): InfrastructureGraph {
       ...(r.tags ? { tags: { ...r.tags } } : {}),
     })),
     relationships: graph.relationships.map((e) => ({ ...e })),
+    // Annotations are presentation-only and untouched by fixes, but the spread
+    // above would otherwise alias the SAME array/objects as the input — a later
+    // mutation of the returned graph's annotations would leak into the caller's
+    // undo history. Deep-copy them so the returned graph is fully isolated.
+    annotations: graph.annotations ? graph.annotations.map((a) => ({ ...a })) : graph.annotations,
   };
 }
 

@@ -15,6 +15,22 @@ import { isAnnotation, isSafeAnnotationColor, type Annotation } from "../aws/ann
 
 export const SHARE_HASH_KEY = "g";
 
+/**
+ * Conservative cross-browser ceiling for a shareable URL. Real limits vary
+ * widely — IE/Edge historically capped at ~2,083 chars, some servers reject
+ * URLs past ~8,000, and many clipboard/messaging paths truncate long links
+ * silently. 8,000 sits at a safe-everywhere floor: comfortably above what a
+ * modest diagram produces, but below the point where the `#g=…` link starts
+ * failing to open (or copy) for a recipient. Past this we refuse to hand out a
+ * broken link and steer the user to JSON export instead.
+ */
+export const MAX_SHARE_URL_LENGTH = 8000;
+
+/** True when a built share URL exceeds the safe length budget (see above). */
+export function isShareUrlTooLong(url: string): boolean {
+  return url.length > MAX_SHARE_URL_LENGTH;
+}
+
 function bytesToBinary(bytes: Uint8Array): string {
   let s = "";
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);

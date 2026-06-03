@@ -32,7 +32,7 @@ import type { GraphSummary } from "../aws/model";
 import { importAnyIaC } from "../lib/importIac";
 import { getExample } from "../examples";
 import { estimateMonthlyCost, estimateTotal, formatMonthly } from "../aws/cost";
-import { buildShareUrl, readGraphFromHash } from "../lib/shareLink";
+import { buildShareUrl, readGraphFromHash, isShareUrlTooLong } from "../lib/shareLink";
 import {
   zoomAbout,
   zoomByFactor,
@@ -1598,6 +1598,17 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? location.origin + location.pathname
         : "https://strata.mk-dir.com/";
     const url = buildShareUrl(base, graph);
+    // A share link packs the whole diagram into the URL hash. Past the safe
+    // length budget the `#g=…` link silently fails to open (or copy) for the
+    // recipient, so don't hand out a broken link — warn and fall back to the
+    // self-contained JSON export, which has no size limit.
+    if (isShareUrlTooLong(url)) {
+      setStatus(
+        "This diagram is too large to share by link — exporting it as JSON instead. Send that file to share it.",
+      );
+      exportJSON();
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
       setStatus("Share link copied to clipboard.");
@@ -1605,7 +1616,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStatus("Couldn't copy automatically — your share link is in the address bar.");
       if (typeof location !== "undefined") location.hash = url.slice(url.indexOf("#") + 1);
     }
-  }, [buildGraph]);
+  }, [buildGraph, exportJSON]);
 
   const importJSONDialog = useCallback(() => {
     const input = document.createElement("input");
