@@ -408,7 +408,7 @@ function TopBar() {
     exportJSON,
     exportImage,
     shareDiagram,
-    compareWithFile,
+    openCompare,
     importJSONDialog,
     importIaCDialog,
     clear,
@@ -543,8 +543,8 @@ function TopBar() {
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem
-            onClick={compareWithFile}
-            title="Compare this diagram against a baseline file (live export, IaC, or Strata JSON)"
+            onClick={openCompare}
+            title="Compare this diagram against a baseline (a saved diagram, a live export, IaC, or Strata JSON)"
           >
             Compare for drift…
           </MenuItem>
@@ -780,6 +780,84 @@ function DriftPanel() {
             − {r.name} <span className="drift-svc">{r.serviceId}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Compare-for-drift picker: choose a baseline — one of this browser's saved
+ *  diagrams, or a file (Strata JSON / IaC). Diffing itself is non-destructive. */
+function CompareDialog() {
+  const { compareOpen, closeCompare, compareWithFile, compareWithSaved, listSavedGraphs } =
+    useFlow();
+  const [saved, setSaved] = React.useState<GraphSummary[] | null>(null);
+  const ref = useDialogA11y<HTMLDivElement>(compareOpen, closeCompare);
+
+  React.useEffect(() => {
+    if (!compareOpen) return;
+    let live = true;
+    setSaved(null);
+    listSavedGraphs()
+      .then((g) => live && setSaved(g))
+      .catch(() => live && setSaved([]));
+    return () => {
+      live = false;
+    };
+  }, [compareOpen, listSavedGraphs]);
+
+  if (!compareOpen) return null;
+  return (
+    <div className="hub-backdrop" onMouseDown={closeCompare}>
+      <div
+        className="export"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Compare for drift"
+        ref={ref}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Compare for drift</h2>
+          <button className="hub-close" onClick={closeCompare} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <p className="hub-subtitle">
+          Pick a <strong>baseline</strong> to compare the current diagram against. Nothing is
+          changed — drifted resources are highlighted on the canvas with a summary.
+        </p>
+
+        <div className="compare-section">
+          <div className="layers-sub">From a file</div>
+          <button className="btn-start" onClick={compareWithFile}>
+            Choose a file… (Strata JSON, CloudFormation, ARM, Terraform)
+          </button>
+        </div>
+
+        <div className="compare-section">
+          <div className="layers-sub">A saved diagram</div>
+          {saved === null ? (
+            <div className="help">Loading…</div>
+          ) : saved.length === 0 ? (
+            <div className="help">No saved diagrams in this browser yet.</div>
+          ) : (
+            <div className="compare-list">
+              {saved.map((g) => (
+                <button
+                  key={g.id}
+                  className="compare-item"
+                  onClick={() => compareWithSaved(g.id)}
+                  title={`Compare against "${g.name}"`}
+                >
+                  <span className="compare-item-name">{g.name}</span>
+                  <span className="compare-item-meta">
+                    {g.resourceCount} resource{g.resourceCount === 1 ? "" : "s"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1785,6 +1863,7 @@ function Workspace() {
       <Tour />
       <StartHub />
       <ExportDialog />
+      <CompareDialog />
       <ConnectDialog />
       <ReplaceConfirmDialog />
       {presentation && (
