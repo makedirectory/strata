@@ -264,8 +264,13 @@ interface FlowContextValue {
   connectOpen: boolean;
   openConnect: () => void;
   closeConnect: () => void;
-  /** Apply a discovered graph: "merge" keeps current work, "replace" is guarded. */
+  /** Apply a discovered graph: "merge" stages a preview, "replace" is guarded. */
   importDiscoveredGraph: (graph: InfrastructureGraph, mode: "merge" | "replace") => void;
+  /** Merge preview: the diff of the staged graph vs the current diagram (or null). */
+  mergePreview: DriftResult | null;
+  /** Apply / discard the staged merge after reviewing the preview. */
+  confirmMerge: () => void;
+  cancelMerge: () => void;
   runValidateUI: () => void;
   runRulesUI: () => void;
   saveGraph: () => void;
@@ -371,6 +376,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Drift: the result of comparing the diagram against a loaded baseline, + its label.
   const [driftResult, setDriftResult] = React.useState<DriftResult | null>(null);
   const [driftBaselineName, setDriftBaselineName] = React.useState("");
+  // Merge preview: a discovered/imported graph awaiting confirmation. The diff of
+  // what merging it would change (`mergePreview`) is derived below, once
+  // `buildGraph` is in scope.
+  const [pendingMerge, setPendingMerge] = React.useState<InfrastructureGraph | null>(null);
   const [ruleSuggestions, setRuleSuggestions] = React.useState<RuleSuggestion[] | null>(null);
   const [status, setStatus] = React.useState<string>(
     "Scroll to pan · ⌘/pinch to zoom · drag empty canvas to select · Space+drag to pan · C to connect.",
@@ -447,18 +456,29 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setConnectOpen(false);
         setStatus(`Imported ${graph.resources.length} discovered resource(s) (replace).`);
       } else {
-        const { added, updated } = storeMergeGraph({
-          resources: graph.resources,
-          relationships: graph.relationships,
-        });
+        // Don't apply yet — stage the graph so the user can review a preview of
+        // what merging will change (the diff is derived in `mergePreview`).
+        setPendingMerge(graph);
         setConnectOpen(false);
-        setStatus(
-          `Merged: reconciled ${updated} existing resource(s), added ${added} new — no duplicates.`,
-        );
       }
     },
-    [confirmReplaceIfDirty, storeReplaceAll, storeMergeGraph],
+    [confirmReplaceIfDirty, storeReplaceAll],
   );
+
+  /** Apply the staged merge after the user confirms the preview. */
+  const confirmMerge = useCallback(() => {
+    if (!pendingMerge) return;
+    const { added, updated } = storeMergeGraph({
+      resources: pendingMerge.resources,
+      relationships: pendingMerge.relationships,
+    });
+    setPendingMerge(null);
+    setStatus(
+      `Merged: reconciled ${updated} existing resource(s), added ${added} new — no duplicates.`,
+    );
+  }, [pendingMerge, storeMergeGraph]);
+
+  const cancelMerge = useCallback(() => setPendingMerge(null), []);
 
   // `viewport` is intentionally NOT here — it lives in the Canvas-only context
   // so panels don't re-render on pan/zoom.
@@ -725,6 +745,14 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     store.relationships,
     getViewport,
   ]);
+
+  // Diff a staged merge against the current diagram so the preview can show what
+  // would be added/updated before the user applies it. Uses the same engine and
+  // matching as drift: `added` here = new resources, `changed` = updates.
+  const mergePreview = React.useMemo<DriftResult | null>(
+    () => (pendingMerge ? diffGraphs(pendingMerge, buildGraph()) : null),
+    [pendingMerge, buildGraph],
+  );
 
   const { setMode: storeSetMode, addResource: storeAddResource } = store;
 
@@ -2053,6 +2081,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       openConnect,
       closeConnect,
       importDiscoveredGraph,
+      mergePreview,
+      confirmMerge,
+      cancelMerge,
       runValidateUI: runValidate,
       runRulesUI: runSuggest,
       saveGraph,
@@ -2167,6 +2198,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       openConnect,
       closeConnect,
       importDiscoveredGraph,
+      mergePreview,
+      confirmMerge,
+      cancelMerge,
       saveGraph,
       listSavedGraphs,
       loadGraph,
