@@ -133,6 +133,11 @@ export interface InfrastructureGraph {
   relationships: Relationship[];
   viewport?: Viewport;
   /**
+   * Presentation-only annotation layer (notes / callouts / zones). Excluded
+   * from validation, cost and IaC emit. See src/aws/annotations.ts.
+   */
+  annotations?: import("./annotations").Annotation[];
+  /**
    * Round-trip carrier for IaC template sections Strata doesn't model as graph
    * nodes (CloudFormation/ARM Parameters, Outputs, Mappings, Conditions, …).
    * Captured on import so export can re-emit a faithful template. Template data

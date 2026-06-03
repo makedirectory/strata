@@ -17,9 +17,16 @@ import type { InfrastructureGraph } from "../aws/model";
 import { emptyGraph } from "../aws/model";
 import { allServices, getService, searchServices, serviceProvider } from "../aws/registry";
 import { validateArchitecture, suggestRules } from "../aws/rules";
+import { evaluateReachability } from "../aws/reachability";
 import { estimateMonthlyCost, estimateTotal } from "../aws/cost";
+import { reviewAccount } from "../aws/review";
+import { mapToCloud } from "../aws/cloudMap";
+import { detectFixes, applyFix } from "../aws/autofix";
+import { changeReceipt, renderMarkdown } from "../aws/receipt";
+import { collectTagKeys, collectTagValues, tagCoverage } from "../aws/tags";
 import { importAnyIaC } from "../lib/importIac";
 import { exportIaC, type ExportFormat } from "../aws/iacExport";
+import { graphToDsl, dslToGraph } from "../aws/dsl";
 import type { CloudProvider } from "../aws/types";
 
 /** MCP protocol revision this server speaks. */
@@ -201,6 +208,117 @@ export const TOOLS: McpTool[] = [
           serviceId: r.serviceId,
           monthly: estimateMonthlyCost(r),
         })),
+      };
+    },
+  },
+  {
+    name: "review_account",
+    description:
+      "Explain & Clean: review a graph for a cost-map summary, scored risk findings, tag coverage, orphan/unconnected resources, and a safe-cleanup checklist. Composes validation + cost; nothing is silently dropped (unknown-cost resources are counted).",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+    run: (a) => reviewAccount(coerceGraph(a.graph)),
+  },
+  {
+    name: "evaluate_reachability",
+    description:
+      "Evaluate internet reachability for a graph: which resources are reachable from the public internet (via public-subnet routing or an external-facing edge service), the world-open ports on them, and risk notes for sensitive exposed ports.",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+    run: (a) => {
+      const r = evaluateReachability(coerceGraph(a.graph));
+      return {
+        exposed: r.exposed,
+        internetReachableIds: [...r.internetReachableIds].sort(),
+        publicSubnetIds: [...r.publicSubnetIds].sort(),
+        notes: r.notes,
+      };
+    },
+  },
+  {
+    name: "map_to_cloud",
+    description:
+      "Translate an InfrastructureGraph onto another cloud provider. Rewrites each resource to the target provider's closest service (by category + capability) and returns the rewritten graph plus an honest list of resources with no equivalent. Does not mutate the input.",
+    inputSchema: objectSchema(
+      {
+        graph: GRAPH_SCHEMA,
+        target: { type: "string", enum: ["aws", "gcp", "azure"] },
+      },
+      ["target"],
+    ),
+    run: (a) => {
+      const target = (str(a, "target") ?? "aws") as CloudProvider;
+      return mapToCloud(coerceGraph(a.graph), target);
+    },
+  },
+  {
+    name: "graph_to_dsl",
+    description:
+      "Serialize an InfrastructureGraph into Strata's human-readable, round-trippable YAML DSL (diagram-as-code).",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+    run: (a) => {
+      const graph = coerceGraph(a.graph);
+      return { dsl: graphToDsl(graph) };
+    },
+  },
+  {
+    name: "graph_from_dsl",
+    description:
+      "Parse Strata's YAML DSL (diagram-as-code) back into an InfrastructureGraph. Never throws: malformed input and structural problems are returned in errors[].",
+    inputSchema: objectSchema({ dsl: { type: "string" } }, ["dsl"]),
+    run: (a) => {
+      const dsl = str(a, "dsl");
+      if (dsl === undefined) throw new Error("graph_from_dsl requires a `dsl` string argument");
+      const { graph, errors } = dslToGraph(dsl);
+      return { graph, errors };
+    },
+  },
+  {
+    name: "list_autofixes",
+    description:
+      "Detect mechanically-fixable misconfigurations in a graph (open security-group ports, missing public-subnet internet route, unencrypted storage, mis-placed NAT). Returns Fixable[] with stable ids to pass to apply_autofix.",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+    run: (a) => {
+      const fixes = detectFixes(coerceGraph(a.graph));
+      return { count: fixes.length, fixes };
+    },
+  },
+  {
+    name: "apply_autofix",
+    description:
+      "Apply one autofix to a graph by its Fixable id (from list_autofixes) and return the modified graph. Unknown/stale ids are a safe no-op (graph returned unchanged). Never mutates the input.",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA, fixId: { type: "string" } }, [
+      "graph",
+      "fixId",
+    ]),
+    run: (a) => {
+      const fixId = str(a, "fixId");
+      if (!fixId) throw new Error("`fixId` (a Fixable.id from list_autofixes) is required.");
+      const before = coerceGraph(a.graph);
+      const after = applyFix(before, fixId);
+      return { applied: after !== before, graph: after };
+    },
+  },
+  {
+    name: "change_receipt",
+    description:
+      "Compare two InfrastructureGraphs (before vs after) and return a deterministic change/audit receipt: resource churn (added/removed/changed), monthly cost delta, validation findings resolved vs introduced, a plain-English summary, and a rendered Markdown report.",
+    inputSchema: objectSchema({ before: GRAPH_SCHEMA, after: GRAPH_SCHEMA }, ["before", "after"]),
+    run: (a) => {
+      const receipt = changeReceipt(coerceGraph(a.before), coerceGraph(a.after));
+      return { receipt, markdown: renderMarkdown(receipt) };
+    },
+  },
+  {
+    name: "tag_report",
+    description:
+      "Report tag coverage for a graph: every tag key in use, its distinct values, and the tagged/untagged resource split.",
+    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+    run: (a) => {
+      const graph = coerceGraph(a.graph);
+      const keys = collectTagKeys(graph);
+      return {
+        keys,
+        values: Object.fromEntries(keys.map((k) => [k, collectTagValues(graph, k)])),
+        coverage: tagCoverage(graph),
       };
     },
   },

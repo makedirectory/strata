@@ -37,6 +37,24 @@ describe("MCP server — protocol", () => {
     expect(names).toContain("validate_architecture");
   });
 
+  it("registers the newly-wired engine tools", () => {
+    const res = handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+    const names = (res!.result as { tools: { name: string }[] }).tools.map((t) => t.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "review_account",
+        "evaluate_reachability",
+        "map_to_cloud",
+        "graph_to_dsl",
+        "graph_from_dsl",
+        "list_autofixes",
+        "apply_autofix",
+        "change_receipt",
+        "tag_report",
+      ]),
+    );
+  });
+
   it("returns method-not-found for an unknown request", () => {
     const res = handleMcpMessage({ jsonrpc: "2.0", id: 3, method: "nope" });
     expect(res!.error?.code).toBe(-32601);
@@ -98,6 +116,38 @@ describe("MCP server — tools", () => {
       format: "terraform",
     });
     expect(data.content).toContain('resource "aws_vpc"');
+  });
+
+  it("graph_to_dsl and graph_from_dsl round-trip a graph", () => {
+    const graph = {
+      resources: [{ id: "v", serviceId: "vpc", name: "v", config: {}, source: "manual" }],
+      relationships: [],
+    };
+    const { data: out } = call("graph_to_dsl", { graph });
+    expect(typeof out.dsl).toBe("string");
+    const { data: back } = call("graph_from_dsl", { dsl: out.dsl });
+    expect(Array.isArray(back.errors)).toBe(true);
+    expect(back.graph.resources.some((r: { id: string }) => r.id === "v")).toBe(true);
+  });
+
+  it("list_autofixes returns a fixes array", () => {
+    const { data } = call("list_autofixes", {
+      graph: { resources: [], relationships: [] },
+    });
+    expect(typeof data.count).toBe("number");
+    expect(Array.isArray(data.fixes)).toBe(true);
+  });
+
+  it("map_to_cloud rewrites onto a target provider", () => {
+    const { data } = call("map_to_cloud", {
+      graph: {
+        resources: [{ id: "v", serviceId: "vpc", name: "v", config: {}, source: "manual" }],
+        relationships: [],
+      },
+      target: "gcp",
+    });
+    expect(data.graph).toBeDefined();
+    expect(Array.isArray(data.unmapped)).toBe(true);
   });
 
   it("reports an unknown tool as an error result (not a protocol error)", () => {
