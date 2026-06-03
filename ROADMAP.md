@@ -40,30 +40,26 @@ Earlier lines: drift / compare UI, cost-diff, local version history, ARN
 merge-upsert, multi-cloud (AWS/GCP/Azure) catalog + IaC, OpenTofu support, the
 MCP server, and the Well-Architected rule set.
 
+The review follow-ups for the annotation batch are now also shipped:
+
+- **Canvas projection + drag unified** — a shared `worldToScreen` /
+  `screenDeltaToWorld` / `snapToGrid` / `DRAG_THRESHOLD_PX` in
+  `src/canvas/geometry.ts`; the annotation overlay and the node overlay share
+  them, and annotation wiring was de-duplicated (array-level helpers + a single
+  per-kind defaults table).
+- **Callout leader line** anchors to the box edge (stays attached when text
+  wraps).
+- **Reachability** collapses a wide world-open range to one note; **autofix**
+  deep-copies annotations on clone; **share links** guard payload size and fall
+  back to JSON export; the **DSL** round-trips the lossless `raw` IaC carrier.
+
 ## Active follow-ups / known limitations
 
-Surfaced during review and intentionally left for a follow-up (none block normal
-use):
+Small, non-blocking polish left for later:
 
-- **Annotations — rendering depth.** The annotation layer is a separate DOM
-  overlay with its own world→screen math and drag handling, parallel to the node
-  renderer. Unify on a shared `worldToScreen` helper and one interaction layer so
-  hit-testing, snapping, and resize stay consistent. _(M)_
-- **Callout leader line.** Anchors to the callout's nominal box centre, so the
-  line can detach from the visible bubble when text wraps to multiple lines.
-  Measure the rendered height (or anchor to the box edge). _(S)_
-- **Reachability — wide-range notes.** A single very wide world-open port range
-  (e.g. `0-65535`) emits one note per sensitive port; collapse to a single
-  "wide world-open range" note. _(S)_
-- **Autofix — annotation cloning.** The autofix graph clone copies the
-  `annotations` array by reference (safe today because the annotation helpers are
-  immutable). Deep-copy it if any in-place annotation mutation is ever added. _(S)_
-- **Share links — size budget.** The URL-hash share payload (now including
-  annotations) has no length guard; large diagrams can silently exceed browser
-  URL limits. Add a size check + warning, or fall back to JSON export. _(S)_
-- **DSL — `raw` carrier.** Round-trips positions and config but not the lossless
-  `raw` IaC source sidecar; a DSL round-trip degrades IaC re-export to a scaffold.
-  _(M)_
+- **Callout → node edge.** The leader line now starts at the callout's box edge;
+  it could also stop at the target node's edge (rather than its centre) — needs
+  node-rect plumbing into the overlay. _(S)_
 
 ## Near-term ideas (no backend required)
 
