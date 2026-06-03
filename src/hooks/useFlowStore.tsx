@@ -1,7 +1,14 @@
 "use client";
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { ResourceInstance, Relationship, Viewport, Account } from "../aws/model";
-import { DEFAULT_NODE_SIZE } from "../aws/model";
+import type {
+  ResourceInstance,
+  Relationship,
+  Viewport,
+  Account,
+  InfrastructureGraph,
+} from "../aws/model";
+import { DEFAULT_NODE_SIZE, emptyGraph } from "../aws/model";
+import { mergeGraphs, type MergeResult } from "../aws/merge";
 import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind, ServiceCategoryId } from "../aws/types";
 import type { RelationshipClass } from "../aws/relationshipClasses";
@@ -482,21 +489,36 @@ export function useFlowStore() {
    * skipping ids that already exist. Preserves viewport + graphId (used by
    * live discovery / import "merge" mode, where existing work must survive).
    */
+  /** Reconcile an incoming graph into the current one (ARN/identity upsert),
+   *  updating matched resources in place rather than appending duplicates.
+   *  Returns the update/add counts. */
   const mergeGraph = useCallback(
-    (next: { resources: ResourceInstance[]; relationships: Relationship[] }) => {
+    (next: { resources: ResourceInstance[]; relationships: Relationship[] }): MergeResult => {
+      let result: MergeResult = {
+        graph: emptyGraph(),
+        updated: 0,
+        added: 0,
+      };
       mutate((cur) => {
-        const haveR = new Set(cur.resources.map((r) => r.id));
-        const haveE = new Set(cur.relationships.map((e) => e.id));
+        const base: InfrastructureGraph = {
+          ...emptyGraph(),
+          resources: cur.resources,
+          relationships: cur.relationships,
+        };
+        const incoming: InfrastructureGraph = {
+          ...emptyGraph(),
+          resources: next.resources,
+          relationships: next.relationships,
+        };
+        result = mergeGraphs(base, incoming);
         return {
-          resources: [...cur.resources, ...next.resources.filter((r) => !haveR.has(r.id))],
-          relationships: [
-            ...cur.relationships,
-            ...next.relationships.filter((e) => !haveE.has(e.id)),
-          ],
+          resources: result.graph.resources,
+          relationships: result.graph.relationships,
         };
       });
       setSelection(null);
       setSelectedIds([]);
+      return result;
     },
     [mutate],
   );

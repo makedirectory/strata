@@ -438,11 +438,18 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           accounts: graph.accounts ?? [],
           graphId: "",
         });
+        setConnectOpen(false);
+        setStatus(`Imported ${graph.resources.length} discovered resource(s) (replace).`);
       } else {
-        storeMergeGraph({ resources: graph.resources, relationships: graph.relationships });
+        const { added, updated } = storeMergeGraph({
+          resources: graph.resources,
+          relationships: graph.relationships,
+        });
+        setConnectOpen(false);
+        setStatus(
+          `Merged: reconciled ${updated} existing resource(s), added ${added} new — no duplicates.`,
+        );
       }
-      setConnectOpen(false);
-      setStatus(`Imported ${graph.resources.length} discovered resource(s) (${mode}).`);
     },
     [confirmReplaceIfDirty, storeReplaceAll, storeMergeGraph],
   );
