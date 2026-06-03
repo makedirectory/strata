@@ -863,6 +863,65 @@ function CompareDialog() {
   );
 }
 
+/** Merge preview: before applying a discovered/imported merge, show what it will
+ *  change — new resources to add and existing ones to update (with the fields
+ *  that differ) — so the user can confirm or cancel. Reuses the drift diff. */
+function MergePreviewDialog() {
+  const { mergePreview, confirmMerge, cancelMerge } = useFlow();
+  const ref = useDialogA11y<HTMLDivElement>(mergePreview !== null, cancelMerge);
+  if (!mergePreview) return null;
+  const { added, changed, unchanged, removed } = mergePreview;
+  const nothing = added.length === 0 && changed.length === 0;
+  return (
+    <div className="hub-backdrop hub-backdrop--top" onMouseDown={cancelMerge}>
+      <div
+        className="export"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Review merge"
+        ref={ref}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Review merge</h2>
+          <button className="hub-close" onClick={cancelMerge} aria-label="Cancel merge">
+            ✕
+          </button>
+        </div>
+        <p className="hub-subtitle">
+          Merging reconciles into your diagram — matched resources are updated in place (keeping
+          their position), new ones are added, and nothing is removed.
+        </p>
+        <div className="drift-counts">
+          <span className="drift-c added">+{added.length} new</span>
+          <span className="drift-c changed">~{changed.length} updated</span>
+          <span className="drift-c">{unchanged} unchanged</span>
+          <span className="drift-c">{removed.length} kept (not in source)</span>
+        </div>
+        <div className="drift-list" style={{ maxHeight: "40vh" }}>
+          {nothing && <div className="help">Everything already matches — nothing to change.</div>}
+          {added.map((r) => (
+            <div key={`a-${r.id}`} className="drift-item added">
+              + {r.name} <span className="drift-svc">{r.serviceId}</span>
+            </div>
+          ))}
+          {changed.map((r) => (
+            <div key={`c-${r.id}`} className="drift-item changed">
+              ~ {r.name} <span className="drift-svc">{r.changes.map((c) => c.key).join(", ")}</span>
+            </div>
+          ))}
+        </div>
+        <div className="confirm-actions">
+          <button className="btn-start" onClick={confirmMerge}>
+            {nothing ? "Apply (no changes)" : "Apply merge"}
+          </button>
+          <button onClick={cancelMerge}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Steps for the first-run guided tour. */
 const TOUR_STEPS: { icon: string; title: string; body: React.ReactNode }[] = [
   {
@@ -1864,6 +1923,7 @@ function Workspace() {
       <StartHub />
       <ExportDialog />
       <CompareDialog />
+      <MergePreviewDialog />
       <ConnectDialog />
       <ReplaceConfirmDialog />
       {presentation && (
