@@ -1402,6 +1402,17 @@ svg.guides {
   font: inherit;
   outline: none;
 }
+/* Zone inline edit fills the region box (the label sits in a corner; the
+   editor should occupy the whole zone so it's easy to target and read). */
+.ann-zone-edit {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  font-weight: 700;
+  font-size: 11px;
+}
 .ann-zone.selected,
 .ann-note.selected,
 .ann-callout.selected {

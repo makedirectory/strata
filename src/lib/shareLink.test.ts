@@ -79,6 +79,31 @@ describe("shareLink", () => {
     expect(decoded!.annotations![0].id).toBe("ok");
   });
 
+  it("strips an unsafe annotation color on decode but keeps the annotation", () => {
+    // BUG 4: the color is injected into a CSS custom property / SVG stroke, so a
+    // style-injection payload must be dropped — without discarding the whole
+    // annotation. Safe colors (#hex / var() / rgb() / named) are preserved.
+    const g = sample() as InfrastructureGraph & { annotations?: Annotation[] };
+    (g as { annotations?: unknown }).annotations = [
+      { id: "evil", kind: "note", text: "x", x: 0, y: 0, color: "red; background:url(x)" },
+      { id: "hex", kind: "note", text: "x", x: 0, y: 0, color: "#34d399" },
+      { id: "var", kind: "note", text: "x", x: 0, y: 0, color: "var(--x)" },
+      { id: "rgb", kind: "note", text: "x", x: 0, y: 0, color: "rgb(1,2,3)" },
+      { id: "named", kind: "note", text: "x", x: 0, y: 0, color: "tomato" },
+    ];
+    const decoded = decodeGraph(encodeGraph(g as InfrastructureGraph));
+    expect(decoded).not.toBeNull();
+    const byId = new Map(decoded!.annotations!.map((a) => [a.id, a]));
+    // The unsafe one survives but loses its color.
+    expect(byId.get("evil")).toMatchObject({ id: "evil", kind: "note", text: "x" });
+    expect(byId.get("evil")!.color).toBeUndefined();
+    // Safe colors are kept verbatim.
+    expect(byId.get("hex")!.color).toBe("#34d399");
+    expect(byId.get("var")!.color).toBe("var(--x)");
+    expect(byId.get("rgb")!.color).toBe("rgb(1,2,3)");
+    expect(byId.get("named")!.color).toBe("tomato");
+  });
+
   it("omits the annotations field entirely when the graph has none", () => {
     const decoded = decodeGraph(encodeGraph(sample()));
     expect(decoded).not.toBeNull();

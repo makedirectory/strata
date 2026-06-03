@@ -420,18 +420,15 @@ export function useFlowStore() {
   /** Live annotation patch during a drag/resize — writes state WITHOUT recording
    *  history (the single entry is committed at drag end via commitCurrentState),
    *  mirroring updateResourcePosition for nodes. */
-  const updateAnnotationLive = useCallback(
-    (id: string, patch: Partial<Omit<Annotation, "id">>) => {
-      const cur = liveRef.current;
-      // The engine always writes a fresh annotations array onto the returned
-      // graph; `?? []` only satisfies the optional-field type.
-      const nextAnnotations =
-        annUpdate({ ...emptyGraph(""), annotations: cur.annotations }, id, patch).annotations ?? [];
-      liveRef.current = { ...cur, annotations: nextAnnotations };
-      setAnnotations(nextAnnotations);
-    },
-    [],
-  );
+  const updateAnnotationLive = useCallback((id: string, patch: Partial<Omit<Annotation, "id">>) => {
+    const cur = liveRef.current;
+    // The engine always writes a fresh annotations array onto the returned
+    // graph; `?? []` only satisfies the optional-field type.
+    const nextAnnotations =
+      annUpdate({ ...emptyGraph(""), annotations: cur.annotations }, id, patch).annotations ?? [];
+    liveRef.current = { ...cur, annotations: nextAnnotations };
+    setAnnotations(nextAnnotations);
+  }, []);
 
   const updateResource = useCallback(
     (id: string, patch: { name?: string; region?: string; config?: Record<string, unknown> }) => {

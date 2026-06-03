@@ -130,9 +130,7 @@ describe("useFlowStore — dirty tracking (the unsaved-work flag the guard reads
 describe("useFlowStore — annotation layer (create / load / undo)", () => {
   it("addAnnotation lands in state and undo reverts it in one step", () => {
     const { result } = setup();
-    act(() =>
-      result.current.addAnnotation({ id: "a1", kind: "note", text: "hi", x: 10, y: 20 }),
-    );
+    act(() => result.current.addAnnotation({ id: "a1", kind: "note", text: "hi", x: 10, y: 20 }));
     expect(result.current.annotations).toHaveLength(1);
     expect(result.current.annotations[0]).toMatchObject({ id: "a1", text: "hi" });
 
@@ -143,7 +141,15 @@ describe("useFlowStore — annotation layer (create / load / undo)", () => {
   it("updateAnnotation patches x/y and removeAnnotation deletes by id", () => {
     const { result } = setup();
     act(() =>
-      result.current.addAnnotation({ id: "a1", kind: "zone", text: "Z", x: 0, y: 0, w: 100, h: 80 }),
+      result.current.addAnnotation({
+        id: "a1",
+        kind: "zone",
+        text: "Z",
+        x: 0,
+        y: 0,
+        w: 100,
+        h: 80,
+      }),
     );
     act(() => result.current.updateAnnotation("a1", { x: 50, y: 60 }));
     expect(result.current.annotations[0]).toMatchObject({ x: 50, y: 60, w: 100, h: 80 });

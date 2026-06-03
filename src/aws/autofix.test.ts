@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { detectFixes, applyFix, type Fixable } from "./autofix";
-import { emptyGraph, type InfrastructureGraph, type ResourceInstance, type Relationship } from "./model";
+import {
+  emptyGraph,
+  type InfrastructureGraph,
+  type ResourceInstance,
+  type Relationship,
+} from "./model";
 
 function res(
   over: Partial<ResourceInstance> & { id: string; serviceId: string },
@@ -25,7 +30,12 @@ function snap(g: InfrastructureGraph): string {
 describe("detectFixes — close-open-sg", () => {
   it("detects a sensitive port open to the world", () => {
     const g = graph([
-      res({ id: "sg1", serviceId: "security-group", name: "web", config: { ingress: "tcp 22 0.0.0.0/0" } }),
+      res({
+        id: "sg1",
+        serviceId: "security-group",
+        name: "web",
+        config: { ingress: "tcp 22 0.0.0.0/0" },
+      }),
     ]);
     const fixes = detectFixes(g);
     expect(fixes).toHaveLength(1);
@@ -36,7 +46,11 @@ describe("detectFixes — close-open-sg", () => {
 
   it("ignores non-sensitive ports (80/443) open to the world", () => {
     const g = graph([
-      res({ id: "sg1", serviceId: "security-group", config: { ingress: "tcp 443 0.0.0.0/0\ntcp 80 0.0.0.0/0" } }),
+      res({
+        id: "sg1",
+        serviceId: "security-group",
+        config: { ingress: "tcp 443 0.0.0.0/0\ntcp 80 0.0.0.0/0" },
+      }),
     ]);
     expect(detectFixes(g)).toHaveLength(0);
   });
@@ -192,6 +206,43 @@ describe("detect/apply — add-igw-default-route", () => {
     expect(addedB.to).toBe("igwB");
   });
 
+  it("emits the assumption note on a cross-VPC fallback (RT's VPC has no IGW)", () => {
+    // BUG 2: when the RT's VPC IS resolved but has no IGW, the chosen IGW lives
+    // in a DIFFERENT VPC — yet the assumption note was suppressed because
+    // `scoped` was derived from vpcOf(rt) truthiness. The note must now fire,
+    // and the route binds to the only available IGW.
+    const g = graph(
+      [
+        res({ id: "vpcA", serviceId: "vpc", name: "VPC A" }),
+        res({ id: "snA", serviceId: "subnet-public", name: "Pub A", parentId: "vpcA" }),
+        res({ id: "rtA", serviceId: "route-table", name: "RT A" }),
+        res({ id: "igwA", serviceId: "internet-gateway", name: "IGW A" }),
+        res({ id: "vpcB", serviceId: "vpc", name: "VPC B" }),
+        res({ id: "snB", serviceId: "subnet-public", name: "Pub B", parentId: "vpcB" }),
+        res({ id: "rtB", serviceId: "route-table", name: "RT B" }),
+      ],
+      [
+        rel({ id: "ea", from: "rtA", to: "snA", kind: "attached_to" }),
+        rel({ id: "eb", from: "rtB", to: "snB", kind: "attached_to" }),
+        rel({ id: "ga", from: "igwA", to: "vpcA", kind: "attached_to" }),
+      ],
+    );
+    const fixB = detectFixes(g).find((f) => f.resourceId === "rtB")!;
+    expect(fixB).toBeDefined();
+    // The only IGW lives in VPC A — a cross-VPC fallback — so the note fires.
+    expect(fixB.detail).toContain("first available Internet Gateway is assumed");
+    expect(fixB.detail).toContain("IGW A");
+
+    const nextB = applyFix(g, fixB.id);
+    const addedB = nextB.relationships.find((e) => e.kind === "routes_to" && e.from === "rtB")!;
+    expect(addedB.to).toBe("igwA");
+
+    // VPC A's own route table still binds same-VPC with NO assumption note.
+    const fixA = detectFixes(g).find((f) => f.resourceId === "rtA")!;
+    expect(fixA.detail).not.toContain("first available Internet Gateway is assumed");
+    expect(fixA.detail).toContain("IGW A");
+  });
+
   it("does not fire when the default route already exists", () => {
     const g = graph(
       [
@@ -279,7 +330,9 @@ describe("detect/apply — move-nat-to-public-subnet", () => {
 
 describe("applyFix — safety / no-op", () => {
   it("returns the same graph reference for an unknown fixId", () => {
-    const g = graph([res({ id: "sg1", serviceId: "security-group", config: { ingress: "tcp 22 0.0.0.0/0" } })]);
+    const g = graph([
+      res({ id: "sg1", serviceId: "security-group", config: { ingress: "tcp 22 0.0.0.0/0" } }),
+    ]);
     expect(applyFix(g, "nope:does-not-exist")).toBe(g);
   });
 

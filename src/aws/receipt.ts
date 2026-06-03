@@ -133,11 +133,7 @@ function plural(n: number, noun: string): string {
  * findings movement. Lines are emitted in a fixed order and omitted only when
  * fully zero, so the list stays compact yet deterministic.
  */
-function buildSummaryLines(
-  drift: DriftResult,
-  cost: CostDelta,
-  findings: FindingDelta,
-): string[] {
+function buildSummaryLines(drift: DriftResult, cost: CostDelta, findings: FindingDelta): string[] {
   const lines: string[] = [];
 
   // --- resource churn ---

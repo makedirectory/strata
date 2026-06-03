@@ -94,11 +94,32 @@ const CAPABILITY_RULES: ReadonlyArray<{ token: Capability; needles: readonly str
   // NoSQL is checked before relational so that wide-column/document stores
   // (Bigtable, DynamoDB, Firestore, Cosmos) aren't swept up by the broad "sql"
   // / "relational" needles below.
-  { token: "nosql-db", needles: ["nosql", "dynamo", "document", "firestore", "cosmos", "wide-column", "bigtable", "mongo"] },
-  { token: "relational-db", needles: ["relational", "rdbms", "postgres", "mysql", "rds", "aurora", "spanner", "sql"] },
-  { token: "cache", needles: ["cache", "redis", "memcached", "elasticache", "memorystore", "memorydb"] },
+  {
+    token: "nosql-db",
+    needles: [
+      "nosql",
+      "dynamo",
+      "document",
+      "firestore",
+      "cosmos",
+      "wide-column",
+      "bigtable",
+      "mongo",
+    ],
+  },
+  {
+    token: "relational-db",
+    needles: ["relational", "rdbms", "postgres", "mysql", "rds", "aurora", "spanner", "sql"],
+  },
+  {
+    token: "cache",
+    needles: ["cache", "redis", "memcached", "elasticache", "memorystore", "memorydb"],
+  },
   { token: "serverless-fn", needles: ["lambda", "function", "cloud functions", "serverless"] },
-  { token: "container-runtime", needles: ["container", "kubernetes", "eks", "gke", "aks", "fargate", "cloud run", "ecs"] },
+  {
+    token: "container-runtime",
+    needles: ["container", "kubernetes", "eks", "gke", "aks", "fargate", "cloud run", "ecs"],
+  },
   { token: "vm", needles: ["instance", "virtual machine", "compute engine", "ec2", "vm"] },
   { token: "queue", needles: ["queue", "sqs", "pub/sub queue"] },
   { token: "topic", needles: ["topic", "sns", "pub/sub", "pubsub", "event grid", "eventbridge"] },
@@ -107,7 +128,17 @@ const CAPABILITY_RULES: ReadonlyArray<{ token: Capability; needles: readonly str
   // Firewall / security-group rules sit in the networking category in several
   // catalogs and their names mention "VPC"; match them before the VPC token so
   // a firewall isn't treated as a network container.
-  { token: "firewall", needles: ["firewall", "security group", "security-group", "nacl", "network security group", "nsg"] },
+  {
+    token: "firewall",
+    needles: [
+      "firewall",
+      "security group",
+      "security-group",
+      "nacl",
+      "network security group",
+      "nsg",
+    ],
+  },
   { token: "subnet", needles: ["subnet"] },
   { token: "vpc", needles: ["virtual network", "vnet", "vpc"] },
   { token: "dns", needles: ["dns", "route53", "cloud dns"] },
@@ -143,7 +174,10 @@ type NoCandidate = "no-category" | "no-capability-match";
  *   - `"no-category"` when the target has no service in the source's category;
  *   - `"no-capability-match"` when the category exists but no token matches.
  */
-function pickCandidate(source: ServiceDefinition, target: CloudProvider): ServiceDefinition | NoCandidate {
+function pickCandidate(
+  source: ServiceDefinition,
+  target: CloudProvider,
+): ServiceDefinition | NoCandidate {
   const category: ServiceCategoryId = source.category;
   const pool = allServices(target)
     .filter((s) => s.category === category)

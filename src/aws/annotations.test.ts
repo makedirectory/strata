@@ -7,6 +7,7 @@ import {
   isAnnotation,
   isAnnotationGraph,
   isAnnotationKind,
+  isSafeAnnotationColor,
   listAnnotations,
   removeAnnotation,
   updateAnnotation,
@@ -59,6 +60,29 @@ describe("isAnnotation", () => {
     expect(isAnnotation({ id: "a", kind: "note", text: "x", x: 0, y: 0, w: "wide" })).toBe(false);
     expect(isAnnotation({ id: "a", kind: "note", text: "x", x: 0, y: 0, color: 1 })).toBe(false);
     expect(isAnnotation({ id: "a", kind: "note", text: "x", x: 0, y: 0, targetId: 2 })).toBe(false);
+  });
+});
+
+describe("isSafeAnnotationColor", () => {
+  it("accepts #hex (3/6/8), rgb()/rgba(), var(--…) and named-color tokens", () => {
+    expect(isSafeAnnotationColor("#fff")).toBe(true);
+    expect(isSafeAnnotationColor("#34d399")).toBe(true);
+    expect(isSafeAnnotationColor("#11223344")).toBe(true);
+    expect(isSafeAnnotationColor("rgb(1,2,3)")).toBe(true);
+    expect(isSafeAnnotationColor("rgba(1, 2, 3, 0.5)")).toBe(true);
+    expect(isSafeAnnotationColor("var(--accent)")).toBe(true);
+    expect(isSafeAnnotationColor("tomato")).toBe(true);
+  });
+
+  it("rejects style-injection and other unsafe forms", () => {
+    expect(isSafeAnnotationColor("red; background:url(x)")).toBe(false);
+    expect(isSafeAnnotationColor("url(javascript:alert(1))")).toBe(false);
+    expect(isSafeAnnotationColor("#12")).toBe(false);
+    expect(isSafeAnnotationColor("#xyzxyz")).toBe(false);
+    expect(isSafeAnnotationColor("expression(1)")).toBe(false);
+    expect(isSafeAnnotationColor("")).toBe(false);
+    expect(isSafeAnnotationColor(123)).toBe(false);
+    expect(isSafeAnnotationColor(undefined)).toBe(false);
   });
 });
 
@@ -218,7 +242,17 @@ describe("round-trip / idempotency", () => {
   });
 
   it("listAnnotations(addAnnotation(...)) round-trips the annotation value", () => {
-    const a = ann({ id: "a1", kind: "zone", text: "vpc", x: 5, y: 6, w: 100, h: 80, color: "#abc", targetId: "r1" });
+    const a = ann({
+      id: "a1",
+      kind: "zone",
+      text: "vpc",
+      x: 5,
+      y: 6,
+      w: 100,
+      h: 80,
+      color: "#abc",
+      targetId: "r1",
+    });
     const g = addAnnotation(emptyGraph(), a);
     expect(listAnnotations(g)).toEqual([a]);
   });

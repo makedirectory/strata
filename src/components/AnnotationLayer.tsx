@@ -25,9 +25,23 @@ const NOTE_H = 96;
 /** Default callout bubble size (world units). */
 const CALLOUT_W = 160;
 const CALLOUT_H = 64;
+/** Default zone region size (world units) — matches useFlow.addAnnotationOfKind. */
+const ZONE_W = 360;
+const ZONE_H = 240;
 /** Smallest a zone may be resized to (world units), matching node resize feel. */
 const MIN_ZONE_W = 80;
 const MIN_ZONE_H = 60;
+/** Click-vs-drag threshold in SCREEN pixels (zoom-independent), matching nodes. */
+const DRAG_THRESHOLD_PX = 3;
+
+/** Per-kind world-unit default width for an annotation with no explicit w. */
+function defaultW(kind: Annotation["kind"]): number {
+  return kind === "zone" ? ZONE_W : kind === "callout" ? CALLOUT_W : NOTE_W;
+}
+/** Per-kind world-unit default height for an annotation with no explicit h. */
+function defaultH(kind: Annotation["kind"]): number {
+  return kind === "zone" ? ZONE_H : kind === "callout" ? CALLOUT_H : NOTE_H;
+}
 
 type DragKind = "move" | "resize";
 interface DragState {
@@ -55,6 +69,13 @@ export const AnnotationLayer: React.FC = () => {
   } = useFlow();
   const { viewport } = useFlowCanvas();
   const dragRef = React.useRef<DragState | null>(null);
+  // Live viewport accessor for the window drag handlers. The handlers install
+  // ONCE (stable identity), so they must read the current scale from this ref —
+  // listing viewport.scale in the effect deps would tear down/re-add the
+  // listeners on every zoom and could drop a mouseup that lands mid-swap,
+  // stranding the drag (annotation "sticks" to the cursor). Mirrors Canvas.tsx.
+  const viewportRef = React.useRef(viewport);
+  viewportRef.current = viewport;
   // The annotation whose text is being edited inline (double-click to enter).
   const [editingId, setEditingId] = React.useState<string | null>(null);
 
@@ -73,9 +94,16 @@ export const AnnotationLayer: React.FC = () => {
     const onMove = (e: MouseEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      const dxWorld = (e.clientX - d.startClientX) / viewport.scale;
-      const dyWorld = (e.clientY - d.startClientY) / viewport.scale;
-      d.moved = d.moved || Math.abs(dxWorld) > 1 || Math.abs(dyWorld) > 1;
+      const scale = viewportRef.current.scale;
+      // Click-vs-drag decision is SCREEN-pixel based (zoom-independent) so a
+      // plain click never trips `moved` → no commit, no undo entry, no dirty.
+      const dxScreen = e.clientX - d.startClientX;
+      const dyScreen = e.clientY - d.startClientY;
+      d.moved =
+        d.moved || Math.abs(dxScreen) > DRAG_THRESHOLD_PX || Math.abs(dyScreen) > DRAG_THRESHOLD_PX;
+      // Position/size updates stay in WORLD units (screenΔ / scale).
+      const dxWorld = dxScreen / scale;
+      const dyWorld = dyScreen / scale;
       if (d.kind === "move") {
         updateAnnotationLive(d.id, {
           x: Math.round(d.startX + dxWorld),
@@ -101,7 +129,13 @@ export const AnnotationLayer: React.FC = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [viewport.scale, updateAnnotationLive, commitAnnotationDrag]);
+  }, [updateAnnotationLive, commitAnnotationDrag]);
+
+  // Split once per annotations change (not per pan/zoom/drag frame) so a live
+  // interaction doesn't re-filter + re-allocate the whole list every render.
+  // (Declared before any early return to keep hook order stable.)
+  const zones = React.useMemo(() => annotations.filter((a) => a.kind === "zone"), [annotations]);
+  const overlays = React.useMemo(() => annotations.filter((a) => a.kind !== "zone"), [annotations]);
 
   if (annotations.length === 0) return null;
 
@@ -120,14 +154,11 @@ export const AnnotationLayer: React.FC = () => {
       startClientY: e.clientY,
       startX: a.x,
       startY: a.y,
-      startW: a.w ?? (a.kind === "callout" ? CALLOUT_W : NOTE_W),
-      startH: a.h ?? (a.kind === "callout" ? CALLOUT_H : NOTE_H),
+      startW: a.w ?? defaultW(a.kind),
+      startH: a.h ?? defaultH(a.kind),
       moved: false,
     };
   };
-
-  const zones = annotations.filter((a) => a.kind === "zone");
-  const overlays = annotations.filter((a) => a.kind !== "zone");
 
   // Screen-space helpers (world → screen for absolute positioning).
   const sx = (worldX: number) => viewport.x + worldX * viewport.scale;
@@ -139,8 +170,9 @@ export const AnnotationLayer: React.FC = () => {
       <div className="annz" aria-hidden="true">
         {zones.map((a) => {
           const selected = a.id === selectedId;
-          const w = (a.w ?? NOTE_W) * viewport.scale;
-          const h = (a.h ?? NOTE_H) * viewport.scale;
+          const w = (a.w ?? ZONE_W) * viewport.scale;
+          const h = (a.h ?? ZONE_H) * viewport.scale;
+          const editing = editingId === a.id;
           return (
             <div
               key={a.id}
@@ -152,14 +184,40 @@ export const AnnotationLayer: React.FC = () => {
                 height: h,
                 ...(a.color ? { ["--ann-color" as string]: a.color } : {}),
               }}
-              onMouseDown={(e) => beginDrag(e, a, "move")}
+              onMouseDown={(e) => {
+                if (editing) return;
+                beginDrag(e, a, "move");
+              }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
-                setEditingId(a.id);
+                if (!presentation) setEditingId(a.id);
               }}
             >
-              <span className="ann-zone-label">{a.text}</span>
-              {selected && !presentation && (
+              {editing ? (
+                <textarea
+                  className="ann-edit ann-zone-edit"
+                  autoFocus
+                  defaultValue={a.text}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onBlur={(e) => {
+                    updateAnnotation(a.id, { text: e.target.value });
+                    setEditingId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setEditingId(null);
+                    }
+                    // Cmd/Ctrl+Enter commits (plain Enter inserts a newline).
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                />
+              ) : (
+                <span className="ann-zone-label">{a.text}</span>
+              )}
+              {selected && !presentation && !editing && (
                 <span
                   className="ann-resize"
                   title="Drag to resize"
@@ -175,7 +233,9 @@ export const AnnotationLayer: React.FC = () => {
       <svg
         className="ann-leaders"
         aria-hidden="true"
-        style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
+        style={{
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
+        }}
       >
         {overlays.map((a) => {
           if (a.kind !== "callout" || !a.targetId) return null;
