@@ -58,6 +58,13 @@ export const CostComingSoon: React.FC = () => {
                 <li>Reserved / savings-plan and commitment awareness</li>
                 <li>Per-environment and per-account roll-ups</li>
               </ul>
+              <p className="soon-body">
+                This will be powered by connecting Strata to <strong>Loop</strong>, our Quantum
+                Feedback System: it forecasts spend and proposes scored, reversible interventions
+                per resource — overlaid right here on the canvas, behind approval gates and a kill
+                switch. Strata stays the open-source world model; the optimization runs in Loop. The
+                forecasting and recommendation engine is part of Loop and never ships inside Strata.
+              </p>
               {registered ? (
                 <p className="soon-thanks">Thanks — we&rsquo;ve noted your interest. ✓</p>
               ) : (
