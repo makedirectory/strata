@@ -19,6 +19,7 @@ import { runDiscovery, runGcpDiscovery, runAzureDiscovery } from "../../lib/api"
 import { EXAMPLES } from "../../examples";
 import { CostComingSoon } from "../../components/ComingSoon";
 import { useDialogA11y } from "../../components/useDialogA11y";
+import { listSnapshots, deleteSnapshot, type SnapshotMeta } from "../../lib/snapshots";
 
 /** Built-in coded starter templates (loadPreset ids) shown in the Start hub. */
 const TEMPLATES: { id: string; label: string; icon: string; desc: string }[] = [
@@ -410,6 +411,7 @@ function TopBar() {
     exportImage,
     shareDiagram,
     openCompare,
+    openVersions,
     importJSONDialog,
     importIaCDialog,
     clear,
@@ -548,6 +550,12 @@ function TopBar() {
             title="Compare this diagram against a baseline (a saved diagram, a live export, IaC, or Strata JSON)"
           >
             Compare for drift…
+          </MenuItem>
+          <MenuItem
+            onClick={openVersions}
+            title="Local version history — snapshot, restore, or compare against a saved version"
+          >
+            Version history…
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={clear} danger title="Clear the canvas">
@@ -876,6 +884,115 @@ function CompareDialog() {
                     {g.resourceCount} resource{g.resourceCount === 1 ? "" : "s"}
                   </span>
                 </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Local version history: snapshot the current diagram, list saved versions, and
+ *  use any as a drift/cost baseline or restore it. Snapshots live in this
+ *  browser (a bounded ring) — cross-device history needs the sharing backend. */
+function VersionsDialog() {
+  const { versionsOpen, closeVersions, saveVersion, restoreVersion, compareWithVersion } =
+    useFlow();
+  const ref = useDialogA11y<HTMLDivElement>(versionsOpen, closeVersions);
+  const [versions, setVersions] = React.useState<SnapshotMeta[]>([]);
+  const [label, setLabel] = React.useState("");
+  const refresh = React.useCallback(() => setVersions(listSnapshots()), []);
+
+  React.useEffect(() => {
+    if (versionsOpen) {
+      refresh();
+      setLabel("");
+    }
+  }, [versionsOpen, refresh]);
+
+  if (!versionsOpen) return null;
+  const save = () => {
+    saveVersion(label);
+    setLabel("");
+    refresh();
+  };
+  return (
+    <div className="hub-backdrop" onMouseDown={closeVersions}>
+      <div
+        className="export"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Version history"
+        ref={ref}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Version history</h2>
+          <button className="hub-close" onClick={closeVersions} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <p className="hub-subtitle">
+          Snapshots saved in this browser. Use one as a drift/cost baseline, or restore it.
+          Cross-device history needs the sharing backend.
+        </p>
+
+        <div className="compare-section">
+          <div className="saved-add">
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Label this version (e.g. pre-migration)…"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") save();
+              }}
+            />
+            <button onClick={save}>Save version</button>
+          </div>
+        </div>
+
+        <div className="compare-section">
+          <div className="layers-sub">Saved versions</div>
+          {versions.length === 0 ? (
+            <div className="help">No versions yet — save one above.</div>
+          ) : (
+            <div className="compare-list">
+              {versions.map((v) => (
+                <div key={v.id} className="version-item">
+                  <div className="version-meta">
+                    <span className="compare-item-name">{v.label}</span>
+                    <span className="compare-item-meta">
+                      {v.resourceCount} resource{v.resourceCount === 1 ? "" : "s"} ·{" "}
+                      {new Date(v.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="version-actions">
+                    <button
+                      onClick={() => compareWithVersion(v.id, v.label)}
+                      title="Compare the current diagram against this version"
+                    >
+                      Compare
+                    </button>
+                    <button
+                      onClick={() => restoreVersion(v.id)}
+                      title="Restore this version onto the canvas"
+                    >
+                      Restore
+                    </button>
+                    <button
+                      className="saved-del"
+                      aria-label={`Delete version ${v.label}`}
+                      title="Delete this version"
+                      onClick={() => {
+                        deleteSnapshot(v.id);
+                        refresh();
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -1945,6 +2062,7 @@ function Workspace() {
       <StartHub />
       <ExportDialog />
       <CompareDialog />
+      <VersionsDialog />
       <MergePreviewDialog />
       <ConnectDialog />
       <ReplaceConfirmDialog />
