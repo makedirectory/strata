@@ -520,9 +520,9 @@ function TopBar() {
           <MenuItem onClick={importJSONDialog}>Import JSON…</MenuItem>
           <MenuItem
             onClick={importIaCDialog}
-            title="Import Terraform (AWS/GCP/Azure), CloudFormation, or an Azure ARM template"
+            title="Import Terraform / OpenTofu (AWS/GCP/Azure), CloudFormation, or an Azure ARM template"
           >
-            Import IaC (Terraform / CloudFormation / ARM)…
+            Import IaC (Terraform / OpenTofu / CloudFormation / ARM)…
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem onClick={exportJSON}>Export JSON</MenuItem>

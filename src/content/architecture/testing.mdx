@@ -42,8 +42,14 @@ npm run test:coverage  # vitest run --coverage — v8 coverage, text + html repo
 
 ## What's covered
 
-The Vitest suite covers the registry, domain model, rules, MCP importer, server
-(graph schema + file repository), the graphs API route, and the Palette component.
+The Vitest suite covers the pure engines (registry, domain model, rules, drift,
+cost, merge, overlays, relationship classes), IaC import/export plus fidelity,
+the multi-cloud discovery transforms for AWS/GCP/Azure and their `/api/discover`
+routes, local version-history snapshots, the MCP importer and the running MCP
+server, the canvas helpers (geometry, layout, arrange, navGrid, image export),
+persistence (`localStore`, the file repository, graph schema), the graphs API
+route, and UI/hook/accessibility tests (the Palette, the store/history/interaction
+hooks, and the dialog-a11y hook).
 `src/server/graphSchema.test.ts` exercises the runtime shape validators in
 `src/server/graphSchema.ts` (`hasGraphCollections`, `isInfrastructureGraph`) — the
 boundary checks that guard request bodies and on-disk JSON before they are treated

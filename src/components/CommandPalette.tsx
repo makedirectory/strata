@@ -216,7 +216,7 @@ export const CommandPalette: React.FC = () => {
       },
       {
         id: "import-iac",
-        title: "Import IaC (Terraform / OpenTofu / CloudFormation)",
+        title: "Import IaC (Terraform / OpenTofu / CloudFormation / ARM)",
         group: "Tools",
         run: flow.importIaCDialog,
         editing: true,

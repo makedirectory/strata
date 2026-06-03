@@ -31,18 +31,23 @@ The screen has three regions:
 A top bar runs across the top. From left to right:
 
 ```
-🔶 Strata   Docs ↗   <status line>   [ + New | ↶ ↷ | 💾 Open ▾ | Data ▾ Analyze ▾ | ▶ ]
+🔶 Strata  <diagram name>  Docs ↗  Intro  <status>  [ + New | ↶ ↷ | 💾 Open ▾ | Data ▾ Analyze ▾ | Cost | ▶ ]
 ```
 
+- **Diagram name** — an editable title next to the logo; what the diagram is saved as.
+- **Docs ↗** — opens these docs in a new tab.
+- **Intro** — replays the quick guided tour.
 - **+ New** — opens the Start hub.
 - **↶ / ↷** — Undo / Redo (icon buttons).
 - **💾** — Save (icon button, no text label).
 - **Open ▾** — your saved diagrams.
-- **Data ▾** — Connect to cloud…, Import JSON…, Import IaC…, Export JSON, Export to
-  IaC…, Clear canvas.
+- **Data ▾** — Connect to cloud…, Import JSON…, Import IaC (Terraform / OpenTofu /
+  CloudFormation / ARM)…, Export JSON, Export PNG image, Export SVG image, Copy
+  share link, Export to IaC…, Compare for drift…, Version history…, Clear canvas.
 - **Analyze ▾** — Validate architecture, Suggest rules.
+- **Cost** — toggle the [estimated monthly cost](/docs/guide/cost) overlay (the
+  button shows the running total).
 - **▶** — enter [presentation mode](/docs/guide/views#presentation-mode).
-- **Docs ↗** — opens these docs in a new tab.
 
 There is **no "File" menu** — the import/export and clear actions live under
 **Data ▾**.
@@ -53,10 +58,13 @@ Click **+ New** (or **Start here** on an empty canvas) to open the **Start hub**
 which offers a few ways to begin:
 
 - **Start blank** — an empty canvas.
-- **Import IaC** — bring in a Terraform or CloudFormation file (see
+- **Start from a template** — pick one of the coded starters: **Basic AWS VPC**,
+  **ECS behind an ALB**, **Serverless API**, or **Static Website**.
+- **Load an example** — larger sample diagrams to explore (each shows its resource
+  count).
+- **Import IaC** — bring in a Terraform / OpenTofu, CloudFormation, or ARM file (see
   [Importing & Exporting IaC](/docs/guide/importing-iac)).
 - **Import Strata JSON** — reopen a diagram you previously exported.
-- **Start from a template** — begin with the ready-made **Basic AWS** layout.
 - **Connect to a cloud** — discover a live AWS, GCP or Azure account (see
   [Connecting to a Cloud](/docs/guide/connecting-aws)).
 

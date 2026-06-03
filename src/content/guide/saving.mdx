@@ -54,6 +54,37 @@ one browser's local storage to another.
 > The JSON export is the same diagram-as-code Strata persists internally, so an
 > exported file round-trips cleanly back through Import JSON.
 
+## Export as an image, or share a link
+
+Two more ways to get a diagram _out_, both under the **Data ▾** menu:
+
+- **Export PNG image** / **Export SVG image** — download a picture of the current
+  canvas (raster PNG or vector SVG), handy for embedding in docs, slides, or a
+  README.
+- **Copy share link** — copies a self-contained URL to your clipboard. The whole
+  diagram is packed into the link itself (the `#g=…` fragment) with **no server
+  involved**, so opening the link in any browser loads the diagram ready to edit.
+  Because the entire graph rides in the URL, it's best for reasonably-sized
+  diagrams; for very large ones prefer **Export JSON**. (A link is also fully
+  portable across machines, unlike a browser-saved diagram.)
+
+## Version history (local snapshots)
+
+**Data ▾ → Version history…** keeps point-in-time **snapshots** of a diagram in
+this browser:
+
+- **Save version** — label and snapshot the current diagram.
+- **Restore** — load an earlier snapshot back onto the canvas (behind the same
+  unsaved-work guard).
+- **Compare** — diff the current canvas against a snapshot; this runs through
+  [Drift Detection](/docs/guide/drift), so you get the green/amber badges and the
+  cost delta against that version.
+
+Snapshots live in this browser's local storage (a bounded ring of the most recent
+25, newest first), separate from named **Save / Open** diagrams and from JSON
+files. They're great for "checkpoint before a big change", but — like browser
+saves — they don't travel between browsers or machines.
+
 ## Start over
 
 Choose **Clear canvas** from the **Data ▾** menu to empty the canvas. If you clear by
@@ -61,9 +92,12 @@ accident, **Undo** (`⌘Z` / `Ctrl Z`) brings it back.
 
 ## Which should I use?
 
-| Goal                                           | Use                  |
-| ---------------------------------------------- | -------------------- |
-| Quickly reopen a diagram in this browser later | Save / Open          |
-| Share, back up, or version-control a diagram   | Export / Import JSON |
-| Move a diagram to another browser or machine   | Export / Import JSON |
-| Hand a diagram to another tool or teammate     | Export JSON          |
+| Goal                                             | Use                                      |
+| ------------------------------------------------ | ---------------------------------------- |
+| Quickly reopen a diagram in this browser later   | Save / Open                              |
+| Checkpoint before a big change (in this browser) | Version history                          |
+| Share, back up, or version-control a diagram     | Export / Import JSON                     |
+| Move a diagram to another browser or machine     | Export / Import JSON, or Copy share link |
+| Send someone an editable copy without a file     | Copy share link                          |
+| Embed or present a picture of the diagram        | Export PNG / SVG image                   |
+| Hand a diagram to another tool or teammate       | Export JSON                              |

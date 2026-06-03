@@ -100,3 +100,18 @@ performance:
   network subgraphs (from the selected node, if any), and `heatByDegree()` ranks
   nodes by connection count. The renderer dims everything not lit by the active
   overlay. Overlays are view-only and never touch history.
+
+## Accessibility: keyboard & screen-reader navigation
+
+The reconciling renderer draws nodes into an **`aria-hidden`** surface, so it's
+invisible to assistive tech on its own. **`src/components/AccessibleNodes.tsx`**
+provides a parallel accessible layer: it mirrors every visible node as a
+transparent, `pointer-events: none`, focusable, `aria-label`led button positioned
+over it — a single tab stop with **roving `tabindex`**. Keys: **arrows** move
+spatially to the nearest node, **Enter/Space** opens a container (or recentres a
+leaf), **Escape** steps out of a focused container, and **Home/End** jump to the
+reading-order ends. The spatial logic is a pure, tested helper —
+**`src/canvas/navGrid.ts`** (`nextInDirection` / `readingOrder`). Modal dialogs
+get focus management (trap, restore, `inert` backdrop) from the shared
+`useDialogA11y` hook. The user-facing summary is in
+[Keyboard & Commands](/docs/guide/shortcuts).

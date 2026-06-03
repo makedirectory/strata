@@ -66,19 +66,20 @@ MCP-native** tool:
 
 ## Layer map
 
-| Layer                     | Location                                                                                                                         | Responsibility                                              |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Service registry / schema | `src/aws/types.ts`, `src/aws/registry.ts`, `src/aws/categories.ts`, `src/aws/services/*.ts`, `src/gcp/*`, `src/azure/*`          | The canonical multi-cloud (AWS/GCP/Azure) vocabulary        |
-| Domain model              | `src/aws/model.ts`, `src/aws/regions.ts`                                                                                         | Persisted environment representation                        |
-| Canvas engine             | `src/canvas/*` (`geometry.ts`, `layout.ts`, `arrange.ts`, `navGrid.ts`), `src/aws/relationshipClasses.ts`, `src/aws/overlays.ts` | Pure geometry, containment layout, edge encoding, overlays  |
-| Visual / UI               | `src/components/*`, `src/hooks/*`                                                                                                | Palette, canvas, inspector                                  |
-| Cost estimation           | `src/aws/cost.ts`                                                                                                                | Rough monthly cost heuristic (per-service + config)         |
-| Drift detection           | `src/aws/drift.ts`                                                                                                               | Diff a diagram against a baseline (added/removed/changed)   |
-| Persistence (live)        | `src/lib/localStore.ts`                                                                                                          | Browser `localStorage` save/load (the active path)          |
-| Server tier (retained)    | `src/server/*`, `src/app/api/graphs/*`                                                                                           | Repository + Route Handlers, kept for a future backend      |
-| Import / export           | `src/aws/mcp.ts`, `src/aws/discovery.ts`, `src/app/api/discover/*`, `src/aws/iac.ts`, `src/aws/iacExport.ts`                     | Live-discovery transform + IaC import/export                |
-| Rules engine              | `src/aws/rules.ts`                                                                                                               | Architecture validation + security-rule suggestions         |
-| MCP server                | `src/mcp/server.ts`, `src/mcp/bin.ts`                                                                                            | Exposes the engines as MCP tools over stdio (`npm run mcp`) |
+| Layer                     | Location                                                                                                                         | Responsibility                                                |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Service registry / schema | `src/aws/types.ts`, `src/aws/registry.ts`, `src/aws/categories.ts`, `src/aws/services/*.ts`, `src/gcp/*`, `src/azure/*`          | The canonical multi-cloud (AWS/GCP/Azure) vocabulary          |
+| Domain model              | `src/aws/model.ts`, `src/aws/regions.ts`                                                                                         | Persisted environment representation                          |
+| Canvas engine             | `src/canvas/*` (`geometry.ts`, `layout.ts`, `arrange.ts`, `navGrid.ts`), `src/aws/relationshipClasses.ts`, `src/aws/overlays.ts` | Pure geometry, containment layout, edge encoding, overlays    |
+| Visual / UI               | `src/components/*` (incl. `AccessibleNodes.tsx`), `src/hooks/*`                                                                  | Palette, canvas, inspector + keyboard/screen-reader access    |
+| Cost estimation           | `src/aws/cost.ts`                                                                                                                | Rough monthly cost heuristic (per-service + config)           |
+| Drift detection           | `src/aws/drift.ts`                                                                                                               | Diff a diagram against a baseline (added/removed/changed)     |
+| Merge / upsert            | `src/aws/merge.ts`                                                                                                               | Reconcile an incoming scan/import (ARN/identity-keyed upsert) |
+| Persistence (live)        | `src/lib/localStore.ts`, `src/lib/snapshots.ts`                                                                                  | Browser `localStorage` save/load + local version snapshots    |
+| Server tier (retained)    | `src/server/*`, `src/app/api/graphs/*`                                                                                           | Repository + Route Handlers, kept for a future backend        |
+| Import / export           | `src/aws/mcp.ts`, `src/aws/discovery.ts`, `src/app/api/discover/*`, `src/aws/iac.ts`, `src/aws/iacExport.ts`, `src/aws/merge.ts` | Live-discovery transform + IaC import/export (+ merge)        |
+| Rules engine              | `src/aws/rules.ts`                                                                                                               | Architecture validation + security-rule suggestions           |
+| MCP server                | `src/mcp/server.ts`, `src/mcp/bin.ts`                                                                                            | Exposes the engines as MCP tools over stdio (`npm run mcp`)   |
 
 ## Section contents
 
@@ -86,6 +87,7 @@ MCP-native** tool:
 - [Domain Data Model](/docs/architecture/data-model)
 - [Visual Mapping](/docs/architecture/visual-mapping)
 - [Rules & Validation Engine](/docs/architecture/rules-engine)
+- [Drift Detection Engine](/docs/architecture/drift)
 - [Persistence & the Server](/docs/architecture/persistence)
 - [Live Discovery & MCP](/docs/architecture/mcp-integration)
 - [IaC Import & Export](/docs/architecture/iac-import)

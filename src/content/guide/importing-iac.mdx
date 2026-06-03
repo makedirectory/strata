@@ -16,10 +16,10 @@ automatically.
 - **Azure ARM templates** (JSON) — the typed `resources[]` array, with `dependsOn`
   and `resourceId(…)` references.
 - **Terraform** (and **OpenTofu**), as the JSON produced by `terraform show -json`
-  / `tofu show -json` (current state) or `terraform plan -json` / `tofu show -json
-    <plan>` (planned changes), for the **`aws`, `google`, and `azurerm`** providers.
-A single state file may mix providers. OpenTofu is a drop-in Terraform fork that
-shares the same HCL and `show -json` schema, so its output imports identically.
+  or `tofu show -json` (current state, or a `plan -json`), for the **`aws`,
+  `google`, and `azurerm`** providers. A single state file may mix providers.
+  OpenTofu is a drop-in Terraform fork sharing the same HCL and `show -json`
+  schema, so its output imports identically.
 
 Strata auto-detects the format and provider from the document, so in most cases you
 don't need to tell it. (Resource types are provider-prefixed — `aws_*`,
