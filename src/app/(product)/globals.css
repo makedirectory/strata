@@ -1275,6 +1275,45 @@ svg.guides {
 .drift-dot--changed {
   fill: #fbbf24;
 }
+/* Compare-for-drift picker dialog */
+.compare-section {
+  margin-top: 14px;
+}
+.compare-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  max-height: 40vh;
+  overflow: auto;
+}
+.compare-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid #203055;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.compare-item:hover {
+  background: #17213a;
+}
+.compare-item-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compare-item-meta {
+  color: var(--sub);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
 .drift {
   position: absolute;
   top: 12px;

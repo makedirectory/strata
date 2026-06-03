@@ -288,10 +288,16 @@ interface FlowContextValue {
   toggleCost: () => void;
   costSummary: { total: number; estimated: number; unknown: number; label: string };
   costMarkers: { id: string; x: number; y: number; text: string }[];
-  /** Drift detection: compare the diagram against a baseline file (non-destructive). */
+  /** Drift detection: compare the diagram against a baseline (non-destructive). */
   driftResult: DriftResult | null;
   driftBaselineName: string;
+  /** Compare picker dialog (choose a baseline: a file or a saved diagram). */
+  compareOpen: boolean;
+  openCompare: () => void;
+  closeCompare: () => void;
   compareWithFile: () => void;
+  /** Compare against another diagram saved in this browser. */
+  compareWithSaved: (id: string) => void;
   clearDrift: () => void;
   driftMarkers: { id: string; x: number; y: number; status: "added" | "changed" }[];
   /** Structured rule suggestions, or `null` before the first run. */
@@ -1518,12 +1524,33 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [storeReplaceAll, storeSetSelection, confirmReplaceIfDirty]);
 
   // ---- Drift detection ----------------------------------------------------
+  const [compareOpen, setCompareOpen] = React.useState(false);
+  const openCompare = useCallback(() => setCompareOpen(true), []);
+  const closeCompare = useCallback(() => setCompareOpen(false), []);
   const clearDrift = useCallback(() => {
     setDriftResult(null);
     setDriftBaselineName("");
   }, []);
-  /** Compare the current diagram against a baseline loaded from a file
-   *  (a Strata JSON graph, or any importable IaC). Non-destructive. */
+
+  /** Diff the current diagram against `baseline` and surface the result. Shared
+   *  by the file and saved-diagram compare paths. Non-destructive. */
+  const runDiff = useCallback(
+    (baseline: InfrastructureGraph, name: string) => {
+      const result = diffGraphs(buildGraph(), baseline);
+      setDriftResult(result);
+      setDriftBaselineName(name);
+      setCompareOpen(false);
+      setStatus(
+        result.inSync
+          ? `No drift vs "${name}".`
+          : `Drift vs "${name}": +${result.added.length} / -${result.removed.length} / ~${result.changed.length}.`,
+      );
+    },
+    [buildGraph],
+  );
+
+  /** Compare against a baseline loaded from a file (a Strata JSON graph, or any
+   *  importable IaC). */
   const compareWithFile = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -1552,14 +1579,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             baseline = importAnyIaC(text, { name: file.name }).graph;
           }
-          const result = diffGraphs(buildGraph(), baseline);
-          setDriftResult(result);
-          setDriftBaselineName(file.name);
-          setStatus(
-            result.inSync
-              ? `No drift vs "${file.name}".`
-              : `Drift vs "${file.name}": +${result.added.length} / -${result.removed.length} / ~${result.changed.length}.`,
-          );
+          runDiff(baseline, file.name);
         } catch (err) {
           const detail = err instanceof Error ? err.message : "unknown error";
           setStatus(`Compare failed: ${detail}`);
@@ -1568,7 +1588,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reader.readAsText(file);
     };
     input.click();
-  }, [buildGraph]);
+  }, [runDiff]);
+
+  /** Compare against another diagram saved in this browser. */
+  const compareWithSaved = useCallback(
+    async (id: string) => {
+      try {
+        const baseline = await getGraph(id);
+        runDiff(baseline, baseline.name || "saved diagram");
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : "unknown error";
+        setStatus(`Compare failed: ${detail}`);
+      }
+    },
+    [runDiff],
+  );
 
   // ---- Save / load (browser-local) ----------------------------------------
   const saveGraph = useCallback(async () => {
@@ -2028,7 +2062,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       costMarkers,
       driftResult,
       driftBaselineName,
+      compareOpen,
+      openCompare,
+      closeCompare,
       compareWithFile,
+      compareWithSaved,
       clearDrift,
       driftMarkers,
       ruleSuggestions,
@@ -2136,7 +2174,11 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       costMarkers,
       driftResult,
       driftBaselineName,
+      compareOpen,
+      openCompare,
+      closeCompare,
       compareWithFile,
+      compareWithSaved,
       clearDrift,
       driftMarkers,
       ruleSuggestions,
