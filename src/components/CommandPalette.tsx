@@ -97,6 +97,17 @@ export const CommandPalette: React.FC = () => {
 
   // Static action/preset/view commands (filtered by title below).
   const staticCommands = useMemo<Command[]>(() => {
+    // One command per mechanically-fixable finding (deterministic order from the
+    // engine), so a user can apply a specific suggestion — e.g. "add a NAT
+    // Gateway per AZ". Each lands as a single undoable history entry.
+    const autofixCommands: Command[] = detectFixes(flow.snapshotGraph()).map((fix) => ({
+      id: `autofix-${fix.id}`,
+      title: `Fix: ${fix.title}`,
+      hint: fix.detail,
+      group: "Fix",
+      editing: true,
+      run: () => flow.applyAutofix(fix.id),
+    }));
     const cmds: Command[] = [
       { id: "fit", title: "Fit to view", group: "View", run: flow.fitToView },
       { id: "tidy", title: "Tidy — auto-arrange", group: "View", run: flow.tidy, editing: true },
@@ -243,16 +254,7 @@ export const CommandPalette: React.FC = () => {
 
       { id: "validate", title: "Validate architecture", group: "Tools", run: flow.runValidateUI },
       { id: "rules", title: "Suggest rules", group: "Tools", run: flow.runRulesUI },
-      {
-        id: "autofix-first",
-        title: "Autofix: apply first available fix",
-        group: "Tools",
-        editing: true,
-        run: () => {
-          const fixes = detectFixes(flow.snapshotGraph());
-          if (fixes[0]) flow.applyAutofix(fixes[0].id);
-        },
-      },
+      ...autofixCommands,
       {
         id: "migrate-gcp",
         title: "Migrate diagram to Google Cloud",
