@@ -52,13 +52,20 @@ list:
 ### 1. Id strategy: UUID vs ARN coexistence
 
 Manually-created resources get server-assigned UUIDs (`randomUUID()`); imported
-resources have real ARNs. `ResourceInstance` carries both (`id` + optional `arn`),
-but there is no defined policy for de-duplication, re-import/merge, or stable
-identity across imports.
+resources have real ARNs. `ResourceInstance` carries both (`id` + optional `arn`).
 
-**Next:** define ARN as the stable external key, keep UUID as the internal id, and
-build a merge/upsert path so re-importing an AWS account updates existing resources
-instead of duplicating them.
+**Largely addressed:** a **merge/upsert path now exists** — `src/aws/merge.ts`
+(`mergeGraphs`) reconciles an incoming scan/import into the current graph, keyed
+on **ARN, else `serviceId` + name** (the same `identityKey` the drift engine
+uses). Matched resources update in place — config is refreshed while the internal
+id, canvas position, `parentId`, and any user rename are preserved; unmatched
+incoming resources are added; unmatched base resources are left untouched (a
+partial scan never deletes). The "Merge" discovery/import path routes through it,
+so re-scanning reconciles instead of duplicating.
+
+**Still next:** make ARN a first-class stable external key end-to-end (e.g. server
+storage keyed on it), and a merge **preview** so users can review updates before
+applying.
 
 ### 2. Overlays are topology, not policy
 
@@ -87,9 +94,10 @@ Handlers before any multi-user deployment.
 
 ### 4. Discovery is read-only and flat
 
-Live discovery lists resources but doesn't infer relationships from Cloud Control,
-and there's no merge/upsert keyed on ARN yet (see #1) — re-scanning an account adds
-nodes rather than reconciling them.
+Live discovery lists resources but doesn't infer relationships from Cloud Control.
+(Re-scans now reconcile rather than duplicate, via the ARN-keyed upsert in
+[§1](#1-id-strategy-uuid-vs-arn-coexistence) — but a flat scan still produces a
+flat graph.)
 
 **Next:** derive containment/edges from discovered properties (as the IaC importer
-does), and route re-scans through an ARN-keyed upsert.
+does), so a discovered account lands nested and connected, not as a flat grid.
