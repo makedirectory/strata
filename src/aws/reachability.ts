@@ -303,16 +303,18 @@ function parseOpenPorts(sg: ResourceInstance): OpenPort[] {
 
 /**
  * World-open sensitive ports surfaced by a security group purely as *notes*
- * (not discrete `OpenPort`s): the sensitive ports that fall inside a world-open
- * range token (`20-23`). Returns `{ port, lo, hi, protocol }` per hit so the
- * caller can phrase a note tying the port to the range.
+ * (not discrete `OpenPort`s). Returns ONE entry per world-open range token that
+ * contains ≥1 sensitive port, carrying the (sorted, de-duped) list of covered
+ * sensitive ports so the caller can emit a single collapsed note per range —
+ * rather than one near-duplicate note per port inside a wide range like
+ * `0-65535`.
  */
 function sensitiveRangeHits(
   sg: ResourceInstance,
-): { port: number; lo: number; hi: number; protocol: string }[] {
+): { lo: number; hi: number; protocol: string; ports: number[] }[] {
   const ingress = sg.config?.["ingress"];
   if (typeof ingress !== "string" || !ingress) return [];
-  const hits: { port: number; lo: number; hi: number; protocol: string }[] = [];
+  const hits: { lo: number; hi: number; protocol: string; ports: number[] }[] = [];
   for (const raw of ingress.split("\n")) {
     const line = tokenizeIngressLine(raw);
     if (!line) continue;
@@ -324,9 +326,8 @@ function sensitiveRangeHits(
       const lo = Number(m[1]);
       const hi = Number(m[2]);
       if (lo > hi) continue;
-      for (const p of SENSITIVE_PORTS) {
-        if (p >= lo && p <= hi) hits.push({ port: p, lo, hi, protocol });
-      }
+      const ports = [...SENSITIVE_PORTS].filter((p) => p >= lo && p <= hi).sort((a, b) => a - b);
+      if (ports.length > 0) hits.push({ lo, hi, protocol, ports });
     }
   }
   return hits;
@@ -429,12 +430,22 @@ export function evaluateReachability(graph: InfrastructureGraph): ReachabilityRe
         }
       }
       // Sensitive ports inside a world-open range token: surfaced as notes only
-      // (the range itself is not enumerated into discrete open ports).
+      // (the range itself is not enumerated into discrete open ports). A single
+      // note is emitted per range token — a wide range (e.g. 0-65535) that
+      // covers many sensitive ports yields ONE collapsed note listing them all,
+      // not one near-duplicate note per port.
       if (internetReachableIds.has(r.id)) {
         for (const hit of sensitiveRangeHits(sg)) {
-          notes.push(
-            `Security group "${sg.name}" exposes sensitive port ${hit.port} within range ${hit.lo}-${hit.hi} to the world.`,
-          );
+          const range = `${hit.lo}-${hit.hi}`;
+          if (hit.ports.length === 1) {
+            notes.push(
+              `Security group "${sg.name}" exposes sensitive port ${hit.ports[0]} within range ${range} to the world.`,
+            );
+          } else {
+            notes.push(
+              `Security group "${sg.name}" exposes a wide world-open port range ${range} (includes sensitive ports ${hit.ports.join(", ")}).`,
+            );
+          }
         }
       }
     }

@@ -2,6 +2,7 @@
 import React from "react";
 import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { nextInDirection, readingOrder, type NavRect, type NavDir } from "../canvas/navGrid";
+import { worldToScreen } from "../canvas/geometry";
 import type { CloudProvider } from "../aws/types";
 
 /**
@@ -109,6 +110,8 @@ export const AccessibleNodes: React.FC = () => {
     <div className="a11y-nodes" role="application" aria-label={summary}>
       {a11yNodes.map((n) => {
         const selected = selectedIds.includes(n.id);
+        // Single source of truth for the world→screen projection.
+        const origin = worldToScreen({ x: n.x, y: n.y }, viewport);
         const label =
           `${n.name}, ${n.serviceName}, ${PROVIDER_LABEL[n.provider]}` +
           `${n.isContainer ? ", container" : ""}` +
@@ -132,8 +135,8 @@ export const AccessibleNodes: React.FC = () => {
             onFocus={() => setActiveId(n.id)}
             onKeyDown={(e) => onKeyDown(e, n)}
             style={{
-              left: viewport.x + n.x * viewport.scale,
-              top: viewport.y + n.y * viewport.scale,
+              left: origin.x,
+              top: origin.y,
               width: n.w * viewport.scale,
               height: n.h * viewport.scale,
             }}

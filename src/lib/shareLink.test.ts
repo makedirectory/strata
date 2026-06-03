@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { encodeGraph, decodeGraph, buildShareUrl, readGraphFromHash } from "./shareLink";
+import {
+  encodeGraph,
+  decodeGraph,
+  buildShareUrl,
+  readGraphFromHash,
+  isShareUrlTooLong,
+  MAX_SHARE_URL_LENGTH,
+} from "./shareLink";
 import { emptyGraph, type InfrastructureGraph } from "../aws/model";
 import type { Annotation } from "../aws/annotations";
 
@@ -108,5 +115,26 @@ describe("shareLink", () => {
     const decoded = decodeGraph(encodeGraph(sample()));
     expect(decoded).not.toBeNull();
     expect(decoded!.annotations).toBeUndefined();
+  });
+
+  it("keeps a normal diagram's share URL under the size budget", () => {
+    const url = buildShareUrl("https://strata.mk-dir.com/", sample());
+    expect(url.length).toBeLessThanOrEqual(MAX_SHARE_URL_LENGTH);
+    expect(isShareUrlTooLong(url)).toBe(false);
+  });
+
+  it("flags a diagram padded with many large annotations as too long to share by link", () => {
+    const g = sample() as InfrastructureGraph & { annotations?: Annotation[] };
+    // Many sizeable note annotations push the encoded payload past the budget.
+    g.annotations = Array.from({ length: 400 }, (_, i) => ({
+      id: `note-${i}`,
+      kind: "note" as const,
+      text: `Annotation ${i}: ${"x".repeat(64)}`,
+      x: i,
+      y: i,
+    }));
+    const url = buildShareUrl("https://strata.mk-dir.com/", g);
+    expect(url.length).toBeGreaterThan(MAX_SHARE_URL_LENGTH);
+    expect(isShareUrlTooLong(url)).toBe(true);
   });
 });

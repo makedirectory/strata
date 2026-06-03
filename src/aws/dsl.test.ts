@@ -187,6 +187,80 @@ describe("dslToGraph", () => {
     expect(graph.resources[2].position).toEqual({ x: 10, y: 20, w: 100, h: 40 });
   });
 
+  it("round-trips a populated raw IaC sidecar; absent raw stays undefined (not {})", () => {
+    const original = sampleGraph();
+    // Resource 0 carries a terraform raw with properties; resource 1 a
+    // cloudformation raw with dependsOn/condition/metadata. Resource 2 has none.
+    original.resources[0].raw = {
+      format: "terraform",
+      type: "aws_vpc",
+      properties: { cidr_block: "10.0.0.0/16", tags: { Name: "main" } },
+    };
+    original.resources[1].raw = {
+      format: "cloudformation",
+      type: "AWS::EC2::Subnet",
+      properties: { CidrBlock: { Ref: "SubnetCidr" } },
+      dependsOn: ["main-vpc"],
+      condition: "IsProd",
+      metadata: { "aws:cdk:path": "Stack/Subnet" },
+    };
+    const { graph, errors } = dslToGraph(graphToDsl(original));
+    expect(errors).toEqual([]);
+    expect(graph.resources[0].raw).toEqual(original.resources[0].raw);
+    expect(graph.resources[1].raw).toEqual(original.resources[1].raw);
+    // A resource without raw stays undefined — not reconstructed as {}.
+    expect(graph.resources[2].raw).toBeUndefined();
+    expect("raw" in graph.resources[2]).toBe(false);
+  });
+
+  it("round-trips an ARM raw sidecar with apiVersion", () => {
+    const original = sampleGraph();
+    original.resources[0].raw = {
+      format: "arm",
+      type: "Microsoft.Network/virtualNetworks",
+      apiVersion: "2021-05-01",
+      properties: { addressSpace: { addressPrefixes: ["10.0.0.0/16"] } },
+    };
+    const { graph, errors } = dslToGraph(graphToDsl(original));
+    expect(errors).toEqual([]);
+    expect(graph.resources[0].raw).toEqual(original.resources[0].raw);
+  });
+
+  it("drops a raw sidecar with an invalid format and reports it via errors[]", () => {
+    const dsl = [
+      "name: Test",
+      "schemaVersion: 1",
+      "resources:",
+      "  - id: a",
+      "    service: vpc",
+      "    name: vpc-a",
+      "    source: manual",
+      "    raw:",
+      "      format: bogus",
+      "      type: aws_vpc",
+    ].join("\n");
+    const { graph, errors } = dslToGraph(dsl);
+    expect(graph.resources[0].raw).toBeUndefined();
+    expect(errors.some((e) => e.includes("invalid raw.format"))).toBe(true);
+  });
+
+  it("drops a raw sidecar missing a string type and reports it via errors[]", () => {
+    const dsl = [
+      "name: Test",
+      "schemaVersion: 1",
+      "resources:",
+      "  - id: a",
+      "    service: vpc",
+      "    name: vpc-a",
+      "    source: manual",
+      "    raw:",
+      "      format: terraform",
+    ].join("\n");
+    const { graph, errors } = dslToGraph(dsl);
+    expect(graph.resources[0].raw).toBeUndefined();
+    expect(errors.some((e) => e.includes("missing a string raw.type"))).toBe(true);
+  });
+
   it("is idempotent (dsl -> graph -> dsl -> graph)", () => {
     const first = dslToGraph(graphToDsl(sampleGraph()));
     const second = dslToGraph(graphToDsl(first.graph));

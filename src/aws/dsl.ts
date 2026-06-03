@@ -30,6 +30,7 @@ import {
   type Account,
   type CanvasPosition,
   type InfrastructureGraph,
+  type RawSource,
   type Relationship,
   type ResourceInstance,
   type Viewport,
@@ -69,6 +70,12 @@ interface DslResource {
   tags?: Record<string, string>;
   /** Canvas placement (`{x,y,w,h}`), preserved so a laid-out graph round-trips. */
   position?: CanvasPosition;
+  /**
+   * Lossless provider-native source sidecar (`RawSource`), preserved so a DSL
+   * round-trip can re-emit faithful IaC instead of a scaffold. Absent for
+   * manually-created resources.
+   */
+  raw?: RawSource;
 }
 
 /** A relationship as it appears in the DSL document. */
@@ -131,6 +138,7 @@ function resourceToDsl(r: ResourceInstance): DslResource {
     config,
     tags,
     position: r.position,
+    raw: r.raw,
   });
 }
 
@@ -225,6 +233,55 @@ function parsePosition(value: unknown): CanvasPosition | undefined {
   return undefined;
 }
 
+/** Read an optional `Record<string,unknown>`; non-objects yield `undefined`. */
+function asObjectRecord(value: unknown): Record<string, unknown> | undefined {
+  return isObject(value) ? { ...value } : undefined;
+}
+
+/** Read an optional `string[]`; drops non-string elements, `undefined` if none. */
+function asStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((v): v is string => typeof v === "string");
+  return out.length > 0 ? out : undefined;
+}
+
+const RAW_FORMATS: ReadonlySet<string> = new Set(["cloudformation", "arm", "terraform"]);
+
+/**
+ * Read a resource's `raw` IaC sidecar (`RawSource`) defensively. `raw` must be
+ * an object with a valid `format` ("cloudformation"|"arm"|"terraform") and a
+ * string `type`; otherwise the WHOLE sidecar is dropped (and an error noted, so
+ * the loss is honest rather than silent). The optional fields are coerced per
+ * type — properties/metadata to objects, dependsOn to string[], condition/
+ * apiVersion to strings — so a malformed sub-field never crashes a re-emit.
+ */
+function parseRaw(value: unknown, resourceId: string, errors: string[]): RawSource | undefined {
+  if (value === undefined) return undefined;
+  if (!isObject(value)) {
+    errors.push(`Resource ${resourceId} has a non-object raw sidecar; dropping it`);
+    return undefined;
+  }
+  const format = value.format;
+  const type = asString(value.type);
+  if (typeof format !== "string" || !RAW_FORMATS.has(format)) {
+    errors.push(`Resource ${resourceId} has an invalid raw.format ${String(format)}; dropping raw`);
+    return undefined;
+  }
+  if (type === undefined) {
+    errors.push(`Resource ${resourceId} is missing a string raw.type; dropping raw`);
+    return undefined;
+  }
+  return compact({
+    format: format as RawSource["format"],
+    type,
+    properties: asObjectRecord(value.properties),
+    dependsOn: asStringArray(value.dependsOn),
+    condition: asString(value.condition),
+    metadata: asObjectRecord(value.metadata),
+    apiVersion: asString(value.apiVersion),
+  });
+}
+
 function parseAccount(value: unknown, index: number, errors: string[]): Account | null {
   if (!isObject(value)) {
     errors.push(`Account entry #${index} is not an object`);
@@ -274,6 +331,7 @@ function parseResource(value: unknown, index: number, errors: string[]): Resourc
     config: asConfig(value.config),
     tags: asStringRecord(value.tags),
     position: parsePosition(value.position),
+    raw: parseRaw(value.raw, id, errors),
   });
 }
 

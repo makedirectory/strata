@@ -10,6 +10,8 @@ import {
   normalizeRect,
   nodesInRect,
   screenToWorld as toWorld,
+  worldToScreen,
+  screenDeltaToWorld,
   type Vec2,
   type Rect,
   type GuideLine,
@@ -161,12 +163,15 @@ export function useCanvasInteraction() {
       }
       const parentById = new Map(resources.map((r) => [r.id, r.parentId]));
       const childIds = new Set(ids.filter((id) => !!parentById.get(id)));
+      // Screen-space offset of the pointer from the anchor's top-left at grab,
+      // via the shared forward projection (single source of truth with overlays).
+      const anchorScreen = worldToScreen({ x: p.x, y: p.y }, pan);
       dragRef.current = {
         anchorId: resource.id,
         ids,
         start,
-        grabDX: e.clientX - (pan.x + p.x * pan.scale),
-        grabDY: e.clientY - (pan.y + p.y * pan.scale),
+        grabDX: e.clientX - anchorScreen.x,
+        grabDY: e.clientY - anchorScreen.y,
         isGroup,
         wasChild: !!resource.parentId,
         childIds,
@@ -284,14 +289,14 @@ export function useCanvasInteraction() {
       const resize = resizeRef.current;
       if (resize) {
         const round = (v: number) => Math.round(v / RESIZE_STEP) * RESIZE_STEP;
-        const w = Math.max(
-          MIN_NODE_W,
-          round(resize.startW + (e.clientX - resize.startClientX) / pan.scale),
+        // Screen-pixel drag delta → world units via the shared conversion.
+        const d = screenDeltaToWorld(
+          e.clientX - resize.startClientX,
+          e.clientY - resize.startClientY,
+          pan.scale,
         );
-        const h = Math.max(
-          MIN_NODE_H,
-          round(resize.startH + (e.clientY - resize.startClientY) / pan.scale),
-        );
+        const w = Math.max(MIN_NODE_W, round(resize.startW + d.x));
+        const h = Math.max(MIN_NODE_H, round(resize.startH + d.y));
         draggedRef.current = true;
         updateSize(resize.id, { w, h });
         return;
