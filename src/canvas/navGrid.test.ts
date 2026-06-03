@@ -51,4 +51,23 @@ describe("readingOrder", () => {
     ];
     expect(readingOrder(rects, 24)).toEqual(["a", "b"]);
   });
+
+  it("is a stable total order on a diagonal band (no cyclic comparator)", () => {
+    // A,B,C each within rowTolerance of a neighbour but not of each other — the
+    // classic non-transitive case. The order must not depend on input permutation.
+    const nodes: NavRect[] = [
+      { id: "A", x: 300, y: 0, w: 100, h: 60 },
+      { id: "B", x: 100, y: 20, w: 100, h: 60 },
+      { id: "C", x: 0, y: 40, w: 100, h: 60 },
+    ];
+    const expected = readingOrder(nodes, 24);
+    // Every permutation yields the same order.
+    const perms: NavRect[][] = [
+      [nodes[1], nodes[0], nodes[2]],
+      [nodes[2], nodes[1], nodes[0]],
+      [nodes[0], nodes[2], nodes[1]],
+      [nodes[2], nodes[0], nodes[1]],
+    ];
+    for (const p of perms) expect(readingOrder(p, 24)).toEqual(expected);
+  });
 });

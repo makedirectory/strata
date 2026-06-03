@@ -31,12 +31,13 @@ const center = (r: NavRect): Center => ({ id: r.id, cx: r.x + r.w / 2, cy: r.y +
  * strictly by pixel — `rowTolerance` is the vertical slack for "same row".
  */
 export function readingOrder(rects: NavRect[], rowTolerance = 24): string[] {
-  return [...rects]
-    .sort((a, b) => {
-      if (Math.abs(a.y - b.y) > rowTolerance) return a.y - b.y;
-      return a.x - b.x;
-    })
-    .map((r) => r.id);
+  // Quantise each node to an integer row bucket so the comparator is a true
+  // total order. A raw tolerance compare (|a.y-b.y|>tol ? … : a.x-b.x) is
+  // non-transitive — three nodes in a diagonal band can form a cycle (A>B, B>C,
+  // A<C), making the sort output depend on input permutation. `y` is the final
+  // tiebreaker for determinism within a bucket.
+  const row = (r: NavRect) => Math.round(r.y / rowTolerance);
+  return [...rects].sort((a, b) => row(a) - row(b) || a.x - b.x || a.y - b.y).map((r) => r.id);
 }
 
 /**

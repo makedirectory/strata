@@ -80,6 +80,44 @@ describe("diffGraphs", () => {
     expect(r.changed[0].changes[0].key).toBe("cidr");
   });
 
+  it("matches N-to-N when several resources share a serviceId+name identity key", () => {
+    // Two ARN-less, identically-named subnets on each side (different ids) must
+    // pair up as in-sync, not report +1 added / -1 removed.
+    const current = graph([
+      res({
+        id: "u1",
+        serviceId: "subnet-public",
+        name: "Subnet",
+        config: { cidr: "10.0.1.0/24" },
+      }),
+      res({
+        id: "u2",
+        serviceId: "subnet-public",
+        name: "Subnet",
+        config: { cidr: "10.0.2.0/24" },
+      }),
+    ]);
+    const baseline = graph([
+      res({
+        id: "b1",
+        serviceId: "subnet-public",
+        name: "Subnet",
+        config: { cidr: "10.0.1.0/24" },
+      }),
+      res({
+        id: "b2",
+        serviceId: "subnet-public",
+        name: "Subnet",
+        config: { cidr: "10.0.2.0/24" },
+      }),
+    ]);
+    const r = diffGraphs(current, baseline);
+    expect(r.added).toHaveLength(0);
+    expect(r.removed).toHaveLength(0);
+    expect(r.unchanged).toBe(2);
+    expect(r.inSync).toBe(true);
+  });
+
   it("matches by ARN when names differ", () => {
     const current = graph([
       res({
