@@ -410,3 +410,112 @@ describe("detectFixes — determinism + ordering", () => {
     expect(sgIds).toEqual(["sgA", "sgB"]); // resourceId-sorted
   });
 });
+
+describe("detectFixes/applyFix — secure-config-flag", () => {
+  const cases: { serviceId: string; key: string; insecure: boolean; secure: boolean }[] = [
+    { serviceId: "s3-bucket", key: "blockPublicAccess", insecure: false, secure: true },
+    { serviceId: "rds", key: "publiclyAccessible", insecure: true, secure: false },
+    {
+      serviceId: "gcp-cloud-storage",
+      key: "uniformBucketLevelAccess",
+      insecure: false,
+      secure: true,
+    },
+    { serviceId: "azure-storage-account", key: "allowPublicAccess", insecure: true, secure: false },
+    { serviceId: "azure-redis", key: "enableNonSslPort", insecure: true, secure: false },
+  ];
+
+  for (const c of cases) {
+    it(`detects and fixes ${c.serviceId}.${c.key}`, () => {
+      const g = graph([res({ id: "r1", serviceId: c.serviceId, config: { [c.key]: c.insecure } })]);
+      const before = snap(g);
+      const fixes = detectFixes(g).filter((f) => f.kind === "secure-config-flag");
+      expect(fixes).toHaveLength(1);
+      expect(fixes[0].id).toBe(`secure-config-flag:${c.key}:r1`);
+
+      const out = applyFix(g, fixes[0].id);
+      expect(out.resources[0].config[c.key]).toBe(c.secure);
+      expect(detectFixes(out).filter((f) => f.kind === "secure-config-flag")).toHaveLength(0);
+      expect(snap(g)).toBe(before); // input untouched
+    });
+  }
+
+  it("does not flag a flag already in its secure state", () => {
+    const g = graph([
+      res({ id: "b", serviceId: "s3-bucket", config: { blockPublicAccess: true } }),
+    ]);
+    expect(detectFixes(g).filter((f) => f.kind === "secure-config-flag")).toHaveLength(0);
+  });
+
+  it("does not flag when the flag is unset (defaults are secure)", () => {
+    const g = graph([res({ id: "b", serviceId: "s3-bucket", config: {} })]);
+    expect(detectFixes(g).filter((f) => f.kind === "secure-config-flag")).toHaveLength(0);
+  });
+});
+
+describe("detectFixes/applyFix — add-nat-per-az", () => {
+  // One VPC, one NAT in az-a's public subnet, private subnets in az-a and az-b,
+  // a public subnet in az-b to host a new NAT, and a route table for az-b's
+  // private subnet.
+  function twoAzGraph(): InfrastructureGraph {
+    return graph(
+      [
+        res({ id: "vpc", serviceId: "vpc" }),
+        res({ id: "pub-a", serviceId: "subnet-public", parentId: "vpc", config: { az: "az-a" } }),
+        res({ id: "pub-b", serviceId: "subnet-public", parentId: "vpc", config: { az: "az-b" } }),
+        res({ id: "priv-a", serviceId: "subnet-private", parentId: "vpc", config: { az: "az-a" } }),
+        res({ id: "priv-b", serviceId: "subnet-private", parentId: "vpc", config: { az: "az-b" } }),
+        res({ id: "nat-a", serviceId: "nat-gateway", parentId: "pub-a", config: { az: "az-a" } }),
+        res({ id: "rt-b", serviceId: "route-table" }),
+      ],
+      [rel({ id: "rt-b-attach", from: "rt-b", to: "priv-b", kind: "attached_to" })],
+    );
+  }
+
+  it("offers the fix when one NAT serves private subnets across 2 AZs", () => {
+    const g = twoAzGraph();
+    const fixes = detectFixes(g).filter((f) => f.kind === "add-nat-per-az");
+    expect(fixes).toHaveLength(1);
+    expect(fixes[0].id).toBe("add-nat-per-az:nat-a");
+    expect(fixes[0].detail).toContain("az-b");
+  });
+
+  it("creates a NAT in the missing AZ's public subnet and routes its private subnets", () => {
+    const g = twoAzGraph();
+    const before = snap(g);
+    const out = applyFix(g, "add-nat-per-az:nat-a");
+
+    const newNat = out.resources.find((r) => r.id === "autofix-nat-az-b");
+    expect(newNat).toBeDefined();
+    expect(newNat?.serviceId).toBe("nat-gateway");
+    expect(newNat?.parentId).toBe("pub-b"); // placed in az-b's public subnet
+    expect(newNat?.config.az).toBe("az-b");
+
+    const route = out.relationships.find((e) => e.to === "autofix-nat-az-b" && e.from === "rt-b");
+    expect(route?.kind).toBe("routes_to");
+    expect(route?.destinationCidr).toBe("0.0.0.0/0");
+
+    expect(snap(g)).toBe(before); // input untouched
+    // Idempotent: a second NAT now exists, so the fix is no longer offered.
+    expect(detectFixes(out).filter((f) => f.kind === "add-nat-per-az")).toHaveLength(0);
+  });
+
+  it("is not offered when the missing AZ has no public subnet to host a NAT", () => {
+    const g = graph([
+      res({ id: "vpc", serviceId: "vpc" }),
+      res({ id: "pub-a", serviceId: "subnet-public", parentId: "vpc", config: { az: "az-a" } }),
+      res({ id: "priv-a", serviceId: "subnet-private", parentId: "vpc", config: { az: "az-a" } }),
+      res({ id: "priv-b", serviceId: "subnet-private", parentId: "vpc", config: { az: "az-b" } }),
+      res({ id: "nat-a", serviceId: "nat-gateway", parentId: "pub-a", config: { az: "az-a" } }),
+    ]);
+    expect(detectFixes(g).filter((f) => f.kind === "add-nat-per-az")).toHaveLength(0);
+  });
+
+  it("is not offered when more than one NAT already exists", () => {
+    const g = twoAzGraph();
+    g.resources.push(
+      res({ id: "nat-b", serviceId: "nat-gateway", parentId: "pub-b", config: { az: "az-b" } }),
+    );
+    expect(detectFixes(g).filter((f) => f.kind === "add-nat-per-az")).toHaveLength(0);
+  });
+});

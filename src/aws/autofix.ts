@@ -20,14 +20,16 @@
  * network, credentials, or persistence.
  */
 import type { InfrastructureGraph, ResourceInstance, Relationship } from "./model";
-import { childrenOf } from "./model";
+import { childrenOf, DEFAULT_NODE_SIZE } from "./model";
 
 /** The kinds of automatic fix this engine can detect and apply. */
 export type FixKind =
   | "close-open-sg"
   | "add-igw-default-route"
   | "enable-storage-encryption"
-  | "move-nat-to-public-subnet";
+  | "move-nat-to-public-subnet"
+  | "secure-config-flag"
+  | "add-nat-per-az";
 
 /**
  * A detected, applyable fix. `id` is deterministic (`${kind}:${resourceId}`) so
@@ -63,6 +65,62 @@ const ENCRYPTION_KEYS: Readonly<Record<string, string>> = {
   documentdb: "storageEncrypted",
   neptune: "storageEncrypted",
 };
+
+/**
+ * Single-resource boolean security flags with a deterministic "secure" value.
+ * Each entry mirrors a `rules.ts` check that fires on an explicit insecure flag;
+ * the fix flips that one config key. Keyed by `key` in the fix id so several
+ * flags on one service never collide. (Encryption-at-rest is handled separately
+ * by `ENCRYPTION_KEYS` above — its own fix kind and id scheme predate this.)
+ */
+interface SecureFlagFix {
+  serviceId: string;
+  /** Config key holding the flag. */
+  key: string;
+  /** The value that constitutes the finding (insecure). */
+  insecure: boolean;
+  /** The value the fix writes (secure). */
+  secure: boolean;
+  /** Short imperative label, e.g. "Enable Block Public Access". */
+  label: string;
+}
+const SECURE_FLAG_FIXES: readonly SecureFlagFix[] = [
+  {
+    serviceId: "s3-bucket",
+    key: "blockPublicAccess",
+    insecure: false,
+    secure: true,
+    label: "Enable Block Public Access",
+  },
+  {
+    serviceId: "rds",
+    key: "publiclyAccessible",
+    insecure: true,
+    secure: false,
+    label: "Disable public accessibility",
+  },
+  {
+    serviceId: "gcp-cloud-storage",
+    key: "uniformBucketLevelAccess",
+    insecure: false,
+    secure: true,
+    label: "Enable uniform bucket-level access",
+  },
+  {
+    serviceId: "azure-storage-account",
+    key: "allowPublicAccess",
+    insecure: true,
+    secure: false,
+    label: "Disable public blob access",
+  },
+  {
+    serviceId: "azure-redis",
+    key: "enableNonSslPort",
+    insecure: true,
+    secure: false,
+    label: "Disable the non-SSL port",
+  },
+];
 
 /** Sensitive ingress ports that must not be open to the world. */
 const SENSITIVE_PORTS: ReadonlySet<number> = new Set([22, 3389, 3306, 5432, 1433, 6379]);
@@ -286,6 +344,47 @@ function publicSubnetForNat(
   return { subnet: undefined };
 }
 
+/**
+ * The Availability Zone a NAT Gateway serves: its own `az` config when set,
+ * otherwise the `az` of the public subnet it sits in. `undefined` when neither
+ * is known.
+ */
+function natAzOf(nat: ResourceInstance, topo: Topo): string | undefined {
+  const own = cfgStr(nat, "az");
+  if (own) return own;
+  const pub = topo.subnetsOf(nat).find((s) => s.serviceId === SUBNET_PUBLIC);
+  return pub ? cfgStr(pub, "az") : undefined;
+}
+
+/** A public subnet declaring the given `az`, or `undefined` (lowest id wins). */
+function publicSubnetInAz(graph: InfrastructureGraph, az: string): ResourceInstance | undefined {
+  return graph.resources
+    .filter((r) => r.serviceId === SUBNET_PUBLIC && cfgStr(r, "az") === az)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+}
+
+/**
+ * AZs that have ≥1 private subnet but no NAT Gateway, AND have a public subnet
+ * to place a new NAT into (so the fix is actionable, not a no-op). Sorted for
+ * determinism. Shared by detection (to gate/describe the fix) and application.
+ */
+function azsNeedingNat(graph: InfrastructureGraph, topo: Topo): string[] {
+  const privateAzs = new Set(
+    graph.resources
+      .filter((r) => r.serviceId === SUBNET_PRIVATE)
+      .map((s) => cfgStr(s, "az"))
+      .filter((az): az is string => !!az),
+  );
+  const coveredAzs = new Set<string>();
+  for (const nat of graph.resources.filter((r) => r.serviceId === NAT_GATEWAY)) {
+    const az = natAzOf(nat, topo);
+    if (az) coveredAzs.add(az);
+  }
+  return [...privateAzs]
+    .filter((az) => !coveredAzs.has(az) && !!publicSubnetInAz(graph, az))
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
 // ---- detection --------------------------------------------------------------
 
 /**
@@ -386,12 +485,53 @@ export function detectFixes(graph: InfrastructureGraph): Fixable[] {
     }
   }
 
+  // (5) secure-config-flag: a single boolean security flag in its insecure state.
+  for (const f of SECURE_FLAG_FIXES) {
+    for (const r of graph.resources.filter((x) => x.serviceId === f.serviceId)) {
+      if (r.config[f.key] === f.insecure) {
+        out.push({
+          id: `secure-config-flag:${f.key}:${r.id}`,
+          kind: "secure-config-flag",
+          resourceId: r.id,
+          title: `${f.label} on "${r.name}"`,
+          detail: `"${r.name}" has ${f.key}=${f.insecure}. Apply to set ${f.key}=${f.secure}.`,
+        });
+      }
+    }
+  }
+
+  // (6) add-nat-per-az: a single NAT Gateway serving private subnets across ≥2
+  // AZs is a single point of failure (and incurs cross-AZ data charges). Offered
+  // only when there is at least one other AZ that has private subnets and a
+  // public subnet to host a new NAT (so applying actually changes the graph).
+  const nats = graph.resources.filter((r) => r.serviceId === NAT_GATEWAY);
+  if (nats.length === 1) {
+    const privateAzCount = new Set(
+      graph.resources
+        .filter((r) => r.serviceId === SUBNET_PRIVATE)
+        .map((s) => cfgStr(s, "az"))
+        .filter((az): az is string => !!az),
+    ).size;
+    const needing = azsNeedingNat(graph, topo);
+    if (privateAzCount >= 2 && needing.length >= 1) {
+      out.push({
+        id: `add-nat-per-az:${nats[0].id}`,
+        kind: "add-nat-per-az",
+        resourceId: nats[0].id,
+        title: `Add a NAT Gateway per AZ`,
+        detail: `One NAT Gateway serves private subnets across ${privateAzCount} AZs (a single point of failure). Apply to add a NAT Gateway in ${needing.length} more AZ(s) (${needing.join(", ")}) and route each AZ's private subnets to it.`,
+      });
+    }
+  }
+
   // Deterministic ordering: by kind (declaration order), then resourceId, then id.
   const kindOrder: Record<FixKind, number> = {
     "close-open-sg": 0,
     "add-igw-default-route": 1,
     "enable-storage-encryption": 2,
-    "move-nat-to-public-subnet": 3,
+    "secure-config-flag": 3,
+    "move-nat-to-public-subnet": 4,
+    "add-nat-per-az": 5,
   };
   out.sort((a, b) => {
     if (a.kind !== b.kind) return kindOrder[a.kind] - kindOrder[b.kind];
@@ -495,6 +635,65 @@ export function applyFix(graph: InfrastructureGraph, fixId: string): Infrastruct
         return !touchesNatAndSubnet;
       });
       nat.parentId = publicSubnet.id;
+      return next;
+    }
+
+    case "secure-config-flag": {
+      const r = next.resources.find((x) => x.id === fix.resourceId);
+      // The fix id is `secure-config-flag:${key}:${resourceId}` — the key never
+      // contains a colon, so the second segment is the config key. Match the
+      // table entry by key + serviceId so the correct secure value is written.
+      const key = fix.id.split(":")[1];
+      const entry = SECURE_FLAG_FIXES.find((e) => e.key === key && e.serviceId === r?.serviceId);
+      if (r && entry) r.config[entry.key] = entry.secure;
+      return next;
+    }
+
+    case "add-nat-per-az": {
+      // For each AZ that has private subnets but no NAT (and has a public subnet
+      // to host one), synthesize a NAT Gateway in that public subnet and route
+      // the AZ's private subnets (via their route tables) to it. Deterministic
+      // ids keep this idempotent; detection stops offering the fix once a second
+      // NAT exists, so re-running is a no-op.
+      const privateSubnets = next.resources.filter((r) => r.serviceId === SUBNET_PRIVATE);
+      for (const az of azsNeedingNat(next, topo)) {
+        const pub = publicSubnetInAz(next, az);
+        if (!pub) continue;
+        const natId = `autofix-nat-${az}`;
+        if (next.resources.some((r) => r.id === natId)) continue;
+        const pos = pub.position
+          ? {
+              x: pub.position.x + 20,
+              y: pub.position.y + 20,
+              w: DEFAULT_NODE_SIZE.w,
+              h: DEFAULT_NODE_SIZE.h,
+            }
+          : undefined;
+        next.resources.push({
+          id: natId,
+          serviceId: NAT_GATEWAY,
+          name: `NAT Gateway (${az})`,
+          parentId: pub.id,
+          config: { az },
+          source: "manual",
+          ...(pos ? { position: pos } : {}),
+        });
+        for (const sn of privateSubnets.filter((s) => cfgStr(s, "az") === az)) {
+          const rt = topo.routeTableFor(sn);
+          if (!rt) continue;
+          const routeId = `autofix-nat-route-${rt.id}-${natId}`;
+          if (next.relationships.some((e) => e.id === routeId)) continue;
+          next.relationships.push({
+            id: routeId,
+            from: rt.id,
+            to: natId,
+            kind: "routes_to",
+            destinationCidr: "0.0.0.0/0",
+            label: "0.0.0.0/0",
+            source: "manual",
+          });
+        }
+      }
       return next;
     }
 
