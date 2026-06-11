@@ -24,6 +24,7 @@ import { relationshipsOf, childrenOf } from "./model";
 import { estimateMonthlyCost, estimateTotal } from "./cost";
 import { validateArchitecture } from "./rules";
 import { getService, requireService } from "./registry";
+import { detectFixes, type Fixable, type FixKind } from "./autofix";
 
 /** A single scored observation about the account. */
 export interface ReviewFinding {
@@ -35,6 +36,81 @@ export interface ReviewFinding {
   resourceId?: string;
   /** Risk weight contributed to `AccountReview.riskScore` (error=3, warn=1, info=0). */
   score: number;
+  /**
+   * The id of an autofix (`detectFixes`) that resolves this finding, when one
+   * exists — lets the UI offer a one-click "Fix". Absent when nothing mechanical
+   * applies. See `linkFixes` for the (test-locked) finding↔fix correspondence.
+   */
+  fixId?: string;
+}
+
+/**
+ * Distinctive, stable substrings of the `rules.ts` finding that each
+ * config-flag fix resolves, keyed by the flag's config key (parsed from the
+ * `secure-config-flag:<key>:<id>` fix id). The `review.test.ts` "fix links"
+ * suite triggers each condition end-to-end and asserts the link holds, so a
+ * wording drift in `rules.ts` fails CI rather than silently dropping a Fix
+ * button. (Deliberately matched here in the display-aggregation layer, never in
+ * the autofix engine, which stays decoupled from rule wording.)
+ */
+const SECURE_FLAG_KEYWORD: Readonly<Record<string, string>> = {
+  blockPublicAccess: "Block Public Access disabled",
+  publiclyAccessible: "must not be publicly accessible",
+  uniformBucketLevelAccess: "uniform bucket-level access disabled",
+  allowPublicAccess: "public blob access enabled",
+  enableNonSslPort: "non-SSL port enabled",
+};
+
+/** Whether `fix` is the mechanical resolution of finding `f`. */
+function fixResolvesFinding(fix: Fixable, f: ReviewFinding): boolean {
+  const sameResource = f.resourceId === fix.resourceId;
+  const kind: FixKind = fix.kind;
+  switch (kind) {
+    case "close-open-sg":
+      return sameResource && f.message.includes("exposes sensitive port");
+    case "enable-storage-encryption":
+      return sameResource && f.message.includes("stores data at rest unencrypted");
+    case "move-nat-to-public-subnet":
+      return sameResource && f.message.includes("should be placed in a public Subnet");
+    case "add-nat-per-az":
+      return sameResource && f.message.includes("serves private subnets across");
+    case "add-igw-default-route":
+      // The fix is anchored to the route table, but the rules finding is on the
+      // public subnet (different resourceId) — match on the message alone.
+      return f.message.includes("routes to an Internet Gateway");
+    case "secure-config-flag": {
+      if (!sameResource) return false;
+      const key = fix.id.split(":")[1];
+      const kw = SECURE_FLAG_KEYWORD[key];
+      return !!kw && f.message.includes(kw);
+    }
+    default: {
+      // Exhaustiveness: a new FixKind must decide here whether it maps to a
+      // finding (compile error until it does).
+      const _never: never = kind;
+      void _never;
+      return false;
+    }
+  }
+}
+
+/**
+ * Attach `fixId` to each finding that an autofix resolves. Each fix is assigned
+ * to at most one finding (consumed on first match, in finding order), so two
+ * findings never claim the same fix.
+ */
+function linkFixes(findings: ReviewFinding[], fixables: readonly Fixable[]): void {
+  const used = new Set<number>();
+  for (const f of findings) {
+    for (let i = 0; i < fixables.length; i++) {
+      if (used.has(i)) continue;
+      if (fixResolvesFinding(fixables[i], f)) {
+        f.fixId = fixables[i].id;
+        used.add(i);
+        break;
+      }
+    }
+  }
 }
 
 /** A resource the review suggests is safe to delete. */
@@ -198,6 +274,9 @@ export function reviewAccount(graph: InfrastructureGraph): AccountReview {
   findings.forEach((f, i) => {
     f.id = `${f.category}:${f.level}:${f.resourceId ?? "graph"}:${i}`;
   });
+
+  // Offer a one-click fix on findings an autofix resolves.
+  linkFixes(findings, detectFixes(graph));
 
   const riskScore = findings.reduce((sum, f) => sum + f.score, 0);
 
