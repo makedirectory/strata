@@ -2027,6 +2027,7 @@ function Workspace() {
     cloudMapTarget,
     mapToTarget,
     goToResource,
+    applyAutofix,
   } = useFlow();
   return (
     <>
@@ -2057,7 +2058,7 @@ function Workspace() {
           <h3>Inspector</h3>
           <Inspector />
           <h3>Account review</h3>
-          <ReviewPanel review={review} onSelectResource={goToResource} />
+          <ReviewPanel review={review} onSelectResource={goToResource} onApplyFix={applyAutofix} />
           <h3>Migrate</h3>
           <MigratePanel
             onMap={mapToTarget}

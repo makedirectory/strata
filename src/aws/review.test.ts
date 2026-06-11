@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { reviewAccount } from "./review";
+import { detectFixes } from "./autofix";
 import {
   emptyGraph,
   type InfrastructureGraph,
@@ -172,5 +173,152 @@ describe("reviewAccount", () => {
       .map((f) => f.resourceId as string);
     const sorted = [...errorResIds].sort();
     expect(errorResIds).toEqual(sorted);
+  });
+});
+
+describe("reviewAccount — finding↔autofix links", () => {
+  // Two-AZ single-NAT graph that triggers the add-nat-per-az reliability finding.
+  function twoAzGraph(): InfrastructureGraph {
+    return graph(
+      [
+        res({ id: "vpc", serviceId: "vpc" }),
+        res({ id: "pub-a", serviceId: "subnet-public", parentId: "vpc", config: { az: "az-a" } }),
+        res({ id: "pub-b", serviceId: "subnet-public", parentId: "vpc", config: { az: "az-b" } }),
+        res({ id: "priv-a", serviceId: "subnet-private", parentId: "vpc", config: { az: "az-a" } }),
+        res({ id: "priv-b", serviceId: "subnet-private", parentId: "vpc", config: { az: "az-b" } }),
+        res({ id: "nat-a", serviceId: "nat-gateway", parentId: "pub-a", config: { az: "az-a" } }),
+        res({ id: "rt-b", serviceId: "route-table" }),
+      ],
+      [{ id: "rt-b-attach", from: "rt-b", to: "priv-b", kind: "attached_to" }],
+    );
+  }
+
+  // Each case: a graph that triggers exactly one fixable finding, the distinctive
+  // substring of that finding, and the fix-id prefix the link must point at.
+  const cases: { name: string; g: () => InfrastructureGraph; msg: string; fixPrefix: string }[] = [
+    {
+      name: "close-open-sg",
+      g: () =>
+        graph([
+          res({ id: "sg1", serviceId: "security-group", config: { ingress: "tcp 22 0.0.0.0/0" } }),
+        ]),
+      msg: "exposes sensitive port",
+      fixPrefix: "close-open-sg:",
+    },
+    {
+      name: "enable-storage-encryption",
+      g: () => graph([res({ id: "ebs1", serviceId: "ebs-volume", config: { encrypted: false } })]),
+      msg: "stores data at rest unencrypted",
+      fixPrefix: "enable-storage-encryption:",
+    },
+    {
+      name: "add-igw-default-route",
+      g: () =>
+        graph(
+          [
+            res({ id: "sn1", serviceId: "subnet-public", name: "Public A" }),
+            res({ id: "rt1", serviceId: "route-table" }),
+            res({ id: "igw1", serviceId: "internet-gateway" }),
+          ],
+          [{ id: "e1", from: "rt1", to: "sn1", kind: "attached_to" }],
+        ),
+      msg: "routes to an Internet Gateway",
+      fixPrefix: "add-igw-default-route:",
+    },
+    {
+      name: "move-nat-to-public-subnet",
+      g: () =>
+        graph([
+          res({ id: "nat1", serviceId: "nat-gateway" }),
+          res({ id: "pub1", serviceId: "subnet-public" }),
+        ]),
+      msg: "should be placed in a public Subnet",
+      fixPrefix: "move-nat-to-public-subnet:",
+    },
+    {
+      name: "add-nat-per-az",
+      g: twoAzGraph,
+      msg: "serves private subnets across",
+      fixPrefix: "add-nat-per-az:",
+    },
+    {
+      name: "secure-config-flag (S3 block public access)",
+      g: () =>
+        graph([res({ id: "b1", serviceId: "s3-bucket", config: { blockPublicAccess: false } })]),
+      msg: "Block Public Access disabled",
+      fixPrefix: "secure-config-flag:blockPublicAccess:",
+    },
+    {
+      name: "secure-config-flag (RDS public)",
+      g: () => graph([res({ id: "db1", serviceId: "rds", config: { publiclyAccessible: true } })]),
+      msg: "must not be publicly accessible",
+      fixPrefix: "secure-config-flag:publiclyAccessible:",
+    },
+    {
+      name: "secure-config-flag (GCS uniform access)",
+      g: () =>
+        graph([
+          res({
+            id: "g1",
+            serviceId: "gcp-cloud-storage",
+            config: { uniformBucketLevelAccess: false },
+          }),
+        ]),
+      msg: "uniform bucket-level access disabled",
+      fixPrefix: "secure-config-flag:uniformBucketLevelAccess:",
+    },
+    {
+      name: "secure-config-flag (Azure blob public)",
+      g: () =>
+        graph([
+          res({
+            id: "sa1",
+            serviceId: "azure-storage-account",
+            config: { allowPublicAccess: true },
+          }),
+        ]),
+      msg: "public blob access enabled",
+      fixPrefix: "secure-config-flag:allowPublicAccess:",
+    },
+    {
+      name: "secure-config-flag (Azure Redis non-SSL)",
+      g: () =>
+        graph([res({ id: "rc1", serviceId: "azure-redis", config: { enableNonSslPort: true } })]),
+      msg: "non-SSL port enabled",
+      fixPrefix: "secure-config-flag:enableNonSslPort:",
+    },
+  ];
+
+  for (const c of cases) {
+    it(`links the ${c.name} finding to its fix`, () => {
+      const g = c.g();
+      const review = reviewAccount(g);
+      const f = review.findings.find((x) => x.message.includes(c.msg));
+      expect(f, `expected a finding matching "${c.msg}"`).toBeDefined();
+      expect(f?.fixId).toBeDefined();
+      expect(f?.fixId?.startsWith(c.fixPrefix)).toBe(true);
+      // The linked fix id must be a real, currently-detectable fix.
+      expect(detectFixes(g).map((x) => x.id)).toContain(f?.fixId);
+    });
+  }
+
+  it("leaves non-fixable findings without a fixId, and never invents fix ids", () => {
+    const g = twoAzGraph();
+    const review = reviewAccount(g);
+    const fixIds = new Set(detectFixes(g).map((x) => x.id));
+    for (const f of review.findings) {
+      if (f.fixId !== undefined) expect(fixIds.has(f.fixId)).toBe(true);
+    }
+    // The untagged-resources hygiene finding is informational — never fixable.
+    const untagged = review.findings.find((f) => f.message.includes("untagged"));
+    expect(untagged?.fixId).toBeUndefined();
+  });
+
+  it("assigns each fix to at most one finding", () => {
+    const g = twoAzGraph();
+    const linked = reviewAccount(g)
+      .findings.map((f) => f.fixId)
+      .filter((id): id is string => !!id);
+    expect(linked.length).toBe(new Set(linked).size);
   });
 });

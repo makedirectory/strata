@@ -18,6 +18,8 @@ export interface ReviewPanelProps {
   review: AccountReview;
   /** Optional click handler so a host can focus/select a finding's resource. */
   onSelectResource?: (resourceId: string) => void;
+  /** Optional handler to apply a finding's one-click autofix (by `fixId`). */
+  onApplyFix?: (fixId: string) => void;
 }
 
 const LEVEL_LABEL: Record<ReviewFinding["level"], string> = {
@@ -30,7 +32,11 @@ function pct(coverage: number): string {
   return `${Math.round(coverage * 100)}%`;
 }
 
-export const ReviewPanel: React.FC<ReviewPanelProps> = ({ review, onSelectResource }) => {
+export const ReviewPanel: React.FC<ReviewPanelProps> = ({
+  review,
+  onSelectResource,
+  onApplyFix,
+}) => {
   const { tagCoverage } = review;
   return (
     <div className="inspector review-panel">
@@ -93,6 +99,20 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ review, onSelectResour
                   {LEVEL_LABEL[f.level]}
                 </span>
                 <span className="finding-msg">{f.message}</span>
+                {f.fixId && onApplyFix ? (
+                  <button
+                    type="button"
+                    className="finding-fix"
+                    title="Apply a one-click fix for this finding"
+                    onClick={(e) => {
+                      // Don't also trigger the row's select-resource handler.
+                      e.stopPropagation();
+                      onApplyFix(f.fixId as string);
+                    }}
+                  >
+                    Fix
+                  </button>
+                ) : null}
               </div>
             ))
           )}
