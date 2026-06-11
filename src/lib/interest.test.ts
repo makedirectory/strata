@@ -20,18 +20,26 @@ describe("interest", () => {
     expect(seen).toEqual(["drift-detection"]);
   });
 
-  it("POSTs to the configured webhook when set", () => {
+  it("POSTs to /api/interest only on a hosted deployment", () => {
     const fetchSpy = vi.fn((..._args: unknown[]) =>
-      Promise.resolve(new Response(null, { status: 200 })),
+      Promise.resolve(new Response(null, { status: 204 })),
     );
     vi.stubGlobal("fetch", fetchSpy);
-    vi.stubEnv("NEXT_PUBLIC_STRATA_INTEREST_URL", "https://example.test/interest");
+
+    // Not hosted → no network call (nothing to collect on a local box).
     recordInterest("cost-optimization");
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // Hosted → fire-and-forget POST to the same-origin route.
+    localStorage.clear();
+    vi.stubEnv("NEXT_PUBLIC_STRATA_HOSTED", "1");
+    recordInterest("cost-optimization", "yes please");
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(fetchSpy).toHaveBeenCalledWith(
-      "https://example.test/interest",
+      "/api/interest",
       expect.objectContaining({ method: "POST" }),
     );
+
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
