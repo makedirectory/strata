@@ -93,19 +93,22 @@ See [`README.md`](./README.md) for the full breakdown and the in-app
 
 ### A note on "MCP-native"
 
-Strata is described as **MCP-native**, but to be clear for contributors:
-**there is no MCP server in this repository today.** The "MCP-native" framing
-means the registry — typed relationships, `cfnType` join keys, config schemas —
-is built as a substrate an LLM/agent can reason over, and as a future ingestion
-path. Concretely:
+Strata is **MCP-native** in two senses. First, the registry — typed
+relationships, `nativeType`/`cfnType` join keys, config schemas — is built as a
+substrate an LLM/agent can reason over. Second, there is now an actual MCP server:
 
-- `src/aws/mcp.ts` is a **pure, dependency-free transform** (`mapDiscoveredToGraph`)
-  that maps a flat `DiscoveredResource[]` onto the graph. It does not host or
-  speak the Model Context Protocol.
-- Live discovery today is a **Cloud Control SDK route** at
-  `src/app/api/discover/route.ts` (server-only), fed by `src/aws/discovery.ts`.
-
-So don't go looking for an MCP server process — it doesn't exist yet.
+- `src/mcp/server.ts` hosts the [Model Context Protocol](https://modelcontextprotocol.io)
+  server over stdio (run it with `npm run mcp`). It is a **thin wrapper over the
+  same pure engines** the app uses — registry, validation, IaC import/export,
+  cost, reachability, review, autofix, DSL — so an agent can query and transform a
+  graph exactly as the UI does. No DOM, network, or credentials. When you add or
+  change a pure engine, wire it through here too.
+- `src/aws/mcp.ts` is something different despite the name: a **pure,
+  dependency-free transform** (`mapDiscoveredToGraph`) that maps a flat
+  `DiscoveredResource[]` onto the graph. It does not host or speak MCP.
+- Live discovery is a **Cloud Control SDK route** at
+  `src/app/api/discover/route.ts` (server-only), fed by `src/aws/discovery.ts` —
+  separate from the MCP server.
 
 ## Common workflows
 
