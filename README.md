@@ -110,6 +110,23 @@ npm test        # run the Vitest suite
 | `AWS_FLOW_DATA_DIR`         | `.data/graphs` | Directory for the file-backed store (retained server tier only).       |
 | `AWS_FLOW_API_TOKEN`        | _(unset)_      | If set, the graph API requires `Authorization: Bearer <token>`.        |
 | `NEXT_PUBLIC_STRATA_HOSTED` | _(unset)_      | Set to `1` on any **shared/hosted** deployment (see below).            |
+| `STRATA_INTEREST_WEBHOOK`   | _(unset)_      | Incoming-webhook URL to notify on "coming soon" interest (see below).  |
+
+#### "Coming soon" interest notifications
+
+When `NEXT_PUBLIC_STRATA_HOSTED=1`, clicking a **"coming soon"** prompt's _"I'd
+use this"_ button POSTs a tiny `{ feature, note? }` signal to the same-origin
+**`/api/interest`** route (it's skipped locally — there's nothing to collect on a
+single-user box). That route, with **no datastore and no npm dependency**:
+
+- always **logs** the signal (so it shows in your host's function logs, e.g.
+  Vercel), and
+- if **`STRATA_INTEREST_WEBHOOK`** is set, forwards a short message to that
+  incoming-webhook URL. Use whatever gives you a notification with zero infra — a
+  **Slack** or **Discord** incoming webhook (phone push), **ntfy.sh** (push), or a
+  webhook→email relay. The body sends both `text` (Slack) and `content` (Discord),
+  so one URL works for either. No credentials are involved, and the endpoint
+  accepts only a small validated payload.
 
 #### Live discovery & credentials
 
