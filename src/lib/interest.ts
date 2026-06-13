@@ -6,8 +6,10 @@
  *      re-prompt the same person),
  *   2. dispatches a `strata:interest` window event (an integration point for
  *      whatever analytics layer is added later), and
- *   3. fire-and-forget POSTs to `NEXT_PUBLIC_STRATA_INTEREST_URL` when set — so
- *      a webhook/form endpoint can collect signals today, with zero infra.
+ *   3. **on a hosted deployment only** (`NEXT_PUBLIC_STRATA_HOSTED=1`),
+ *      fire-and-forget POSTs the signal to the same-origin `/api/interest` route,
+ *      which notifies the operator (webhook + log). There's nothing to collect on
+ *      a single-user local box, so the network call is skipped there.
  */
 const STORE_KEY = "strata.interest";
 
@@ -40,9 +42,11 @@ export function recordInterest(feature: string, note?: string): boolean {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("strata:interest", { detail: { feature, note } }));
   }
-  const url = process.env.NEXT_PUBLIC_STRATA_INTEREST_URL;
-  if (url && typeof fetch === "function") {
-    void fetch(url, {
+  // Notify the operator only on a hosted deployment, and only the first time a
+  // browser registers (the UI doesn't re-prompt anyway). The server route
+  // (`/api/interest`) decides how to deliver it (webhook + log).
+  if (isNew && typeof fetch === "function" && process.env.NEXT_PUBLIC_STRATA_HOSTED === "1") {
+    void fetch("/api/interest", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ feature, note }),
