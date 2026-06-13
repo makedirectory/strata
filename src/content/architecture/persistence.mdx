@@ -67,9 +67,22 @@ enters it in the first place.
 > still work — they are kept for a future durable, multi-user backend
 > (Postgres/DynamoDB). The live UI simply no longer calls them for graph
 > persistence. The server routes the UI _does_ still use are **`/api/discover`**,
-> **`/api/discover/gcp`**, and **`/api/discover/azure`** (live cloud discovery). The
-> rest of this page documents that retained server tier, which is where a durable
-> backend will plug in.
+> **`/api/discover/gcp`**, and **`/api/discover/azure`** (live cloud discovery) and
+> **`/api/interest`** (below). The rest of this page documents that retained server
+> tier, which is where a durable backend will plug in.
+
+### "Coming soon" interest signal (`/api/interest`)
+
+A tiny, datastore-free notification path — **not** part of the retained tier. When
+`NEXT_PUBLIC_STRATA_HOSTED=1`, the "I'd use this" button (`recordInterest` in
+`src/lib/interest.ts`) POSTs `{ feature, note? }` to `src/app/api/interest/route.ts`
+(skipped locally — nothing to collect on a single-user box). The route validates
+the small payload, **always `console.log`s** it (captured in the host's function
+logs, e.g. Vercel), and — when **`STRATA_INTEREST_WEBHOOK`** is set — forwards a
+one-line message to that incoming webhook (Slack `text` + Discord `content` in one
+body; ntfy.sh / a webhook→email relay also work). No persistence, no credentials,
+no npm dependency; a webhook failure never affects the user. To start receiving
+them, set `STRATA_INTEREST_WEBHOOK` in the hosted env.
 
 ## The graph Route Handlers (retained for a future backend)
 
