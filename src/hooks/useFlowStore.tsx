@@ -19,6 +19,7 @@ import type { CanvasMode, CanvasDensity, Selection } from "../types";
 import type { RelationshipKind, ServiceCategoryId } from "../aws/types";
 import type { RelationshipClass } from "../aws/relationshipClasses";
 import type { OverlayKind } from "../aws/overlays";
+import type { ChangeKind } from "../aws/planDiff";
 import { defaultConfig, getService } from "../aws/registry";
 import { GRID_STEP } from "../canvas/geometry";
 import { useHistory, type HistoryState } from "./useHistory";
@@ -113,6 +114,9 @@ export function useFlowStore() {
   const [activeOverlay, setActiveOverlay] = useState<OverlayKind>("none");
   // Active tag-tint key (view-only; drives the "tags" tint overlay). Not in history.
   const [tagTintKey, setTagTintKey] = useState<string | null>(null);
+  // Latest terraform plan diff (resource id → change kind), driving the "plan"
+  // overlay. View-only / transient: set when a plan is loaded, never in history.
+  const [planChanges, setPlanChanges] = useState<Record<string, ChangeKind>>({});
   // Summary group keys (`${parentId}::${serviceId}`) that are expanded (shown
   // as individual nodes rather than a single "N× …" summary). View-only.
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
@@ -631,6 +635,7 @@ export function useFlowStore() {
     presentation,
     activeOverlay,
     tagTintKey,
+    planChanges,
     expandedGroups,
     selection,
     selectedIds,
@@ -659,6 +664,7 @@ export function useFlowStore() {
     setPresentation,
     setActiveOverlay,
     setTagTintKey,
+    setPlanChanges,
     setLayers,
     setSelection,
     setSelectedIds,

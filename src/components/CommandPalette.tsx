@@ -219,6 +219,13 @@ export const CommandPalette: React.FC = () => {
         hint: "tint nodes by their first tag key",
       },
       {
+        id: "overlay-plan",
+        title: "Overlay: Plan changes",
+        group: "View",
+        run: () => flow.setActiveOverlay("plan"),
+        hint: "tint nodes by terraform plan (create / update / delete / replace)",
+      },
+      {
         id: "overlay-none",
         title: "Overlay: None",
         group: "View",
