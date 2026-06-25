@@ -39,10 +39,26 @@ function hasKey(files: HclFile[], dir: string, key: string): boolean {
 }
 
 /**
- * Identify the root modules in a repo. A directory is a root when it declares a
- * `provider`/`terraform` (backend) block, or — failing that — when it holds
- * top-level `resource`/`module` blocks yet is neither referenced as another
- * dir's local module nor sitting under a conventional `modules/` library path.
+ * True when any `terraform {}` block in `dir` configures a `backend`. A bare
+ * `terraform {}` (just `required_providers`/`required_version`) is common inside
+ * reusable modules and must NOT mark them as roots — only a backend does.
+ */
+function declaresBackend(files: HclFile[], dir: string): boolean {
+  return files.some((f) => {
+    if (dirOf(f.path) !== dir) return false;
+    const blocks = f.doc.terraform;
+    const list = Array.isArray(blocks) ? blocks : blocks ? [blocks] : [];
+    return list.some((b) => b && typeof b === "object" && "backend" in (b as object));
+  });
+}
+
+/**
+ * Identify the root modules in a repo. A directory is a root when it is an
+ * apply-able entry point — it declares a `backend` or a `provider` block — or,
+ * failing that, holds top-level `resource`/`module` blocks. In every case a dir
+ * that is referenced as another dir's local module, or that sits under a
+ * conventional `modules/` library path, is excluded (those are libraries, and a
+ * module declaring its own `terraform { required_providers }` is not a root).
  */
 export function detectTfRoots(files: HclFile[]): TfRoot[] {
   const dirs = new Set(files.map((f) => dirOf(f.path)));
@@ -66,13 +82,14 @@ export function detectTfRoots(files: HclFile[]): TfRoot[] {
     }
   }
 
+  const isLibrary = (dir: string) => childDirs.has(dir) || dir.split("/").includes("modules");
+
   const roots: TfRoot[] = [];
   for (const dir of dirs) {
-    const declaresEntry = hasKey(files, dir, "provider") || hasKey(files, dir, "terraform");
+    if (isLibrary(dir)) continue; // reusable module, not an entry point
+    const declaresEntry = declaresBackend(files, dir) || hasKey(files, dir, "provider");
     const declaresInfra = hasKey(files, dir, "resource") || hasKey(files, dir, "module");
-    const underModules = dir.split("/").includes("modules");
-    const isRoot = declaresEntry || (declaresInfra && !childDirs.has(dir) && !underModules);
-    if (isRoot) roots.push({ dir, name: leafName(dir) });
+    if (declaresEntry || declaresInfra) roots.push({ dir, name: leafName(dir) });
   }
 
   // Fallback: a flat repo with no provider blocks — treat any non-child infra
