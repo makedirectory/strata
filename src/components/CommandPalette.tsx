@@ -309,6 +309,13 @@ export const CommandPalette: React.FC = () => {
         run: flow.openConnect,
       },
       {
+        id: "companion",
+        title: "Terraform companion (map a repo / visualize a plan)",
+        group: "Tools",
+        run: flow.openCompanion,
+        editing: true,
+      },
+      {
         id: "preset-basic",
         title: "Load preset: Basic AWS",
         group: "Tools",
