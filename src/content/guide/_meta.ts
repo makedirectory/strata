@@ -5,6 +5,7 @@ const meta = {
   views: "Views, Layers & Overlays",
   "importing-iac": "Importing & Exporting IaC",
   "connecting-aws": "Connecting to a Cloud",
+  "connecting-repos": "Connecting a Repository",
   validation: "Validation & Rules",
   drift: "Drift Detection",
   cost: "Estimated Cost",

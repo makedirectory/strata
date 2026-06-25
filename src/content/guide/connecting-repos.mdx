@@ -1,0 +1,77 @@
+---
+title: Connecting a Repository
+---
+
+# Connecting a Repository
+
+Point Strata at a **Terraform or OpenTofu repository on disk** and turn its
+infrastructure-as-code into a diagram — without deploying anything, without cloud
+credentials, and without modifying the repo.
+
+This complements the other two on-ramps:
+
+- [**Importing IaC**](/docs/guide/importing-iac) imports a single file you select.
+- [**Connecting to a Cloud**](/docs/guide/connecting-aws) maps what's **live** in an account.
+- **Connecting a repository** maps what a whole repo **declares**, across all of
+  its root modules at once.
+
+> **Local only.** This feature reads the local filesystem and may run the
+> `terraform` CLI, so it's available when you run Strata locally
+> (`npm run dev`). It's disabled on the hosted demo.
+
+## Opening the dialog
+
+- **Data menu** — click **Data ▾**, then **Connect repository…**
+- **Command palette** — press **⌘K** / **Ctrl K**, type `connect repository`.
+
+Enter the absolute path to the repo (e.g.
+`/Users/you/code/my-infrastructure`) and click **Detect roots**.
+
+## Roots become layers
+
+A repository is rarely one Terraform configuration. Reusable `modules/` are
+libraries; the real entry points are the **root modules** — the directories you
+`terraform apply` in, each with its own backend/provider (for example
+`environments/prod`, `environments/stage`, `bootstrap`).
+
+Strata detects those roots and lists them. By default **all roots are selected**
+and become separate **layers** (one Strata "account" per root) so a shared module
+that's instantiated in several environments doesn't collapse into one. Uncheck any
+you don't want, then click **Map**.
+
+## Fidelity: how the HCL is read
+
+The connector normalises your code into the same JSON the importer already
+understands, using a **strategy ladder**:
+
+| Strategy           | How it works                                                                 | Trade-off                                                                      |
+| ------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Auto** (default) | Try **resolved**, fall back to **static** per root.                          | Best available fidelity with no setup.                                         |
+| **Resolved**       | `terraform/tofu init -backend=false` → `plan -refresh=false` → `show -json`. | Expands modules, `for_each`/`count` and references exactly — needs the CLI.    |
+| **Static**         | Convert raw `.tf` with `@cdktf/hcl2json` and resolve structure directly.     | Fully offline; `for_each`/`count` shown once; lower fidelity but always works. |
+
+The resolved path uses **no cloud credentials** (`-backend=false`,
+`-refresh=false`) and runs against a **throwaway copy** of the repo, so your
+source tree is never touched. It still needs provider plugins and usually
+variable values, so for many repos it falls back to the static parse — the dialog
+reports which strategy ran for each root.
+
+## What you get
+
+Each mapped resource is addressed Terraform-style
+(`module.networking.aws_vpc.main`). Containment (a subnet inside its VPC) and
+`depends_on`-style edges are resolved within each module. Resource types Strata
+doesn't model yet (e.g. `aws_s3_bucket_policy`) are skipped and reported as
+warnings.
+
+The result loads onto the canvas like any other diagram — validate it, estimate
+cost, export it, or save it locally.
+
+## From the command line (MCP)
+
+The same connector is exposed over MCP, so an agent can map a repo by path:
+
+- `list_repo_roots({ path })` — enumerate the Terraform roots.
+- `connect_repo({ path, root?, roots?, strategy? })` — build the layered graph.
+
+See [MCP Integration](/docs/architecture/mcp-integration) for the full tool list.
