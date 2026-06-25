@@ -28,6 +28,7 @@
     "@aws-sdk/client-cloudcontrol": "^3.1068.0",
     "@azure/arm-resourcegraph": "^4.2.1",
     "@azure/identity": "^4.13.1",
+    "@cdktf/hcl2json": "^0.21.0",
     "@google-cloud/asset": "^6.3.3",
     "js-yaml": "^4.2.0",
     "next": "^15.5.19",
