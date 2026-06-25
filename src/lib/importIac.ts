@@ -27,14 +27,14 @@ import { AZURE_TF_TYPE_TO_SERVICE_ID, importArm, isArmTemplate } from "../azure/
  * Terraform type → serviceId across all providers. The `aws_*` / `google_*` /
  * `azurerm_*` prefixes are disjoint, so merging never collides.
  */
-const MERGED_TF_TYPE_TO_SERVICE_ID: Record<string, string> = {
+export const MERGED_TF_TYPE_TO_SERVICE_ID: Record<string, string> = {
   ...TF_TYPE_TO_SERVICE_ID,
   ...GCP_TF_TYPE_TO_SERVICE_ID,
   ...AZURE_TF_TYPE_TO_SERVICE_ID,
 };
 
 /** Union of every provider's Terraform containment-reference keys. */
-const MERGED_CONTAINMENT_KEYS = [
+export const MERGED_CONTAINMENT_KEYS = [
   "subnet_id",
   "vpc_id", // AWS
   "subnetwork",
