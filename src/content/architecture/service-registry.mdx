@@ -119,6 +119,36 @@ first, preserving its order), and builds two indexes:
   `validateRegistry()` (not an integrity error). For AWS entries the key falls back
   to `cfnType` via `serviceNativeType()`, so the AWS path is unchanged.
 
+```mermaid
+flowchart LR
+  subgraph catalogs["Per-provider catalogs"]
+    aws["src/aws/services/*.ts"]
+    gcp["src/gcp/services/*.ts"]
+    azure["src/azure/services/*.ts"]
+  end
+  aws --> svc
+  gcp --> svc
+  azure --> svc
+  svc["SERVICES<br/>flattened, AWS first<br/>registry.ts"]
+  svc --> sidx["SERVICE_INDEX<br/>id → ServiceDefinition"]
+  svc --> nidx["NATIVE_INDEX<br/>(provider, nativeType)<br/>first-wins"]
+
+  subgraph consumers["Consumers — nothing hardcoded"]
+    palette["Palette · node colour / icon"]
+    inspector["Inspector form"]
+    valid["rules.ts validation"]
+    iacc["IaC import / export"]
+    discc["Live discovery"]
+    mcpc["MCP server tools"]
+  end
+  sidx --> palette
+  sidx --> inspector
+  sidx --> valid
+  sidx --> mcpc
+  nidx --> iacc
+  nidx --> discc
+```
+
 Public accessors include `getService`, `requireService`,
 `getServiceByNativeType(provider, type)`, `getServiceByCfnType` (a thin
 AWS-scoped wrapper, kept for the existing CloudFormation/MCP call sites),

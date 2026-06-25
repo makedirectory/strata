@@ -37,6 +37,25 @@ The transform module is intentionally a **pure, dependency-free transform**: it
 takes a flat list of `DiscoveredResource` objects and maps them onto the
 registry-backed graph the canvas already knows how to render.
 
+End to end, a live scan keeps the SDK on the server and the transform pure — and
+credentials never cross back to the browser or into the graph:
+
+```mermaid
+sequenceDiagram
+  participant UI as Browser Connect dialog
+  participant API as discover route (server-only)
+  participant SDK as Cloud SDK
+  participant T as mapDiscoveredToGraph (pure)
+  UI->>API: POST region, types, optional creds
+  API->>SDK: list resources by native type
+  SDK-->>API: raw resource descriptions
+  API->>API: normalize to DiscoveredResource[]
+  API->>T: DiscoveredResource[]
+  T-->>API: InfrastructureGraph (source = mcp)
+  API-->>UI: graph only — credentials never returned
+  Note over API,SDK: SDK + creds live only here, in process memory
+```
+
 ## `DiscoveredResource`
 
 A single resource as surfaced by an MCP server / Cloud Control API / GCP Cloud
@@ -102,6 +121,16 @@ runs in three passes:
 The result must pass `validateGraph()` before persist. `unmappedTypes(resources)`
 reports the distinct CFN types with no registry entry — surfacing registry gaps to
 operators/developers.
+
+```mermaid
+flowchart LR
+  in["DiscoveredResource[]"] --> p1["1 · Resolve &amp; index<br/>getServiceByNativeType<br/>build arn → id index<br/>skip unknown types"]
+  p1 --> p2["2 · Build ResourceInstance[]<br/>serviceId · config · parentId<br/>source = mcp · grid layout"]
+  p2 --> p3["3 · Emit Relationship[]<br/>resolve target ARNs<br/>default kind connects_to<br/>drop dangling edges"]
+  p3 --> v{"validateGraph()"}
+  v -->|ok| persist["persist / render"]
+  v -->|errors| reject["reject"]
+```
 
 ## The producer (`discovery.ts` + `/api/discover`)
 
