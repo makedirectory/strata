@@ -295,6 +295,10 @@ interface FlowContextValue {
   exportIaCOpen: boolean;
   openExportIaC: () => void;
   closeExportIaC: () => void;
+  /** Whether the Terraform/OpenTofu companion (connect repo / plan) dialog is open. */
+  companionOpen: boolean;
+  openCompanion: () => void;
+  closeCompanion: () => void;
   /** Build the current model as an InfrastructureGraph (for the export dialog). */
   snapshotGraph: () => InfrastructureGraph;
 
@@ -471,6 +475,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [exportIaCOpen, setExportIaCOpen] = React.useState(false);
   const openExportIaC = useCallback(() => setExportIaCOpen(true), []);
   const closeExportIaC = useCallback(() => setExportIaCOpen(false), []);
+
+  const [companionOpen, setCompanionOpen] = React.useState(false);
+  const openCompanion = useCallback(() => setCompanionOpen(true), []);
+  const closeCompanion = useCallback(() => setCompanionOpen(false), []);
 
   const [connectOpen, setConnectOpen] = React.useState(false);
   const openConnect = useCallback(() => setConnectOpen(true), []);
@@ -2323,6 +2331,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       exportIaCOpen,
       openExportIaC,
       closeExportIaC,
+      companionOpen,
+      openCompanion,
+      closeCompanion,
       snapshotGraph: buildGraph,
       connectOpen,
       openConnect,
@@ -2465,6 +2476,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       exportIaCOpen,
       openExportIaC,
       closeExportIaC,
+      companionOpen,
+      openCompanion,
+      closeCompanion,
       buildGraph,
       connectOpen,
       openConnect,
