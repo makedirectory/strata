@@ -219,6 +219,13 @@ export const CommandPalette: React.FC = () => {
         hint: "tint nodes by their first tag key",
       },
       {
+        id: "overlay-plan",
+        title: "Overlay: Plan changes",
+        group: "View",
+        run: () => flow.setActiveOverlay("plan"),
+        hint: "tint nodes by terraform plan (create / update / delete / replace)",
+      },
+      {
         id: "overlay-none",
         title: "Overlay: None",
         group: "View",
@@ -300,6 +307,13 @@ export const CommandPalette: React.FC = () => {
         title: "Connect to cloud (discover live resources)",
         group: "Tools",
         run: flow.openConnect,
+      },
+      {
+        id: "companion",
+        title: "Terraform companion (map a repo / visualize a plan)",
+        group: "Tools",
+        run: flow.openCompanion,
+        editing: true,
       },
       {
         id: "preset-basic",

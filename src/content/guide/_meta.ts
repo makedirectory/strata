@@ -5,6 +5,7 @@ const meta = {
   views: "Views, Layers & Overlays",
   "importing-iac": "Importing & Exporting IaC",
   "connecting-aws": "Connecting to a Cloud",
+  "terraform-companion": "Terraform Companion",
   validation: "Validation & Rules",
   drift: "Drift Detection",
   cost: "Estimated Cost",

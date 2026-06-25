@@ -41,6 +41,9 @@ next-env.d.ts
 # Local persistence store
 .data/
 
+# Terraform companion snapshot store (when STRATA_DATA_DIR points inside the repo)
+.strata/
+
 # Docusaurus
 website/node_modules/
 website/build/

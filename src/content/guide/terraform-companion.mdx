@@ -1,0 +1,114 @@
+---
+title: Terraform Companion
+---
+
+# Terraform / OpenTofu Companion
+
+Run Strata **next to your Terraform/OpenTofu workflow**: map a repo into a
+diagram, and visualize what a `plan` will change — directly from Terraform's own
+JSON. There is no Terraform plugin involved (Terraform has no plan/apply hook);
+Strata simply reads the **machine-readable JSON** Terraform already produces.
+
+> **Local only.** The companion reads the local filesystem and runs the
+> `terraform` CLI, so it's available when you run Strata locally (`npm run dev`,
+> or the `strata` CLI). It's disabled on the hosted demo, where Strata stays
+> localStorage-only.
+
+## Two things it does
+
+|                 | Connect                                | Plan                                   |
+| --------------- | -------------------------------------- | -------------------------------------- |
+| **Question**    | "What does my repo declare?"           | "What will this change apply?"         |
+| **Input**       | the repo's `.tf` source                | a `terraform plan`                     |
+| **Output**      | a layered diagram (one layer per root) | the same diagram, **tinted by change** |
+| **Credentials** | none                                   | your backend's (for an accurate diff)  |
+
+## In the app
+
+**Data ▸ Terraform companion…** (or ⌘K → "Terraform companion").
+
+1. Enter a repository path and **Detect roots**. A repo usually has several root
+   modules (e.g. `environments/prod`, `bootstrap`); each becomes a **layer**.
+2. **Connect** builds the diagram. Fidelity ladder:
+   - _Auto_ (default): resolve with `terraform plan` when a binary is present
+     (expands modules/`for_each`), else a static HCL parse.
+   - _Static_: offline, no terraform — `for_each`/`count` shown once.
+   - _Resolved_: requires `terraform`/`tofu`. Runs in a throwaway copy with **no
+     cloud credentials**; your repo is never modified.
+3. **Plan** runs `terraform plan` in your repo and overlays the result: nodes are
+   tinted **green=create, amber=update, purple=replace, red=delete**, with a count
+   summary. Toggle it anytime via ⌘K → "Overlay: Plan changes".
+
+### Visualize a plan JSON (no credentials)
+
+Under **"Visualize a plan JSON"**, paste the output of:
+
+```bash
+terraform plan -out plan.bin
+terraform show -json plan.bin    # paste this
+```
+
+Strata renders the change overlay without running anything — the safest path, and
+the one to use in CI or when the backend needs credentials Strata shouldn't hold.
+
+## From the CLI
+
+```bash
+npm run strata -- roots   ./infra
+npm run strata -- connect ./infra --strategy auto
+npm run strata -- plan    ./infra --root prod        # runs terraform plan + diffs it
+npm run strata -- plan    ./infra --root prod --json # machine-readable, for CI/agents
+```
+
+Add `--save` to write a snapshot to the storage folder (below).
+
+## Where diagrams are saved
+
+With no user accounts, the live app uses your browser's **localStorage**. The
+companion can also write **snapshots** to a dedicated folder set by
+`STRATA_DATA_DIR` (default `~/.strata`) — outside your IaC project, so Strata's
+output never mixes with your code. Point it anywhere and `git init` it to version
+your diagrams:
+
+```bash
+export STRATA_DATA_DIR=~/strata-diagrams   # its own git repo, if you like
+```
+
+Saved snapshots appear in the companion dialog to reload later. On the hosted
+demo, snapshot storage is disabled (localStorage only).
+
+## Live watch
+
+After detecting roots, click **⟳ Watch** (next to Plan) to keep the diagram in
+sync with your edits: the server watches the repo's `.tf`/`.tfvars` files and
+re-runs `plan` on every change, streaming the result over Server-Sent Events so
+the canvas and change overlay update live — no reload. A dot shows when a re-plan
+is in flight and when it last updated; **⏹ Stop watch** ends it. Runs are
+debounced (a burst of saves is one plan) and single-flighted (a change mid-run
+queues exactly one trailing run). Live updates don't prompt the unsaved-work
+guard, so saving a file never interrupts you.
+
+The terminal equivalent prints each diff until you press `^C`:
+
+```bash
+npm run strata -- watch ./infra --root prod        # add --save to snapshot each run
+```
+
+Both share one engine (`src/server/watchPlan.ts`); the browser path is the SSE
+route `GET /api/plan/watch`.
+
+## From an agent (MCP)
+
+- `list_repo_roots({ path })`
+- `connect_repo({ path, root?, roots?, strategy? })`
+- `import_plan({ planJson })` or `import_plan({ repoPath, root? })`
+
+See [MCP Integration](/docs/architecture/mcp-integration).
+
+## Caveats
+
+- A meaningful plan diff needs the **real backend state** — without it Terraform
+  reports everything as a create. So `Plan` uses your repo's backend/credentials;
+  the credential-free path is to feed a plan JSON you generated.
+- `terraform plan` usually needs variables/provider config; when _connecting_, the
+  resolved strategy falls back to static if it can't run, and reports which ran.

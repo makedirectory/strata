@@ -10,6 +10,7 @@ import type { InfrastructureGraph, GraphSummary } from "../aws/model";
 import type { DiscoverResult } from "../aws/discovery";
 import type { GcpDiscoverResult } from "../gcp/discovery";
 import type { AzureDiscoverResult } from "../azure/discovery";
+import type { PlanDiff } from "../aws/planDiff";
 
 /** True for plain (non-null, non-array) objects — safe to read keys from. */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -139,6 +140,133 @@ export async function runDiscovery(opts: {
     res,
     (v): v is DiscoverResult => isRecord(v) && Array.isArray(v.resources),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Terraform/OpenTofu companion (local-only routes)
+// ---------------------------------------------------------------------------
+
+export interface RepoRoot {
+  dir: string;
+  name: string;
+}
+
+export interface RepoRootReport {
+  name: string;
+  dir: string;
+  strategy: "resolved" | "static" | "failed";
+  resourceCount: number;
+  note?: string;
+}
+
+export interface ConnectRepoResponse {
+  graph: InfrastructureGraph;
+  roots: RepoRootReport[];
+  unmappedTypes: string[];
+  warnings: string[];
+}
+
+export interface PlanResponse {
+  graph: InfrastructureGraph;
+  diff: PlanDiff;
+  root?: string;
+  warnings: string[];
+}
+
+export interface SnapshotMeta {
+  id: string;
+  name: string;
+  createdAt: string;
+  repo?: string;
+  root?: string;
+  hasDiff: boolean;
+  resourceCount: number;
+}
+
+export interface Snapshot extends SnapshotMeta {
+  graph: InfrastructureGraph;
+  diff?: PlanDiff;
+}
+
+/** POST /api/connect-repo with `detectOnly` → list a repo's Terraform roots. */
+export async function detectRepoRoots(path: string): Promise<RepoRoot[]> {
+  const res = await fetch("/api/connect-repo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, detectOnly: true }),
+  });
+  const body = await parseJson<{ roots: RepoRoot[] }>(
+    res,
+    (v): v is { roots: RepoRoot[] } => isRecord(v) && Array.isArray(v.roots),
+  );
+  return body.roots;
+}
+
+/** POST /api/connect-repo → build a layered graph from a local Terraform repo. */
+export async function connectRepo(opts: {
+  path: string;
+  roots?: string[];
+  strategy?: "auto" | "static" | "resolved";
+}): Promise<ConnectRepoResponse> {
+  const res = await fetch("/api/connect-repo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return parseJson<ConnectRepoResponse>(
+    res,
+    (v): v is ConnectRepoResponse => isRecord(v) && isRecord(v.graph) && Array.isArray(v.roots),
+  );
+}
+
+/** POST /api/plan → graph + change diff, from a plan JSON or a local repo run. */
+export async function runPlan(
+  opts: { planJson: unknown; name?: string } | { repoPath: string; root?: string },
+): Promise<PlanResponse> {
+  const res = await fetch("/api/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return parseJson<PlanResponse>(
+    res,
+    (v): v is PlanResponse => isRecord(v) && isRecord(v.graph) && isRecord(v.diff),
+  );
+}
+
+/** GET /api/snapshots → list saved snapshots (storage folder; local only). */
+export async function listSnapshots(): Promise<SnapshotMeta[]> {
+  const res = await fetch("/api/snapshots");
+  const body = await parseJson<{ snapshots: SnapshotMeta[] }>(
+    res,
+    (v): v is { snapshots: SnapshotMeta[] } => isRecord(v) && Array.isArray(v.snapshots),
+  );
+  return body.snapshots;
+}
+
+/** POST /api/snapshots → save the current diagram (+ optional plan diff). */
+export async function saveSnapshot(input: {
+  name: string;
+  graph: InfrastructureGraph;
+  diff?: PlanDiff;
+  repo?: string;
+  root?: string;
+}): Promise<SnapshotMeta> {
+  const res = await fetch("/api/snapshots", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseJson<SnapshotMeta>(
+    res,
+    (v): v is SnapshotMeta => isRecord(v) && typeof v.id === "string",
+  );
+}
+
+/** GET /api/snapshots/:id → load a full snapshot. */
+export async function loadSnapshot(id: string): Promise<Snapshot> {
+  const res = await fetch(`/api/snapshots/${encodeURIComponent(id)}`);
+  return parseJson<Snapshot>(res, (v): v is Snapshot => isRecord(v) && isRecord(v.graph));
 }
 
 /**
