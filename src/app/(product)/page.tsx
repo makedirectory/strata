@@ -18,7 +18,15 @@ import { listGcpDiscoverableTypes, parseGcpExport } from "../../gcp/discovery";
 import { listAzureDiscoverableTypes, parseAzureExport } from "../../azure/discovery";
 import { mapDiscoveredToGraph, unmappedTypes, type DiscoveredResource } from "../../aws/mcp";
 import type { CloudProvider } from "../../aws/types";
-import { runDiscovery, runGcpDiscovery, runAzureDiscovery } from "../../lib/api";
+import {
+  runDiscovery,
+  runGcpDiscovery,
+  runAzureDiscovery,
+  detectRepoRoots,
+  connectRepo,
+  type RepoRoot,
+  type RepoRootReport,
+} from "../../lib/api";
 import { EXAMPLES } from "../../examples";
 import { CostComingSoon } from "../../components/ComingSoon";
 import { useDialogA11y } from "../../components/useDialogA11y";
@@ -439,6 +447,7 @@ function TopBar() {
     openStartHub,
     openExportIaC,
     openConnect,
+    openConnectRepo,
     graphName,
     renameGraph,
     openTour,
@@ -530,6 +539,12 @@ function TopBar() {
             title="Discover live AWS, GCP or Azure resources, or paste an export"
           >
             Connect to cloud…
+          </MenuItem>
+          <MenuItem
+            onClick={openConnectRepo}
+            title="Map a local Terraform / OpenTofu repository into a diagram"
+          >
+            Connect repository…
           </MenuItem>
           <MenuItem onClick={importJSONDialog}>Import JSON…</MenuItem>
           <MenuItem
@@ -1562,6 +1577,216 @@ const PROVIDER_ORDER: CloudProvider[] = ["aws", "gcp", "azure"];
 const STRATA_HOSTED =
   process.env.NEXT_PUBLIC_STRATA_HOSTED === "1" || process.env.NEXT_PUBLIC_STRATA_HOSTED === "true";
 
+/**
+ * "Connect repository" sub-flow: enter a local Terraform/OpenTofu repo path →
+ * detect its root modules → map them into one layered diagram (an Account per
+ * root). Runs server-side via /api/connect-repo (filesystem + optional
+ * terraform), so it's a local-deployment feature, disabled when hosted.
+ */
+function ConnectRepoDialog() {
+  const { connectRepoOpen, closeConnectRepo, importDiscoveredGraph } = useFlow();
+
+  const [path, setPath] = React.useState("");
+  const [roots, setRoots] = React.useState<RepoRoot[]>([]);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [strategy, setStrategy] = React.useState<"auto" | "static" | "resolved">("auto");
+  const [phase, setPhase] = React.useState<"setup" | "detecting" | "roots" | "running">("setup");
+  const [error, setError] = React.useState<string | null>(null);
+  const [report, setReport] = React.useState<RepoRootReport[] | null>(null);
+  const [warnings, setWarnings] = React.useState<string[]>([]);
+
+  const dialogRef = useDialogA11y<HTMLDivElement>(connectRepoOpen, closeConnectRepo);
+
+  // Reset transient state whenever the dialog is (re)opened.
+  React.useEffect(() => {
+    if (connectRepoOpen) {
+      setPhase("setup");
+      setError(null);
+      setRoots([]);
+      setReport(null);
+      setWarnings([]);
+    }
+  }, [connectRepoOpen]);
+
+  if (!connectRepoOpen) return null;
+
+  const detect = async () => {
+    setError(null);
+    setPhase("detecting");
+    try {
+      const found = await detectRepoRoots(path.trim());
+      if (found.length === 0) {
+        setError("No Terraform root modules found under that path.");
+        setPhase("setup");
+        return;
+      }
+      setRoots(found);
+      setSelected(new Set(found.map((r) => r.name))); // all roots as layers by default
+      setPhase("roots");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not read that repository.");
+      setPhase("setup");
+    }
+  };
+
+  const toggleRoot = (name: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+
+  const build = async () => {
+    setError(null);
+    setPhase("running");
+    try {
+      const allSelected = selected.size === roots.length;
+      const result = await connectRepo({
+        path: path.trim(),
+        roots: allSelected ? undefined : [...selected],
+        strategy,
+      });
+      setReport(result.roots);
+      setWarnings(result.warnings);
+      importDiscoveredGraph(result.graph, "replace");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to map the repository.");
+      setPhase("roots");
+    }
+  };
+
+  return (
+    <div className="hub-backdrop" onMouseDown={closeConnectRepo}>
+      <div
+        className="connect"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connect repository"
+        ref={dialogRef}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Connect repository</h2>
+          <button className="hub-close" onClick={closeConnectRepo} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        {STRATA_HOSTED ? (
+          <p className="connect-note">
+            Connecting a repository reads the local filesystem and runs Terraform, so it&rsquo;s
+            available only on a local deployment — not on this hosted instance.
+          </p>
+        ) : (
+          <>
+            <p className="connect-note">
+              Point Strata at a local Terraform / OpenTofu repository. Each root module (e.g.
+              <code> environments/prod</code>) becomes a layer. No cloud credentials are used and
+              the repo is never modified.
+            </p>
+
+            <label className="connect-field">
+              <span>Repository path</span>
+              <input
+                type="text"
+                value={path}
+                placeholder="/Users/you/code/my-infrastructure"
+                onChange={(e) => setPath(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && path.trim() && phase === "setup") detect();
+                }}
+              />
+            </label>
+
+            {(phase === "roots" || phase === "running") && (
+              <>
+                <div className="connect-rootlist">
+                  <div className="connect-rootlist-head">
+                    Roots to map ({selected.size}/{roots.length})
+                  </div>
+                  {roots.map((r) => (
+                    <label key={r.name} className="connect-root">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.name)}
+                        onChange={() => toggleRoot(r.name)}
+                      />
+                      <span className="connect-root-name">{r.name}</span>
+                      <span className="connect-root-dir">{r.dir}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <label className="connect-field">
+                  <span>Fidelity</span>
+                  <select
+                    value={strategy}
+                    onChange={(e) => setStrategy(e.target.value as "auto" | "static" | "resolved")}
+                  >
+                    <option value="auto">
+                      Auto — resolve with terraform if available, else static
+                    </option>
+                    <option value="static">Static only — fast, offline, no terraform</option>
+                    <option value="resolved">Resolved only — requires terraform/tofu</option>
+                  </select>
+                </label>
+              </>
+            )}
+
+            {report && (
+              <div className="connect-report">
+                {report.map((r) => (
+                  <div key={r.name} className="connect-report-row">
+                    <span className="connect-root-name">{r.name}</span>
+                    <span className={`connect-badge connect-badge-${r.strategy}`}>
+                      {r.strategy}
+                    </span>
+                    <span className="connect-root-dir">{r.resourceCount} resource(s)</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {warnings.length > 0 && (
+              <ul className="connect-warnings">
+                {warnings.slice(0, 6).map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            )}
+
+            {error && <p className="connect-error">{error}</p>}
+
+            <div className="connect-actions">
+              {phase === "setup" || phase === "detecting" ? (
+                <button
+                  className="btn-start"
+                  disabled={!path.trim() || phase === "detecting"}
+                  onClick={detect}
+                >
+                  {phase === "detecting" ? "Detecting…" : "Detect roots"}
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => setPhase("setup")}>Back</button>
+                  <button
+                    className="btn-start"
+                    disabled={selected.size === 0 || phase === "running"}
+                    onClick={build}
+                  >
+                    {phase === "running" ? "Mapping…" : `Map ${selected.size} root(s)`}
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** "Connect to AWS" discovery sub-flow: source → scope → discover → review →
  *  import. Live scans run server-side via /api/discover; on a hosted deployment
  *  the user brings their own credentials (sent per-request, never stored). The
@@ -2077,6 +2302,7 @@ function Workspace() {
       <VersionsDialog />
       <MergePreviewDialog />
       <ConnectDialog />
+      <ConnectRepoDialog />
       <ReplaceConfirmDialog />
       {presentation && (
         <button className="present-exit" onClick={() => setPresentation(false)}>

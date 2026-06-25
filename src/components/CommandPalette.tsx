@@ -302,6 +302,13 @@ export const CommandPalette: React.FC = () => {
         run: flow.openConnect,
       },
       {
+        id: "connect-repo",
+        title: "Connect repository (map a Terraform / OpenTofu repo)",
+        group: "Tools",
+        run: flow.openConnectRepo,
+        editing: true,
+      },
+      {
         id: "preset-basic",
         title: "Load preset: Basic AWS",
         group: "Tools",
