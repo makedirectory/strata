@@ -26,6 +26,25 @@ auto-detects format/provider and routes to the right importer; it lives in `lib/
 to avoid a cycle (the provider adapters import the shared engine). The "Import IaC"
 dialog calls it.
 
+All three formats converge on one shared `buildGraph()`, and export is the mirror
+image — verbatim re-emit where a `raw` sidecar exists, an honest scaffold otherwise:
+
+```mermaid
+flowchart TB
+  src["IaC source<br/>CloudFormation · ARM · Terraform / OpenTofu"]
+  src --> entry["importAnyIaC(content)<br/>src/lib/importIac.ts"]
+  entry --> detect{"detect format / provider"}
+  detect -->|"Resources / AWSTemplateFormatVersion"| cfn["importCloudFormation"]
+  detect -->|"isArmTemplate"| arm["importArm"]
+  detect -->|"values / planned_values / format_version"| tf["importTerraform"]
+  cfn --> resolved["ResolvedItem[]"]
+  arm --> resolved
+  tf --> resolved
+  resolved --> build["buildGraph()<br/>filter config to configFields<br/>grid layout · resolve parentId<br/>emit + dedupe typed edges"]
+  build --> ig["InfrastructureGraph<br/>+ raw sidecar · iacSource"]
+  ig -. "exportIaC(graph, format)" .-> out["CloudFormation / Terraform / ARM<br/>faithful re-emit or scaffold + report"]
+```
+
 ## Entry points
 
 | Function                                      | Purpose                                                                                                                                                   |

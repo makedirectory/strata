@@ -14,6 +14,33 @@ read-only serverless filesystem (Vercel), so there is no server-side datastore t
 write to — each browser keeps its own diagrams, and JSON export/import is how you
 move one between browsers.
 
+The save/load path is entirely browser-local; the server routes that _are_ live
+handle discovery and the interest signal; the `/api/graphs` tier is built and
+tested but intentionally off the save path, waiting for a durable backend:
+
+```mermaid
+flowchart TB
+  subgraph activep["Active save path (browser)"]
+    hook["useFlow"] --> ls["localStore.ts"]
+    ls --> storage["localStorage<br/>strata:graphs:v1"]
+    hook --> snaps["snapshots.ts<br/>strata:snapshots:v1"]
+  end
+
+  subgraph livep["Live server routes (in use)"]
+    discr["/api/discover (+ gcp · azure)"]
+    interestr["/api/interest"]
+  end
+
+  subgraph retainedp["Retained server tier — not on the save path"]
+    routes["/api/graphs Route Handlers"] --> repo["Repository interface"]
+    repo --> file["FileRepository (default)"]
+    repo -.-> pg["PostgresRepository (designed-for)"]
+    repo -.-> dyn["DynamoRepository (designed-for)"]
+  end
+
+  hook -.->|"live cloud scan"| discr
+```
+
 `localStore.ts` deliberately mirrors the function surface of the old server client
 (`listGraphs` / `getGraph` / `createGraph` / `updateGraph` / `deleteGraph`, all
 `async`) so the hook layer only had to swap one import. It assigns

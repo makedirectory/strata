@@ -71,9 +71,43 @@ Match the existing pages:
   on-page TOC automatically.
 - **MDX components.** Standard Markdown plus GFM tables and fenced code blocks with
   language hints (`ts`, `bash`, `yaml`, `json`) are what the existing pages use.
-  Blockquotes (`>`) are used for prominent call-outs. No custom React components are
-  imported in the current content — keep new pages to the same vocabulary unless
-  you also register the component in `src/mdx-components.tsx`.
+  Blockquotes (`>`) are used for prominent call-outs. Beyond Markdown and the
+  `mermaid` diagrams below, no custom React components are imported in the current
+  content — keep new pages to the same vocabulary unless you also register the
+  component in `src/mdx-components.tsx`.
+
+### Diagrams (Mermaid)
+
+Diagrams are authored as ` ```mermaid ` fenced code blocks — no import, no setup.
+Nextra ships `@theguild/remark-mermaid`, whose remark plugin (already in the
+compile pipeline) rewrites each `mermaid` fence into a client `<Mermaid>` component
+at build time. That component lazily loads `mermaid` **in the browser**, renders on
+scroll-into-view, and re-themes itself with the docs light/dark toggle.
+
+Because rendering is entirely client-side, the diagrams hydrate on the
+statically-generated pages and so **render the same in `npm run dev`, in a
+production `next build`, and on the deployed (Vercel) host** — no server runtime is
+involved. Note: `next build` does not use Turbopack, which is what makes this work
+out of the box (the Turbopack path needs an extra alias).
+
+````md
+```mermaid
+flowchart LR
+  A["source"] --> B["importAnyIaC"] --> C["InfrastructureGraph"]
+```
+````
+
+Authoring tips that keep the client-side parse from failing silently (a bad diagram
+logs to the browser console and renders nothing):
+
+- **Quote node labels** that contain spaces or punctuation: `A["Cloud SDK (server)"]`.
+  Use `<br/>` for line breaks and HTML entities (`&amp;`, `&lt;`) for `&`/`<`.
+- **Avoid reserved words as node ids** — `graph`, `end`, `class`, `style`,
+  `subgraph`. Use `ig`, `svc`, etc.
+- Supported diagram types include `flowchart`, `sequenceDiagram`, and `erDiagram` —
+  all three are used across the architecture pages.
+- There's no build-time validation of diagram syntax, so **open the page with
+  `npm run dev` and confirm it renders** before committing.
 - **Links** are absolute doc paths (`/docs/architecture/...`). You can target a
   heading by its slug, e.g.
   `/docs/architecture/persistence#auth-guard` (slugs are kebab-cased heading text;

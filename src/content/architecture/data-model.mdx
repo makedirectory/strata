@@ -55,6 +55,46 @@ export interface InfrastructureGraph {
 }
 ```
 
+The graph is the aggregate root; resources self-reference through `parentId` for
+containment and are wired together by typed `Relationship` edges:
+
+```mermaid
+erDiagram
+  InfrastructureGraph ||--o{ Account : "accounts[]"
+  InfrastructureGraph ||--o{ ResourceInstance : "resources[]"
+  InfrastructureGraph ||--o{ Relationship : "relationships[]"
+  Account ||--o{ ResourceInstance : "accountId"
+  ResourceInstance ||--o{ ResourceInstance : "parentId (containment)"
+  ResourceInstance ||--o{ Relationship : "from / to"
+
+  InfrastructureGraph {
+    string id
+    string name
+    int schemaVersion
+    IacSource iacSource "lossless re-emit"
+  }
+  Account {
+    string accountId "AWS id / GCP project / Azure sub"
+    string environment
+  }
+  ResourceInstance {
+    string id
+    string serviceId "→ ServiceDefinition"
+    string accountId
+    string region
+    string parentId "containment tree"
+    json config "keyed by ConfigField"
+    string source "manual | imported | mcp"
+    RawSource raw "verbatim IaC, never creds"
+  }
+  Relationship {
+    string id
+    string from "ResourceInstance.id"
+    string to "ResourceInstance.id"
+    RelationshipKind kind
+  }
+```
+
 ## Containment via `parentId`
 
 Logical containment is modeled as a single field, `ResourceInstance.parentId`: a
