@@ -307,8 +307,14 @@ interface FlowContextValue {
   connectOpen: boolean;
   openConnect: () => void;
   closeConnect: () => void;
-  /** Apply a discovered graph: "merge" stages a preview, "replace" is guarded. */
-  importDiscoveredGraph: (graph: InfrastructureGraph, mode: "merge" | "replace") => void;
+  /** Apply a discovered graph: "merge" stages a preview, "replace" is guarded.
+   *  `opts.confirm: false` skips the unsaved-work guard; `opts.silent` stays quiet
+   *  in the status bar (both used by the live `watch` updates). */
+  importDiscoveredGraph: (
+    graph: InfrastructureGraph,
+    mode: "merge" | "replace",
+    opts?: { confirm?: boolean; silent?: boolean },
+  ) => void;
   /** Merge preview: the diff of the staged graph vs the current diagram (or null). */
   mergePreview: DriftResult | null;
   /** Apply / discard the staged merge after reviewing the preview. */
@@ -507,9 +513,15 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /** Apply a graph built from discovered resources. "merge" preserves current
    *  work; "replace" goes through the unsaved-work guard. */
   const importDiscoveredGraph = useCallback(
-    async (graph: InfrastructureGraph, mode: "merge" | "replace") => {
+    async (
+      graph: InfrastructureGraph,
+      mode: "merge" | "replace",
+      opts: { confirm?: boolean; silent?: boolean } = {},
+    ) => {
       if (mode === "replace") {
-        if (!(await confirmReplaceIfDirty())) return;
+        // Live updates (e.g. `strata watch`) opt out of the dirty-confirm so a
+        // file change doesn't prompt on every tick, and stay quiet in the status bar.
+        if (opts.confirm !== false && !(await confirmReplaceIfDirty())) return;
         storeReplaceAll({
           resources: graph.resources,
           relationships: graph.relationships,
@@ -519,7 +531,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           graphId: "",
         });
         setConnectOpen(false);
-        setStatus(`Imported ${graph.resources.length} discovered resource(s) (replace).`);
+        if (!opts.silent)
+          setStatus(`Imported ${graph.resources.length} discovered resource(s) (replace).`);
       } else {
         // Don't apply yet — stage the graph so the user can review a preview of
         // what merging will change (the diff is derived in `mergePreview`).
