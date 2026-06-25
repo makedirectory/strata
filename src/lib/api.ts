@@ -141,6 +141,59 @@ export async function runDiscovery(opts: {
   );
 }
 
+/** A Terraform root module returned by the connect-repo route. */
+export interface RepoRoot {
+  dir: string;
+  name: string;
+}
+
+/** Per-root outcome from a repository connect. */
+export interface RepoRootReport {
+  name: string;
+  dir: string;
+  strategy: "resolved" | "static" | "failed";
+  resourceCount: number;
+  note?: string;
+}
+
+export interface ConnectRepoResponse {
+  graph: InfrastructureGraph;
+  roots: RepoRootReport[];
+  unmappedTypes: string[];
+  warnings: string[];
+}
+
+/** POST /api/connect-repo with `detectOnly` → list a repo's Terraform roots. */
+export async function detectRepoRoots(path: string): Promise<RepoRoot[]> {
+  const res = await fetch("/api/connect-repo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, detectOnly: true }),
+  });
+  const body = await parseJson<{ roots: RepoRoot[] }>(
+    res,
+    (v): v is { roots: RepoRoot[] } => isRecord(v) && Array.isArray(v.roots),
+  );
+  return body.roots;
+}
+
+/** POST /api/connect-repo → build a layered graph from a local Terraform repo. */
+export async function connectRepo(opts: {
+  path: string;
+  roots?: string[];
+  strategy?: "auto" | "static" | "resolved";
+}): Promise<ConnectRepoResponse> {
+  const res = await fetch("/api/connect-repo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return parseJson<ConnectRepoResponse>(
+    res,
+    (v): v is ConnectRepoResponse => isRecord(v) && isRecord(v.graph) && Array.isArray(v.roots),
+  );
+}
+
 /**
  * POST /api/discover/gcp → run a live Cloud Asset Inventory scan with the
  * server's ambient Application Default Credentials. `scope` is a

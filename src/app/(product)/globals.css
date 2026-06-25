@@ -2314,6 +2314,101 @@ button.drift-item:hover {
   padding: 8px 10px;
   margin-bottom: 10px;
 }
+.connect-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.connect-field input,
+.connect-field select {
+  background: #0f1830;
+  color: var(--text);
+  border: 1px solid #223055;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.connect-rootlist {
+  border: 1px solid #1a2540;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.connect-rootlist-head {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid #1a2540;
+}
+.connect-root {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.connect-root:hover {
+  background: #131d36;
+}
+.connect-root-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.connect-root-dir {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: var(--mono, monospace);
+}
+.connect-report {
+  border: 1px solid #1a2540;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.connect-report-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #131d36;
+  font-size: 13px;
+}
+.connect-report-row:last-child {
+  border-bottom: none;
+}
+.connect-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.connect-badge-resolved {
+  background: #10331f;
+  color: #5fd08a;
+}
+.connect-badge-static {
+  background: #122a44;
+  color: #5fa8e0;
+}
+.connect-badge-failed {
+  background: #2a1320;
+  color: var(--danger);
+}
+.connect-warnings {
+  font-size: 12px;
+  color: var(--muted);
+  background: #131d36;
+  border: 1px solid #1a2540;
+  border-radius: 10px;
+  padding: 8px 10px 8px 24px;
+  margin-bottom: 12px;
+}
 .connect-actions {
   display: flex;
   gap: 8px;

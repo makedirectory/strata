@@ -298,6 +298,11 @@ interface FlowContextValue {
   connectOpen: boolean;
   openConnect: () => void;
   closeConnect: () => void;
+  // ---- Connect repository (IaC from disk) ----
+  /** Whether the "Connect repository" (Terraform/OpenTofu) dialog is open. */
+  connectRepoOpen: boolean;
+  openConnectRepo: () => void;
+  closeConnectRepo: () => void;
   /** Apply a discovered graph: "merge" stages a preview, "replace" is guarded. */
   importDiscoveredGraph: (graph: InfrastructureGraph, mode: "merge" | "replace") => void;
   /** Merge preview: the diff of the staged graph vs the current diagram (or null). */
@@ -470,6 +475,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [connectOpen, setConnectOpen] = React.useState(false);
   const openConnect = useCallback(() => setConnectOpen(true), []);
   const closeConnect = useCallback(() => setConnectOpen(false), []);
+
+  const [connectRepoOpen, setConnectRepoOpen] = React.useState(false);
+  const openConnectRepo = useCallback(() => setConnectRepoOpen(true), []);
+  const closeConnectRepo = useCallback(() => setConnectRepoOpen(false), []);
 
   /**
    * Gate any graph-replacing action behind an unsaved-work check. Resolves
@@ -2314,6 +2323,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       connectOpen,
       openConnect,
       closeConnect,
+      connectRepoOpen,
+      openConnectRepo,
+      closeConnectRepo,
       importDiscoveredGraph,
       mergePreview,
       confirmMerge,
@@ -2454,6 +2466,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       connectOpen,
       openConnect,
       closeConnect,
+      connectRepoOpen,
+      openConnectRepo,
+      closeConnectRepo,
       importDiscoveredGraph,
       mergePreview,
       confirmMerge,
