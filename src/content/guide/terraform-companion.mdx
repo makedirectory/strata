@@ -77,6 +77,26 @@ export STRATA_DATA_DIR=~/strata-diagrams   # its own git repo, if you like
 Saved snapshots appear in the companion dialog to reload later. On the hosted
 demo, snapshot storage is disabled (localStorage only).
 
+## Live watch
+
+After detecting roots, click **⟳ Watch** (next to Plan) to keep the diagram in
+sync with your edits: the server watches the repo's `.tf`/`.tfvars` files and
+re-runs `plan` on every change, streaming the result over Server-Sent Events so
+the canvas and change overlay update live — no reload. A dot shows when a re-plan
+is in flight and when it last updated; **⏹ Stop watch** ends it. Runs are
+debounced (a burst of saves is one plan) and single-flighted (a change mid-run
+queues exactly one trailing run). Live updates don't prompt the unsaved-work
+guard, so saving a file never interrupts you.
+
+The terminal equivalent prints each diff until you press `^C`:
+
+```bash
+npm run strata -- watch ./infra --root prod        # add --save to snapshot each run
+```
+
+Both share one engine (`src/server/watchPlan.ts`); the browser path is the SSE
+route `GET /api/plan/watch`.
+
 ## From an agent (MCP)
 
 - `list_repo_roots({ path })`
