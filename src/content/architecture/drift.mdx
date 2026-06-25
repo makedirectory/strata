@@ -51,6 +51,25 @@ Each baseline resource is consumed at most once (`matchedBaseIds`), so a match i
 never double-counted. Anything in `current` with no match is **added**; any
 baseline resource left unmatched is **removed**.
 
+```mermaid
+flowchart TB
+  cur["current graph<br/>(on the canvas)"] --> diff["diffGraphs(current, baseline)"]
+  base["baseline graph<br/>(source of truth)"] --> diff
+  diff --> match{"match each current<br/>resource to a baseline"}
+  match -->|"by id"| paired["matched pair"]
+  match -->|"else by ARN"| paired
+  match -->|"else serviceId + name"| paired
+  match -->|"no match"| added["added"]
+  paired --> cfg{"config differs?"}
+  cfg -->|yes| changed["changed<br/>+ { key, from, to }[]"]
+  cfg -->|no| unchanged["unchanged (count)"]
+  base -.->|"baseline left unmatched"| removed["removed"]
+  added --> result["DriftResult<br/>added · removed · changed · inSync"]
+  changed --> result
+  removed --> result
+  unchanged --> result
+```
+
 ## Config diffing
 
 A matched pair is **changed** if any config value differs. `diffConfig` walks the
