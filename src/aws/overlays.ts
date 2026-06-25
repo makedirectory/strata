@@ -16,8 +16,9 @@ import { emptyGraph } from "./model";
 import { litReachable } from "./reachability";
 import { relationshipClassOf } from "./relationshipClasses";
 import type { RelationshipKind } from "./types";
+import type { ChangeKind } from "./planDiff";
 
-export type OverlayKind = "none" | "iam" | "security" | "heat" | "reachability" | "tags";
+export type OverlayKind = "none" | "iam" | "security" | "heat" | "reachability" | "tags" | "plan";
 
 /** Emphasised node + relationship ids for an overlay. */
 export interface OverlayLit {
@@ -219,6 +220,36 @@ export function heatColor(t: number): string {
   }
   // amber → red
   return mix("#fbbf24", "#ef4444", (clamped - 0.5) / 0.5);
+}
+
+/**
+ * Colour for a plan change kind (the "plan" overlay). Routed through the same
+ * per-node tint channel the tag overlay uses, so the renderer needs no change.
+ * `noop`/`read` return `null` (no tint — unchanged resources stay neutral).
+ */
+export function planChangeColor(kind: ChangeKind): string | null {
+  switch (kind) {
+    case "create":
+      return "#16a34a"; // green
+    case "update":
+      return "#d97706"; // amber
+    case "delete":
+      return "#dc2626"; // red
+    case "replace":
+      return "#7c3aed"; // purple
+    default:
+      return null; // noop / read
+  }
+}
+
+/** Per-node id → colour tint map for a plan diff (only changed nodes are tinted). */
+export function planTintMap(changes: Record<string, ChangeKind>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [id, kind] of Object.entries(changes)) {
+    const color = planChangeColor(kind);
+    if (color) out.set(id, color);
+  }
+  return out;
 }
 
 function mix(a: string, b: string, t: number): string {

@@ -54,9 +54,11 @@ import {
   overlayLitFor,
   heatByDegree,
   heatColor,
+  planTintMap,
   type OverlayKind,
   type OverlayLit,
 } from "../aws/overlays";
+import type { ChangeKind } from "../aws/planDiff";
 import type { ServiceCategoryId } from "../aws/types";
 import { reviewAccount, type AccountReview } from "../aws/review";
 import { mapToCloud, type CloudMapResult } from "../aws/cloudMap";
@@ -204,6 +206,9 @@ interface FlowContextValue {
   /** Active tag key for the "tags" tint overlay (null = none). */
   tagTintKey: string | null;
   setTagTintKey: (key: string | null) => void;
+  /** Latest terraform plan diff (resource id → change kind), drives "plan" overlay. */
+  planChanges: Record<string, ChangeKind>;
+  setPlanChanges: (changes: Record<string, ChangeKind>) => void;
   toggleCategory: (id: ServiceCategoryId) => void;
   toggleRelClass: (id: RelationshipClass) => void;
   setFilterMode: (m: "dim" | "hide") => void;
@@ -800,12 +805,18 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     getViewport,
   ]);
 
-  // Categorical tag-tint map for the "tags" overlay; null when inactive so the
-  // separate renderer channel stays inert.
+  // Categorical per-node tint map. Drives the "tags" overlay and, reusing the
+  // same renderer channel, the "plan" overlay (resource → change colour). Null
+  // when neither is active so the channel stays inert.
   const tagTint = React.useMemo<ReadonlyMap<string, string> | null>(() => {
-    if (store.activeOverlay !== "tags" || !store.tagTintKey) return null;
-    return tagTintMap(buildGraph(), store.tagTintKey);
-  }, [store.activeOverlay, store.tagTintKey, buildGraph]);
+    if (store.activeOverlay === "tags" && store.tagTintKey)
+      return tagTintMap(buildGraph(), store.tagTintKey);
+    if (store.activeOverlay === "plan") {
+      const map = planTintMap(store.planChanges);
+      return map.size > 0 ? map : null;
+    }
+    return null;
+  }, [store.activeOverlay, store.tagTintKey, store.planChanges, buildGraph]);
 
   // Account review (Explain & Clean) derived from the current graph.
   const review = React.useMemo<AccountReview>(() => reviewAccount(buildGraph()), [buildGraph]);
@@ -2251,6 +2262,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setActiveOverlay: store.setActiveOverlay,
       tagTintKey: store.tagTintKey,
       setTagTintKey: store.setTagTintKey,
+      planChanges: store.planChanges,
+      setPlanChanges: store.setPlanChanges,
       toggleCategory: store.toggleCategory,
       toggleRelClass: store.toggleRelClass,
       setFilterMode: store.setFilterMode,
@@ -2395,6 +2408,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.setActiveOverlay,
       store.tagTintKey,
       store.setTagTintKey,
+      store.planChanges,
+      store.setPlanChanges,
       store.toggleCategory,
       store.toggleRelClass,
       store.setFilterMode,
