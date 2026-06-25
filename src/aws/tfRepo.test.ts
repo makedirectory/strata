@@ -37,6 +37,22 @@ describe("detectTfRoots", () => {
     expect(dirs).not.toContain("modules/networking");
   });
 
+  it("does not treat a module's bare terraform{required_providers} block as a root", () => {
+    const withReqProviders: HclFile[] = [
+      ...files,
+      {
+        path: "modules/knowledge-base/main.tf",
+        doc: {
+          terraform: [{ required_providers: { aws: { source: "hashicorp/aws" } } }],
+          resource: { aws_s3_bucket: { kb: [{}] } },
+        },
+      },
+    ];
+    expect(detectTfRoots(withReqProviders).map((r) => r.dir)).not.toContain(
+      "modules/knowledge-base",
+    );
+  });
+
   it("falls back to top-level infra dirs when no provider blocks exist", () => {
     const flat: HclFile[] = [{ path: "main.tf", doc: { resource: { aws_vpc: { x: [{}] } } } }];
     expect(detectTfRoots(flat)).toEqual([{ dir: "", name: "root" }]);
