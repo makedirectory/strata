@@ -25,6 +25,7 @@ import { detectFixes, applyFix } from "../aws/autofix";
 import { changeReceipt, renderMarkdown } from "../aws/receipt";
 import { collectTagKeys, collectTagValues, tagCoverage } from "../aws/tags";
 import { importAnyIaC } from "../lib/importIac";
+import { connectRepo, detectRepoRoots, type ConnectStrategy } from "../server/connectRepo";
 import { exportIaC, type ExportFormat } from "../aws/iacExport";
 import { graphToDsl, dslToGraph } from "../aws/dsl";
 import type { CloudProvider } from "../aws/types";
@@ -54,7 +55,7 @@ export interface McpTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  run: (args: Args) => unknown;
+  run: (args: Args) => unknown | Promise<unknown>;
 }
 
 const objectSchema = (
@@ -155,6 +156,49 @@ export const TOOLS: McpTool[] = [
       const r = importAnyIaC(content, { name: str(a, "name") });
       return {
         format: r.format,
+        resourceCount: r.graph.resources.length,
+        unmappedTypes: r.unmappedTypes,
+        warnings: r.warnings,
+        graph: r.graph,
+      };
+    },
+  },
+  {
+    name: "list_repo_roots",
+    description:
+      "List the Terraform/OpenTofu root modules (apply-able entry points, e.g. environments/prod) under a local repo path. Local only; reads no cloud state.",
+    inputSchema: objectSchema({ path: { type: "string" } }, ["path"]),
+    run: async (a) => {
+      const path = str(a, "path");
+      if (!path) throw new Error("`path` (the local repository directory) is required.");
+      return { roots: await detectRepoRoots(path) };
+    },
+  },
+  {
+    name: "connect_repo",
+    description:
+      "Build a Strata graph from a local Terraform/OpenTofu repository, one Account layer per root. Auto-ladder: resolves modules via `terraform plan` when a binary is available (no cloud credentials — runs against a throwaway copy, never mutating the repo), else falls back to a static HCL parse. `strategy`: auto (default) | static | resolved. `root`/`roots` select specific roots (default all). Local only.",
+    inputSchema: objectSchema(
+      {
+        path: { type: "string" },
+        root: { type: "string" },
+        roots: { type: "array", items: { type: "string" } },
+        strategy: { type: "string", enum: ["auto", "static", "resolved"] },
+      },
+      ["path"],
+    ),
+    run: async (a) => {
+      const path = str(a, "path");
+      if (!path) throw new Error("`path` (the local repository directory) is required.");
+      const roots = Array.isArray(a.roots)
+        ? (a.roots.filter((r) => typeof r === "string") as string[])
+        : str(a, "root")
+          ? [str(a, "root")!]
+          : undefined;
+      const strategy = str(a, "strategy") as ConnectStrategy | undefined;
+      const r = await connectRepo(path, { roots, strategy });
+      return {
+        roots: r.roots,
         resourceCount: r.graph.resources.length,
         unmappedTypes: r.unmappedTypes,
         warnings: r.warnings,
@@ -353,8 +397,9 @@ const fail = (id: string | number | null, code: number, message: string): JsonRp
 /**
  * Handle one JSON-RPC message. Returns the response, or `null` for
  * notifications (no `id` / `notifications/*`) which must not be answered.
+ * Async because some tools (e.g. `connect_repo`) do local fs/process work.
  */
-export function handleMcpMessage(msg: JsonRpcRequest): JsonRpcResponse | null {
+export async function handleMcpMessage(msg: JsonRpcRequest): Promise<JsonRpcResponse | null> {
   const id = msg.id ?? null;
   switch (msg.method) {
     case "initialize":
@@ -390,7 +435,7 @@ export function handleMcpMessage(msg: JsonRpcRequest): JsonRpcResponse | null {
           : {}
       ) as Args;
       try {
-        const result = tool.run(args);
+        const result = await tool.run(args);
         return ok(id, { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
       } catch (e) {
         return ok(id, {
@@ -408,6 +453,7 @@ export function handleMcpMessage(msg: JsonRpcRequest): JsonRpcResponse | null {
 /** Wire the dispatcher to stdio (newline-delimited JSON-RPC). */
 export function runStdio(): void {
   let buffer = "";
+  let chain: Promise<void> = Promise.resolve();
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk: string) => {
     buffer += chunk;
@@ -422,8 +468,12 @@ export function runStdio(): void {
       } catch {
         continue; // skip malformed lines
       }
-      const res = handleMcpMessage(msg);
-      if (res) process.stdout.write(JSON.stringify(res) + "\n");
+      // Serialise handling so async tools (connect_repo) can't interleave their
+      // responses out of request order on the single stdout stream.
+      chain = chain.then(async () => {
+        const res = await handleMcpMessage(msg);
+        if (res) process.stdout.write(JSON.stringify(res) + "\n");
+      });
     }
   });
 }
