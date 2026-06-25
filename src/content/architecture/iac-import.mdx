@@ -26,6 +26,23 @@ auto-detects format/provider and routes to the right importer; it lives in `lib/
 to avoid a cycle (the provider adapters import the shared engine). The "Import IaC"
 dialog calls it.
 
+### Raw HCL & whole repositories
+
+`importTerraform` consumes **resolved** JSON, not raw `.tf` source. To map a repo
+of hand-written HCL, two more pieces sit on top of the same `buildGraph`:
+
+- **`importHclJson(files, rootDir, name?, opts?)`** (`src/aws/hclJson.ts`) — a pure
+  adapter over [`@cdktf/hcl2json`](https://github.com/hashicorp/terraform-cdk)
+  output. It expands local `module` blocks inline (Terraform-style addresses),
+  resolves intra-module references into containment + `depends_on` edges, and emits
+  `ResolvedItem[]`. Lower fidelity than resolved JSON (`for_each`/`count` aren't
+  expanded), but needs no binary, network or credentials.
+- **`connectRepo(path, opts?)`** (`src/server/connectRepo.ts`) — the server-only
+  runner behind the [Connect a Repository](/docs/guide/connecting-repos) flow and
+  the `connect_repo` MCP tool. It detects roots (`src/aws/tfRepo.ts`), runs a
+  strategy ladder per root (resolved `terraform plan -json` against a throwaway copy
+  → static `importHclJson` fallback), and merges the roots into one layered graph.
+
 ## Entry points
 
 | Function                                      | Purpose                                                                                                                                                   |
