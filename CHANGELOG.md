@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-25
+
+Two big capabilities land: a **local Terraform/OpenTofu companion** (map a repo,
+visualize a `plan` as a change overlay, and live-watch as you edit) and a
+**front-end analysis suite** (Account Review, reachability, migration, DSL,
+autofix, change receipts, tag coverage, and annotations) — plus inline one-click
+fixes and hosted-interest notifications.
+
+### Added
+
+- **Terraform / OpenTofu companion (local).** Point Strata at a repo on disk and
+  turn it into a diagram, then see what a `plan` will change — all from Terraform's
+  own JSON (no plugin, no cloud credentials, the source repo is never modified).
+  - **Connect** → one layered diagram, an account layer per root, via a static
+    HCL→graph engine over `@cdktf/hcl2json` with an **auto / static / resolved**
+    strategy ladder (resolved runs `terraform plan` in a throwaway copy).
+    New pure engines: `src/aws/hclJson.ts`, `src/aws/tfRepo.ts`.
+  - **Plan diff** → nodes tinted **create / update / delete / replace** with
+    counts (`src/aws/planDiff.ts` + a `plan` overlay), from
+    `terraform show -json`, or pasted credential-free.
+  - **Live watch** → re-plan on `.tf`/`.tfvars` change over **Server-Sent Events**
+    (`GET /api/plan/watch`), debounced + single-flighted (`src/server/watchPlan.ts`).
+  - **Three surfaces, one engine:** the **Terraform companion** dialog (Data ▾),
+    a `strata` **CLI** (`roots` / `connect` / `plan` / `watch`, with `--json` for
+    CI/agents), and **MCP tools** (`list_repo_roots`, `connect_repo`, `import_plan`).
+  - **Storage folder** for snapshots — a dedicated, gitignorable directory
+    (`STRATA_DATA_DIR`, default `~/.strata`) that can be versioned on its own and
+    never mixes with the IaC project. Local-only; disabled on hosted deploys.
+- **Account Review** ("Explain & Clean") — a plain-English read of the graph with
+  fixable findings, plus an inline **one-click Fix** on each fixable finding.
+- **Internet reachability overlay** — traces which resources are reachable from
+  the public internet.
+- **Cross-cloud migration mapping** — remap a diagram onto another provider,
+  reporting what couldn't be mapped.
+- **Graph DSL** — convert a diagram to/from a compact text form (`graph_to_dsl` /
+  `graph_from_dsl`), round-trippable.
+- **Autofix** — suggested fixes for the single-NAT finding and five security flags.
+- **Change receipts** and **tag-coverage** reporting.
+- **Annotations layer** — a presentation-only notes/callouts/zones layer, excluded
+  from validation, cost, and IaC emit.
+- **Hosted-interest notification** — the "coming soon" interest path notifies the
+  operator server-side (`/api/interest`), with no new dependencies.
+
+### Changed
+
+- Shipped the active roadmap follow-ups; de-duplicated the annotation wiring and
+  canvas projection; refreshed the guide and architecture docs (Terraform
+  companion guide, MCP tool list, storage-folder and interest-notify notes).
+
+### Fixed
+
+- Hardened the companion's server surface from a CodeQL pass: prototype-pollution-
+  safe plan-diff maps (null-prototype + guarded keys) and stricter repo-path
+  validation (NUL-byte rejection + normalization).
+- Resolved code-review and second-review findings across the analysis features and
+  the companion, with Prettier formatting and a tracked roadmap.
+
 ## [0.5.0] - 2026-06-02
 
 Operability & polish: compare a design against any baseline (and see the cost
