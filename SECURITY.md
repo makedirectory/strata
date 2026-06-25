@@ -22,7 +22,7 @@ Instead, report privately via a GitHub draft security advisory:
 - <https://github.com/makedirectory/aws-flow-builder/security/advisories/new>
 
 If you cannot use GitHub advisories, you can email the maintainers at
-**andrew@koroid.com**.
+**andrew@mk-dir.com**.
 
 Please include enough detail to reproduce — affected version/commit, steps,
 impact, and any proof-of-concept. We will acknowledge your report, keep you
