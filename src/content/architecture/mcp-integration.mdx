@@ -214,17 +214,28 @@ and IaC import/export — with **no DOM, no network, and no credentials**.
 
 ### Tools
 
-| Tool                    | Input                              | Backed by                                                                |
-| ----------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
-| `list_services`         | `{ provider?, category?, query? }` | registry (`allServices`/`searchServices`)                                |
-| `get_service`           | `{ id }`                           | registry (`getService`)                                                  |
-| `validate_architecture` | `{ graph }`                        | `validateArchitecture` ([rules engine](/docs/architecture/rules-engine)) |
-| `suggest_rules`         | `{ graph }`                        | `suggestRules`                                                           |
-| `import_iac`            | `{ content, name? }`               | `importAnyIaC` ([IaC import](/docs/architecture/iac-import))             |
-| `export_iac`            | `{ graph, format }`                | `exportIaC` (CloudFormation / Terraform)                                 |
-| `estimate_cost`         | `{ graph }`                        | `estimateMonthlyCost` / `estimateTotal`                                  |
+| Tool                    | Input                                   | Backed by                                                                |
+| ----------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `list_services`         | `{ provider?, category?, query? }`      | registry (`allServices`/`searchServices`)                                |
+| `get_service`           | `{ id }`                                | registry (`getService`)                                                  |
+| `validate_architecture` | `{ graph }`                             | `validateArchitecture` ([rules engine](/docs/architecture/rules-engine)) |
+| `suggest_rules`         | `{ graph }`                             | `suggestRules`                                                           |
+| `import_iac`            | `{ content, name? }`                    | `importAnyIaC` ([IaC import](/docs/architecture/iac-import))             |
+| `list_repo_roots`       | `{ path }`                              | `detectRepoRoots` (Terraform roots under a local path)                   |
+| `connect_repo`          | `{ path, root?, roots?, strategy? }`    | `connectRepo` (local repo → layered graph)                               |
+| `import_plan`           | `{ planJson }` or `{ repoPath, root? }` | `importPlanJson` / `runRepoPlan` (plan → graph + change diff)            |
+| `export_iac`            | `{ graph, format }`                     | `exportIaC` (CloudFormation / Terraform)                                 |
+| `estimate_cost`         | `{ graph }`                             | `estimateMonthlyCost` / `estimateTotal`                                  |
 
 Because every tool delegates to a pure engine, the server stays in lockstep with
 the app: a new registry entry or validation rule is immediately available over MCP
 with no extra wiring. This is the running counterpart to the "MCP-native" framing
 — distinct from the `src/aws/mcp.ts` discovery transform above.
+
+The exceptions are the **companion** tools (`connect_repo`, `list_repo_roots`,
+`import_plan`): they read the local filesystem and may shell out to
+`terraform`/`tofu` (via `src/server/`), so they are **local-only** and not pure.
+They still use **no cloud credentials** for `connect`, and never mutate the source
+repo. Because a tool can now do async work, `handleMcpMessage` is `async` and
+stdout writes are serialised to preserve order. See the
+[Terraform Companion](/docs/guide/terraform-companion) guide.

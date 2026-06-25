@@ -5,6 +5,8 @@ import {
   overlayLitFor,
   heatByDegree,
   heatColor,
+  planChangeColor,
+  planTintMap,
 } from "./overlays";
 import type { ResourceInstance, Relationship } from "./model";
 import type { RelationshipKind } from "./types";
@@ -134,5 +136,21 @@ describe("heatColor", () => {
     expect(heatColor(1)).toBe("rgb(239, 68, 68)");
     expect(heatColor(-5)).toBe(heatColor(0));
     expect(heatColor(5)).toBe(heatColor(1));
+  });
+});
+
+describe("plan overlay tint", () => {
+  it("colours changed kinds and leaves noop/read untinted", () => {
+    expect(planChangeColor("create")).toBeTruthy();
+    expect(planChangeColor("delete")).toBeTruthy();
+    expect(planChangeColor("replace")).toBeTruthy();
+    expect(planChangeColor("noop")).toBeNull();
+    expect(planChangeColor("read")).toBeNull();
+  });
+
+  it("builds a tint map for only the changed nodes", () => {
+    const map = planTintMap({ a: "create", b: "noop", c: "delete" });
+    expect([...map.keys()].sort()).toEqual(["a", "c"]);
+    expect(map.get("a")).toBe(planChangeColor("create"));
   });
 });

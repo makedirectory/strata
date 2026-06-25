@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { handleMcpMessage, TOOLS } from "./server";
 
 /** Call a tool through the JSON-RPC dispatcher and JSON-parse its text result. */
-function call(name: string, args: Record<string, unknown> = {}) {
-  const res = handleMcpMessage({
+async function call(name: string, args: Record<string, unknown> = {}) {
+  const res = await handleMcpMessage({
     jsonrpc: "2.0",
     id: 1,
     method: "tools/call",
@@ -19,26 +19,28 @@ function call(name: string, args: Record<string, unknown> = {}) {
 }
 
 describe("MCP server — protocol", () => {
-  it("responds to initialize with server info + tools capability", () => {
-    const res = handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "initialize" });
+  it("responds to initialize with server info + tools capability", async () => {
+    const res = await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "initialize" });
     const r = res!.result as { serverInfo: { name: string }; capabilities: { tools: unknown } };
     expect(r.serverInfo.name).toBe("strata");
     expect(r.capabilities.tools).toBeDefined();
   });
 
-  it("ignores notifications (no response)", () => {
-    expect(handleMcpMessage({ jsonrpc: "2.0", method: "notifications/initialized" })).toBeNull();
+  it("ignores notifications (no response)", async () => {
+    expect(
+      await handleMcpMessage({ jsonrpc: "2.0", method: "notifications/initialized" }),
+    ).toBeNull();
   });
 
-  it("lists all registered tools", () => {
-    const res = handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+  it("lists all registered tools", async () => {
+    const res = await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const names = (res!.result as { tools: { name: string }[] }).tools.map((t) => t.name);
     expect(names).toEqual(expect.arrayContaining(TOOLS.map((t) => t.name)));
     expect(names).toContain("validate_architecture");
   });
 
-  it("registers the newly-wired engine tools", () => {
-    const res = handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+  it("registers the newly-wired engine tools", async () => {
+    const res = await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const names = (res!.result as { tools: { name: string }[] }).tools.map((t) => t.name);
     expect(names).toEqual(
       expect.arrayContaining([
@@ -51,31 +53,34 @@ describe("MCP server — protocol", () => {
         "apply_autofix",
         "change_receipt",
         "tag_report",
+        "connect_repo",
+        "list_repo_roots",
+        "import_plan",
       ]),
     );
   });
 
-  it("returns method-not-found for an unknown request", () => {
-    const res = handleMcpMessage({ jsonrpc: "2.0", id: 3, method: "nope" });
+  it("returns method-not-found for an unknown request", async () => {
+    const res = await handleMcpMessage({ jsonrpc: "2.0", id: 3, method: "nope" });
     expect(res!.error?.code).toBe(-32601);
   });
 });
 
 describe("MCP server — tools", () => {
-  it("list_services filters by provider", () => {
-    const { data } = call("list_services", { provider: "gcp" });
+  it("list_services filters by provider", async () => {
+    const { data } = await call("list_services", { provider: "gcp" });
     expect(data.count).toBeGreaterThan(0);
     expect(data.services.every((s: { provider: string }) => s.provider === "gcp")).toBe(true);
   });
 
-  it("get_service returns a definition, and errors on unknown id", () => {
-    expect(call("get_service", { id: "vpc" }).data.id).toBe("vpc");
-    const bad = call("get_service", { id: "nope" });
+  it("get_service returns a definition, and errors on unknown id", async () => {
+    expect((await call("get_service", { id: "vpc" })).data.id).toBe("vpc");
+    const bad = await call("get_service", { id: "nope" });
     expect(bad.isError).toBe(true);
   });
 
-  it("validate_architecture flags an issue and counts levels", () => {
-    const { data } = call("validate_architecture", {
+  it("validate_architecture flags an issue and counts levels", async () => {
+    const { data } = await call("validate_architecture", {
       graph: {
         resources: [
           { id: "sn", serviceId: "subnet-public", name: "sn", config: {}, source: "manual" },
@@ -89,8 +94,8 @@ describe("MCP server — tools", () => {
     ).toBe(true);
   });
 
-  it("estimate_cost totals a graph", () => {
-    const { data } = call("estimate_cost", {
+  it("estimate_cost totals a graph", async () => {
+    const { data } = await call("estimate_cost", {
       graph: {
         resources: [{ id: "n", serviceId: "nat-gateway", name: "n", config: {}, source: "manual" }],
       },
@@ -99,16 +104,16 @@ describe("MCP server — tools", () => {
     expect(data.currency).toMatch(/USD/);
   });
 
-  it("import_iac parses CloudFormation", () => {
-    const { data } = call("import_iac", {
+  it("import_iac parses CloudFormation", async () => {
+    const { data } = await call("import_iac", {
       content: JSON.stringify({ Resources: { V: { Type: "AWS::EC2::VPC", Properties: {} } } }),
     });
     expect(data.format).toBe("cloudformation");
     expect(data.resourceCount).toBe(1);
   });
 
-  it("export_iac generates Terraform", () => {
-    const { data } = call("export_iac", {
+  it("export_iac generates Terraform", async () => {
+    const { data } = await call("export_iac", {
       graph: {
         resources: [{ id: "v", serviceId: "vpc", name: "v", config: {}, source: "manual" }],
         relationships: [],
@@ -118,28 +123,33 @@ describe("MCP server — tools", () => {
     expect(data.content).toContain('resource "aws_vpc"');
   });
 
-  it("graph_to_dsl and graph_from_dsl round-trip a graph", () => {
+  it("graph_to_dsl and graph_from_dsl round-trip a graph", async () => {
     const graph = {
       resources: [{ id: "v", serviceId: "vpc", name: "v", config: {}, source: "manual" }],
       relationships: [],
     };
-    const { data: out } = call("graph_to_dsl", { graph });
+    const { data: out } = await call("graph_to_dsl", { graph });
     expect(typeof out.dsl).toBe("string");
-    const { data: back } = call("graph_from_dsl", { dsl: out.dsl });
+    const { data: back } = await call("graph_from_dsl", { dsl: out.dsl });
     expect(Array.isArray(back.errors)).toBe(true);
     expect(back.graph.resources.some((r: { id: string }) => r.id === "v")).toBe(true);
   });
 
-  it("list_autofixes returns a fixes array", () => {
-    const { data } = call("list_autofixes", {
+  it("list_autofixes returns a fixes array", async () => {
+    const { data } = await call("list_autofixes", {
       graph: { resources: [], relationships: [] },
     });
     expect(typeof data.count).toBe("number");
     expect(Array.isArray(data.fixes)).toBe(true);
   });
 
-  it("map_to_cloud rewrites onto a target provider", () => {
-    const { data } = call("map_to_cloud", {
+  it("connect_repo and import_plan require their inputs", async () => {
+    expect((await call("connect_repo", {})).isError).toBe(true);
+    expect((await call("import_plan", {})).isError).toBe(true);
+  });
+
+  it("map_to_cloud rewrites onto a target provider", async () => {
+    const { data } = await call("map_to_cloud", {
       graph: {
         resources: [{ id: "v", serviceId: "vpc", name: "v", config: {}, source: "manual" }],
         relationships: [],
@@ -150,8 +160,8 @@ describe("MCP server — tools", () => {
     expect(Array.isArray(data.unmapped)).toBe(true);
   });
 
-  it("reports an unknown tool as an error result (not a protocol error)", () => {
-    const res = handleMcpMessage({
+  it("reports an unknown tool as an error result (not a protocol error)", async () => {
+    const res = await handleMcpMessage({
       jsonrpc: "2.0",
       id: 9,
       method: "tools/call",

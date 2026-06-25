@@ -18,7 +18,21 @@ import { listGcpDiscoverableTypes, parseGcpExport } from "../../gcp/discovery";
 import { listAzureDiscoverableTypes, parseAzureExport } from "../../azure/discovery";
 import { mapDiscoveredToGraph, unmappedTypes, type DiscoveredResource } from "../../aws/mcp";
 import type { CloudProvider } from "../../aws/types";
-import { runDiscovery, runGcpDiscovery, runAzureDiscovery } from "../../lib/api";
+import {
+  runDiscovery,
+  runGcpDiscovery,
+  runAzureDiscovery,
+  detectRepoRoots,
+  connectRepo,
+  runPlan,
+  listSnapshots as listStoreSnapshots,
+  saveSnapshot as saveStoreSnapshot,
+  loadSnapshot as loadStoreSnapshot,
+  type RepoRoot,
+  type RepoRootReport,
+  type SnapshotMeta as StoreSnapshotMeta,
+} from "../../lib/api";
+import type { PlanDiff } from "../../aws/planDiff";
 import { EXAMPLES } from "../../examples";
 import { CostComingSoon } from "../../components/ComingSoon";
 import { useDialogA11y } from "../../components/useDialogA11y";
@@ -439,6 +453,7 @@ function TopBar() {
     openStartHub,
     openExportIaC,
     openConnect,
+    openCompanion,
     graphName,
     renameGraph,
     openTour,
@@ -530,6 +545,12 @@ function TopBar() {
             title="Discover live AWS, GCP or Azure resources, or paste an export"
           >
             Connect to cloud…
+          </MenuItem>
+          <MenuItem
+            onClick={openCompanion}
+            title="Map a local Terraform / OpenTofu repo and visualize a plan diff"
+          >
+            Terraform companion…
           </MenuItem>
           <MenuItem onClick={importJSONDialog}>Import JSON…</MenuItem>
           <MenuItem
@@ -1562,6 +1583,446 @@ const PROVIDER_ORDER: CloudProvider[] = ["aws", "gcp", "azure"];
 const STRATA_HOSTED =
   process.env.NEXT_PUBLIC_STRATA_HOSTED === "1" || process.env.NEXT_PUBLIC_STRATA_HOSTED === "true";
 
+/**
+ * Terraform/OpenTofu companion: map a local repo to a layered diagram, and
+ * visualize a `plan` as a change overlay. Local-only (server reads the
+ * filesystem + may run terraform); disabled on hosted deployments. Snapshots
+ * persist to the storage folder (also local-only).
+ */
+function CompanionDialog() {
+  const flow = useFlow();
+  const { companionOpen, closeCompanion, importDiscoveredGraph } = flow;
+
+  const [path, setPath] = React.useState("");
+  const [roots, setRoots] = React.useState<RepoRoot[]>([]);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [strategy, setStrategy] = React.useState<"auto" | "static" | "resolved">("auto");
+  const [phase, setPhase] = React.useState<"setup" | "detecting" | "roots" | "busy">("setup");
+  const [error, setError] = React.useState<string | null>(null);
+  const [report, setReport] = React.useState<RepoRootReport[] | null>(null);
+  const [warnings, setWarnings] = React.useState<string[]>([]);
+  const [planCounts, setPlanCounts] = React.useState<PlanDiff["counts"] | null>(null);
+  const [planText, setPlanText] = React.useState("");
+  const [snapshots, setSnapshots] = React.useState<StoreSnapshotMeta[]>([]);
+  const [watching, setWatching] = React.useState<string | null>(null);
+  const [watchPhase, setWatchPhase] = React.useState<"planning" | "idle">("idle");
+  const [lastUpdated, setLastUpdated] = React.useState<string>("");
+  const esRef = React.useRef<EventSource | null>(null);
+
+  const dialogRef = useDialogA11y<HTMLDivElement>(companionOpen, closeCompanion);
+
+  const stopWatch = React.useCallback(() => {
+    esRef.current?.close();
+    esRef.current = null;
+    setWatching(null);
+    setWatchPhase("idle");
+  }, []);
+
+  const refreshSnapshots = React.useCallback(() => {
+    if (STRATA_HOSTED) return;
+    listStoreSnapshots()
+      .then(setSnapshots)
+      .catch(() => setSnapshots([]));
+  }, []);
+
+  React.useEffect(() => {
+    if (companionOpen) {
+      setPhase("setup");
+      setError(null);
+      setReport(null);
+      setWarnings([]);
+      setPlanCounts(null);
+      refreshSnapshots();
+    }
+  }, [companionOpen, refreshSnapshots]);
+
+  // Tear the live watch down whenever the dialog closes or unmounts.
+  React.useEffect(() => {
+    if (!companionOpen) stopWatch();
+    return stopWatch;
+  }, [companionOpen, stopWatch]);
+
+  if (!companionOpen) return null;
+
+  const firstSelected = [...selected][0];
+
+  const detect = async () => {
+    setError(null);
+    setPhase("detecting");
+    try {
+      const found = await detectRepoRoots(path.trim());
+      if (found.length === 0) {
+        setError("No Terraform root modules found under that path.");
+        setPhase("setup");
+        return;
+      }
+      setRoots(found);
+      setSelected(new Set(found.map((r) => r.name)));
+      setPhase("roots");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not read that repository.");
+      setPhase("setup");
+    }
+  };
+
+  const toggleRoot = (name: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+
+  // Apply a graph to the canvas; for a plan, also drive the change overlay.
+  // `live` (watch ticks) skips the unsaved-work prompt and status-bar spam.
+  const apply = async (
+    graph: Parameters<typeof importDiscoveredGraph>[0],
+    diff?: PlanDiff,
+    live = false,
+  ) => {
+    await importDiscoveredGraph(graph, "replace", live ? { confirm: false, silent: true } : {});
+    if (diff) {
+      flow.setPlanChanges(diff.changes);
+      flow.setActiveOverlay("plan");
+      setPlanCounts(diff.counts);
+    } else {
+      flow.setPlanChanges({});
+      flow.setActiveOverlay("none");
+    }
+  };
+
+  // Live watch: subscribe to the SSE stream and re-apply on every re-plan.
+  const startWatch = () => {
+    if (!firstSelected) return;
+    stopWatch();
+    setError(null);
+    const qs = new URLSearchParams({ repoPath: path.trim(), root: firstSelected });
+    const es = new EventSource(`/api/plan/watch?${qs.toString()}`);
+    esRef.current = es;
+    setWatching(firstSelected);
+    es.addEventListener("status", (e) => {
+      try {
+        setWatchPhase(JSON.parse((e as MessageEvent).data).phase);
+      } catch {
+        /* ignore */
+      }
+    });
+    es.addEventListener("plan", (e) => {
+      try {
+        const r = JSON.parse((e as MessageEvent).data) as { graph: unknown; diff: PlanDiff };
+        void apply(r.graph as never, r.diff, true);
+        setPlanCounts(r.diff.counts);
+        setLastUpdated(new Date().toLocaleTimeString());
+      } catch {
+        /* ignore malformed frame */
+      }
+    });
+    es.addEventListener("error", (e) => {
+      const data = (e as MessageEvent).data;
+      if (data) {
+        try {
+          setError(JSON.parse(data).message);
+        } catch {
+          /* ignore */
+        }
+      }
+      // A transport-level error (no data) just means the stream dropped; stop.
+      if (!data) stopWatch();
+    });
+  };
+
+  const doConnect = async () => {
+    setError(null);
+    setPhase("busy");
+    try {
+      const all = selected.size === roots.length;
+      const r = await connectRepo({
+        path: path.trim(),
+        roots: all ? undefined : [...selected],
+        strategy,
+      });
+      setReport(r.roots);
+      setWarnings(r.warnings);
+      await apply(r.graph);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to map the repository.");
+    } finally {
+      setPhase("roots");
+    }
+  };
+
+  const doPlanRun = async () => {
+    if (!firstSelected) return;
+    setError(null);
+    setPhase("busy");
+    try {
+      const r = await runPlan({ repoPath: path.trim(), root: firstSelected });
+      setWarnings(r.warnings);
+      await apply(r.graph, r.diff);
+      closeCompanion();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Plan failed.");
+    } finally {
+      setPhase("roots");
+    }
+  };
+
+  const doPlanPaste = async () => {
+    setError(null);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(planText);
+    } catch {
+      setError("That isn't valid JSON. Paste the output of `terraform show -json <planfile>`.");
+      return;
+    }
+    setPhase("busy");
+    try {
+      const r = await runPlan({ planJson: parsed });
+      setWarnings(r.warnings);
+      await apply(r.graph, r.diff);
+      closeCompanion();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not read that plan JSON.");
+      setPhase(roots.length ? "roots" : "setup");
+    }
+  };
+
+  const saveCurrent = async () => {
+    try {
+      await saveStoreSnapshot({
+        name: flow.graphName || "diagram",
+        graph: flow.snapshotGraph(),
+        diff: planCounts ? { changes: flow.planChanges, counts: planCounts } : undefined,
+        repo: path.trim() || undefined,
+      });
+      refreshSnapshots();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save snapshot.");
+    }
+  };
+
+  const loadSnap = async (id: string) => {
+    try {
+      const snap = await loadStoreSnapshot(id);
+      await apply(snap.graph, snap.diff);
+      closeCompanion();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load snapshot.");
+    }
+  };
+
+  const busy = phase === "busy" || phase === "detecting";
+
+  return (
+    <div className="hub-backdrop" onMouseDown={closeCompanion}>
+      <div
+        className="connect"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Terraform companion"
+        ref={dialogRef}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="hub-header">
+          <h2 className="hub-title">Terraform / OpenTofu companion</h2>
+          <button className="hub-close" onClick={closeCompanion} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        {STRATA_HOSTED ? (
+          <p className="connect-note">
+            The companion reads the local filesystem and runs Terraform, so it&rsquo;s available
+            only on a local deployment — not on this hosted instance.
+          </p>
+        ) : (
+          <>
+            <p className="connect-note">
+              Map a local Terraform / OpenTofu repo into a diagram, and visualize a{" "}
+              <code>plan</code> as a change overlay. No cloud credentials are used to connect; the
+              repo is never modified.
+            </p>
+
+            <label className="connect-field">
+              <span>Repository path</span>
+              <input
+                type="text"
+                value={path}
+                placeholder="/Users/you/code/my-infrastructure"
+                onChange={(e) => setPath(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && path.trim() && phase === "setup") detect();
+                }}
+              />
+            </label>
+
+            {phase !== "setup" && phase !== "detecting" && roots.length > 0 && (
+              <>
+                <div className="connect-rootlist">
+                  <div className="connect-rootlist-head">
+                    Roots ({selected.size}/{roots.length} selected)
+                  </div>
+                  {roots.map((r) => (
+                    <label key={r.name} className="connect-root">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.name)}
+                        onChange={() => toggleRoot(r.name)}
+                      />
+                      <span className="connect-root-name">{r.name}</span>
+                      <span className="connect-root-dir">{r.dir}</span>
+                    </label>
+                  ))}
+                </div>
+                <label className="connect-field">
+                  <span>Connect fidelity</span>
+                  <select
+                    value={strategy}
+                    onChange={(e) => setStrategy(e.target.value as typeof strategy)}
+                  >
+                    <option value="auto">
+                      Auto — resolve with terraform if available, else static
+                    </option>
+                    <option value="static">Static only — fast, offline, no terraform</option>
+                    <option value="resolved">Resolved only — requires terraform/tofu</option>
+                  </select>
+                </label>
+              </>
+            )}
+
+            {report && (
+              <div className="connect-report">
+                {report.map((r) => (
+                  <div key={r.name} className="connect-report-row">
+                    <span className="connect-root-name">{r.name}</span>
+                    <span className={`connect-badge connect-badge-${r.strategy}`}>
+                      {r.strategy}
+                    </span>
+                    <span className="connect-root-dir">{r.resourceCount} resource(s)</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {planCounts && (
+              <div className="plan-legend">
+                <span className="plan-chip plan-create">+{planCounts.create} create</span>
+                <span className="plan-chip plan-update">~{planCounts.update} update</span>
+                <span className="plan-chip plan-replace">±{planCounts.replace} replace</span>
+                <span className="plan-chip plan-delete">−{planCounts.delete} delete</span>
+              </div>
+            )}
+
+            {warnings.length > 0 && (
+              <ul className="connect-warnings">
+                {warnings.slice(0, 6).map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            )}
+
+            {error && <p className="connect-error">{error}</p>}
+
+            <div className="connect-actions">
+              {phase === "setup" || phase === "detecting" ? (
+                <button className="btn-start" disabled={!path.trim() || busy} onClick={detect}>
+                  {phase === "detecting" ? "Detecting…" : "Detect roots"}
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => setPhase("setup")} disabled={busy}>
+                    Back
+                  </button>
+                  <button disabled={selected.size === 0 || busy} onClick={doConnect}>
+                    {phase === "busy" ? "Working…" : `Connect ${selected.size} root(s)`}
+                  </button>
+                  <button
+                    className="btn-start"
+                    disabled={!firstSelected || busy}
+                    onClick={doPlanRun}
+                    title="Run terraform plan in your repo (uses your backend + credentials)"
+                  >
+                    {`Plan ${firstSelected ?? ""}`.trim()}
+                  </button>
+                  {watching ? (
+                    <button onClick={stopWatch} title="Stop watching for changes">
+                      ⏹ Stop watch
+                    </button>
+                  ) : (
+                    <button
+                      disabled={!firstSelected || busy}
+                      onClick={startWatch}
+                      title="Re-run plan automatically when .tf files change (live)"
+                    >
+                      ⟳ Watch
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+
+            {watching && (
+              <p className="companion-watching">
+                <span className={`watch-dot ${watchPhase === "planning" ? "planning" : ""}`} />
+                {watchPhase === "planning"
+                  ? `Re-planning ${watching}…`
+                  : `Watching ${watching}${lastUpdated ? ` · updated ${lastUpdated}` : ""}`}
+              </p>
+            )}
+
+            <details className="companion-advanced">
+              <summary>Visualize a plan JSON (no credentials)</summary>
+              <p className="connect-note">
+                Paste the output of <code>terraform show -json &lt;planfile&gt;</code> to overlay
+                the changes without Strata running terraform.
+              </p>
+              <textarea
+                className="companion-plan-text"
+                value={planText}
+                placeholder='{ "resource_changes": [ … ] }'
+                onChange={(e) => setPlanText(e.target.value)}
+              />
+              <div className="connect-actions">
+                <button
+                  className="btn-start"
+                  disabled={!planText.trim() || busy}
+                  onClick={doPlanPaste}
+                >
+                  Visualize plan JSON
+                </button>
+              </div>
+            </details>
+
+            {snapshots.length > 0 && (
+              <div className="companion-snapshots">
+                <div className="connect-rootlist-head">Saved snapshots ({snapshots.length})</div>
+                {snapshots.slice(0, 8).map((s) => (
+                  <button key={s.id} className="companion-snap" onClick={() => loadSnap(s.id)}>
+                    <span className="connect-root-name">{s.name}</span>
+                    {s.hasDiff && (
+                      <span className="connect-badge connect-badge-resolved">plan</span>
+                    )}
+                    <span className="connect-root-dir">
+                      {s.resourceCount} res · {new Date(s.createdAt).toLocaleString()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="connect-actions">
+              <button onClick={saveCurrent} disabled={busy}>
+                Save current to storage folder
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** "Connect to AWS" discovery sub-flow: source → scope → discover → review →
  *  import. Live scans run server-side via /api/discover; on a hosted deployment
  *  the user brings their own credentials (sent per-request, never stored). The
@@ -2077,6 +2538,7 @@ function Workspace() {
       <VersionsDialog />
       <MergePreviewDialog />
       <ConnectDialog />
+      <CompanionDialog />
       <ReplaceConfirmDialog />
       {presentation && (
         <button className="present-exit" onClick={() => setPresentation(false)}>

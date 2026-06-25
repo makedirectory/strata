@@ -54,9 +54,11 @@ import {
   overlayLitFor,
   heatByDegree,
   heatColor,
+  planTintMap,
   type OverlayKind,
   type OverlayLit,
 } from "../aws/overlays";
+import type { ChangeKind } from "../aws/planDiff";
 import type { ServiceCategoryId } from "../aws/types";
 import { reviewAccount, type AccountReview } from "../aws/review";
 import { mapToCloud, type CloudMapResult } from "../aws/cloudMap";
@@ -204,6 +206,9 @@ interface FlowContextValue {
   /** Active tag key for the "tags" tint overlay (null = none). */
   tagTintKey: string | null;
   setTagTintKey: (key: string | null) => void;
+  /** Latest terraform plan diff (resource id → change kind), drives "plan" overlay. */
+  planChanges: Record<string, ChangeKind>;
+  setPlanChanges: (changes: Record<string, ChangeKind>) => void;
   toggleCategory: (id: ServiceCategoryId) => void;
   toggleRelClass: (id: RelationshipClass) => void;
   setFilterMode: (m: "dim" | "hide") => void;
@@ -290,6 +295,10 @@ interface FlowContextValue {
   exportIaCOpen: boolean;
   openExportIaC: () => void;
   closeExportIaC: () => void;
+  /** Whether the Terraform/OpenTofu companion (connect repo / plan) dialog is open. */
+  companionOpen: boolean;
+  openCompanion: () => void;
+  closeCompanion: () => void;
   /** Build the current model as an InfrastructureGraph (for the export dialog). */
   snapshotGraph: () => InfrastructureGraph;
 
@@ -298,8 +307,14 @@ interface FlowContextValue {
   connectOpen: boolean;
   openConnect: () => void;
   closeConnect: () => void;
-  /** Apply a discovered graph: "merge" stages a preview, "replace" is guarded. */
-  importDiscoveredGraph: (graph: InfrastructureGraph, mode: "merge" | "replace") => void;
+  /** Apply a discovered graph: "merge" stages a preview, "replace" is guarded.
+   *  `opts.confirm: false` skips the unsaved-work guard; `opts.silent` stays quiet
+   *  in the status bar (both used by the live `watch` updates). */
+  importDiscoveredGraph: (
+    graph: InfrastructureGraph,
+    mode: "merge" | "replace",
+    opts?: { confirm?: boolean; silent?: boolean },
+  ) => void;
   /** Merge preview: the diff of the staged graph vs the current diagram (or null). */
   mergePreview: DriftResult | null;
   /** Apply / discard the staged merge after reviewing the preview. */
@@ -467,6 +482,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const openExportIaC = useCallback(() => setExportIaCOpen(true), []);
   const closeExportIaC = useCallback(() => setExportIaCOpen(false), []);
 
+  const [companionOpen, setCompanionOpen] = React.useState(false);
+  const openCompanion = useCallback(() => setCompanionOpen(true), []);
+  const closeCompanion = useCallback(() => setCompanionOpen(false), []);
+
   const [connectOpen, setConnectOpen] = React.useState(false);
   const openConnect = useCallback(() => setConnectOpen(true), []);
   const closeConnect = useCallback(() => setConnectOpen(false), []);
@@ -494,9 +513,15 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /** Apply a graph built from discovered resources. "merge" preserves current
    *  work; "replace" goes through the unsaved-work guard. */
   const importDiscoveredGraph = useCallback(
-    async (graph: InfrastructureGraph, mode: "merge" | "replace") => {
+    async (
+      graph: InfrastructureGraph,
+      mode: "merge" | "replace",
+      opts: { confirm?: boolean; silent?: boolean } = {},
+    ) => {
       if (mode === "replace") {
-        if (!(await confirmReplaceIfDirty())) return;
+        // Live updates (e.g. `strata watch`) opt out of the dirty-confirm so a
+        // file change doesn't prompt on every tick, and stay quiet in the status bar.
+        if (opts.confirm !== false && !(await confirmReplaceIfDirty())) return;
         storeReplaceAll({
           resources: graph.resources,
           relationships: graph.relationships,
@@ -506,7 +531,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
           graphId: "",
         });
         setConnectOpen(false);
-        setStatus(`Imported ${graph.resources.length} discovered resource(s) (replace).`);
+        if (!opts.silent)
+          setStatus(`Imported ${graph.resources.length} discovered resource(s) (replace).`);
       } else {
         // Don't apply yet — stage the graph so the user can review a preview of
         // what merging will change (the diff is derived in `mergePreview`).
@@ -800,12 +826,18 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     getViewport,
   ]);
 
-  // Categorical tag-tint map for the "tags" overlay; null when inactive so the
-  // separate renderer channel stays inert.
+  // Categorical per-node tint map. Drives the "tags" overlay and, reusing the
+  // same renderer channel, the "plan" overlay (resource → change colour). Null
+  // when neither is active so the channel stays inert.
   const tagTint = React.useMemo<ReadonlyMap<string, string> | null>(() => {
-    if (store.activeOverlay !== "tags" || !store.tagTintKey) return null;
-    return tagTintMap(buildGraph(), store.tagTintKey);
-  }, [store.activeOverlay, store.tagTintKey, buildGraph]);
+    if (store.activeOverlay === "tags" && store.tagTintKey)
+      return tagTintMap(buildGraph(), store.tagTintKey);
+    if (store.activeOverlay === "plan") {
+      const map = planTintMap(store.planChanges);
+      return map.size > 0 ? map : null;
+    }
+    return null;
+  }, [store.activeOverlay, store.tagTintKey, store.planChanges, buildGraph]);
 
   // Account review (Explain & Clean) derived from the current graph.
   const review = React.useMemo<AccountReview>(() => reviewAccount(buildGraph()), [buildGraph]);
@@ -2251,6 +2283,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setActiveOverlay: store.setActiveOverlay,
       tagTintKey: store.tagTintKey,
       setTagTintKey: store.setTagTintKey,
+      planChanges: store.planChanges,
+      setPlanChanges: store.setPlanChanges,
       toggleCategory: store.toggleCategory,
       toggleRelClass: store.toggleRelClass,
       setFilterMode: store.setFilterMode,
@@ -2310,6 +2344,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       exportIaCOpen,
       openExportIaC,
       closeExportIaC,
+      companionOpen,
+      openCompanion,
+      closeCompanion,
       snapshotGraph: buildGraph,
       connectOpen,
       openConnect,
@@ -2395,6 +2432,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       store.setActiveOverlay,
       store.tagTintKey,
       store.setTagTintKey,
+      store.planChanges,
+      store.setPlanChanges,
       store.toggleCategory,
       store.toggleRelClass,
       store.setFilterMode,
@@ -2450,6 +2489,9 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       exportIaCOpen,
       openExportIaC,
       closeExportIaC,
+      companionOpen,
+      openCompanion,
+      closeCompanion,
       buildGraph,
       connectOpen,
       openConnect,
