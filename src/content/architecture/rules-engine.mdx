@@ -133,6 +133,20 @@ the Inspector for the user to read and apply by hand.
 
 ## How results surface
 
+Both functions take the built graph and return structured data; the flow store
+fans the findings out to the Inspector list and to on-canvas node badges:
+
+```mermaid
+flowchart TB
+  ig["InfrastructureGraph<br/>(built from the canvas)"] --> va["validateArchitecture(graph)"]
+  ig --> sr["suggestRules(graph)"]
+  va --> res["ValidationResult[]<br/>level · message · resourceId"]
+  sr --> sug["RuleSuggestion[]<br/>scope · type · rules"]
+  res --> insp["Inspector<br/>colour-coded level badges"]
+  res --> canvas["Canvas<br/>findings-overlay badges<br/>on the offending node"]
+  sug --> insp
+```
+
 The engine is invoked from the flow store and rendered by the Inspector:
 
 1. `useFlowStore`/`useFlow` (`src/hooks/useFlow.tsx`) expose `runValidate` and

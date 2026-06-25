@@ -15,6 +15,44 @@ Strata exists to make cloud infrastructure **legible**: to turn a sprawling
 account (or many accounts) into a navigable, typed diagram that a human can read,
 reason about, and edit.
 
+## System at a glance
+
+Everything radiates from the registry: the indexes feed the domain model, the pure
+analysis engines, and the two surfaces (the canvas UI and the MCP server). Nothing
+about a service is hardcoded downstream.
+
+```mermaid
+flowchart TB
+  subgraph reg["Service registry — single source of truth"]
+    cat["Per-provider catalogs<br/>aws · gcp · azure services"]
+    idx["registry.ts<br/>SERVICE_INDEX · NATIVE_INDEX"]
+    cat --> idx
+  end
+
+  model["Domain model<br/>InfrastructureGraph"]
+
+  subgraph engines["Pure analysis engines (no DOM · no I/O)"]
+    rules["rules.ts<br/>validation"]
+    drift["drift.ts<br/>cost.ts"]
+    iac["iac.ts · iacExport.ts<br/>IaC import / export"]
+    disc["mcp.ts<br/>discovery transform"]
+  end
+
+  subgraph surfaces["Surfaces"]
+    ui["Canvas UI<br/>palette · inspector"]
+    mcpsrv["MCP server<br/>src/mcp/server.ts"]
+  end
+
+  store["Browser localStorage<br/>localStore.ts"]
+
+  idx --> model
+  idx --> engines
+  model --> engines
+  engines --> ui
+  engines --> mcpsrv
+  ui <--> store
+```
+
 ## Two design goals drive everything
 
 1. **Model the broad multi-cloud service network, not a handful of icons.** The
