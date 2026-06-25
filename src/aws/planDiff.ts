@@ -25,10 +25,6 @@ export interface PlanDiff {
   counts: Record<ChangeKind, number>;
 }
 
-/** Object keys that could pollute a prototype if written from untrusted input. */
-const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
-const isSafeKey = (k: string): boolean => !UNSAFE_KEYS.has(k);
-
 const EMPTY_COUNTS = (): Record<ChangeKind, number> => ({
   create: 0,
   update: 0,
@@ -55,7 +51,8 @@ export function actionsToKind(actions: readonly unknown[]): ChangeKind {
  * yield an empty diff rather than throwing (the graph still renders).
  */
 export function planDiff(tf: unknown): PlanDiff {
-  const changes: Record<string, ChangeKind> = {};
+  // Null-prototype map so a tainted address key can never reach Object.prototype.
+  const changes: Record<string, ChangeKind> = Object.create(null);
   const counts = EMPTY_COUNTS();
   if (!isRecord(tf) || !Array.isArray(tf.resource_changes)) return { changes, counts };
 
@@ -68,8 +65,9 @@ export function planDiff(tf: unknown): PlanDiff {
           ? `${rc.type}.${String(rc.name)}`
           : undefined;
     // Guard the (untrusted, plan-derived) address before using it as a key, so a
-    // crafted plan can't pollute Object.prototype via `__proto__`/`constructor`.
-    if (!address || !isSafeKey(address)) continue;
+    // crafted plan can't pollute a prototype via `__proto__`/`constructor`.
+    if (!address) continue;
+    if (address === "__proto__" || address === "constructor" || address === "prototype") continue;
     const change = isRecord(rc.change) ? rc.change : {};
     const actions = Array.isArray(change.actions) ? change.actions : [];
     const kind = actionsToKind(actions);
@@ -81,17 +79,18 @@ export function planDiff(tf: unknown): PlanDiff {
 
 /** Re-key a diff into a namespace (e.g. per-root layer: `prod::<address>`). */
 export function namespacePlanDiff(diff: PlanDiff, prefix: string): PlanDiff {
-  const changes: Record<string, ChangeKind> = {};
+  const changes: Record<string, ChangeKind> = Object.create(null);
   for (const [addr, kind] of Object.entries(diff.changes)) {
     const key = `${prefix}${addr}`;
-    if (isSafeKey(key)) changes[key] = kind;
+    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+    changes[key] = kind;
   }
   return { changes, counts: diff.counts };
 }
 
 /** Merge several plan diffs into one (counts summed, change maps unioned). */
 export function mergePlanDiffs(diffs: readonly PlanDiff[]): PlanDiff {
-  const changes: Record<string, ChangeKind> = {};
+  const changes: Record<string, ChangeKind> = Object.create(null);
   const counts = EMPTY_COUNTS();
   for (const d of diffs) {
     Object.assign(changes, d.changes);
