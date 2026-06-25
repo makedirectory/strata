@@ -25,6 +25,10 @@ export interface PlanDiff {
   counts: Record<ChangeKind, number>;
 }
 
+/** Object keys that could pollute a prototype if written from untrusted input. */
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const isSafeKey = (k: string): boolean => !UNSAFE_KEYS.has(k);
+
 const EMPTY_COUNTS = (): Record<ChangeKind, number> => ({
   create: 0,
   update: 0,
@@ -63,7 +67,9 @@ export function planDiff(tf: unknown): PlanDiff {
         : typeof rc.type === "string"
           ? `${rc.type}.${String(rc.name)}`
           : undefined;
-    if (!address) continue;
+    // Guard the (untrusted, plan-derived) address before using it as a key, so a
+    // crafted plan can't pollute Object.prototype via `__proto__`/`constructor`.
+    if (!address || !isSafeKey(address)) continue;
     const change = isRecord(rc.change) ? rc.change : {};
     const actions = Array.isArray(change.actions) ? change.actions : [];
     const kind = actionsToKind(actions);
@@ -76,7 +82,10 @@ export function planDiff(tf: unknown): PlanDiff {
 /** Re-key a diff into a namespace (e.g. per-root layer: `prod::<address>`). */
 export function namespacePlanDiff(diff: PlanDiff, prefix: string): PlanDiff {
   const changes: Record<string, ChangeKind> = {};
-  for (const [addr, kind] of Object.entries(diff.changes)) changes[`${prefix}${addr}`] = kind;
+  for (const [addr, kind] of Object.entries(diff.changes)) {
+    const key = `${prefix}${addr}`;
+    if (isSafeKey(key)) changes[key] = kind;
+  }
   return { changes, counts: diff.counts };
 }
 
