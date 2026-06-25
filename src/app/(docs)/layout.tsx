@@ -18,7 +18,7 @@ export const metadata = {
 };
 
 // Open-source project — point this at the public repository.
-const REPO = "https://github.com/koroid/strata";
+const REPO = "https://github.com/makedirectory/strata";
 
 const navbar = <Navbar logo={<b>🔶 Strata</b>} projectLink={REPO} />;
 const footer = <Footer>MIT — Strata · open source</Footer>;
