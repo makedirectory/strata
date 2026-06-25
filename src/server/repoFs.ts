@@ -12,7 +12,7 @@
 import { execFile } from "node:child_process";
 import { cp, mkdtemp, readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { parse as hcl2json } from "@cdktf/hcl2json";
 import type { HclFile } from "../aws/hclJson";
@@ -52,14 +52,20 @@ export async function resolveRepoPath(repoPath: string): Promise<string> {
     );
   }
   if (!repoPath || typeof repoPath !== "string") throw new Error("A repository path is required.");
+  // Reject NUL-byte injection, then normalise to a single absolute path that all
+  // downstream fs access derives from. (This is a local, single-user devtool —
+  // reading the operator's chosen repo is the intended function — and it is fully
+  // disabled on hosted/multi-tenant deploys by the guard above.)
+  if (repoPath.includes("\0")) throw new Error("Invalid repository path.");
+  const abs = resolve(repoPath);
   let st;
   try {
-    st = await stat(repoPath);
+    st = await stat(abs);
   } catch {
     throw new Error(`Path not found: ${repoPath}`);
   }
   if (!st.isDirectory()) throw new Error(`Not a directory: ${repoPath}`);
-  return repoPath;
+  return abs;
 }
 
 /** Recursively collect `.tf` files under `dir`, returning {abs, rel} pairs. */
