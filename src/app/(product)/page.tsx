@@ -1604,8 +1604,19 @@ function CompanionDialog() {
   const [planCounts, setPlanCounts] = React.useState<PlanDiff["counts"] | null>(null);
   const [planText, setPlanText] = React.useState("");
   const [snapshots, setSnapshots] = React.useState<StoreSnapshotMeta[]>([]);
+  const [watching, setWatching] = React.useState<string | null>(null);
+  const [watchPhase, setWatchPhase] = React.useState<"planning" | "idle">("idle");
+  const [lastUpdated, setLastUpdated] = React.useState<string>("");
+  const esRef = React.useRef<EventSource | null>(null);
 
   const dialogRef = useDialogA11y<HTMLDivElement>(companionOpen, closeCompanion);
+
+  const stopWatch = React.useCallback(() => {
+    esRef.current?.close();
+    esRef.current = null;
+    setWatching(null);
+    setWatchPhase("idle");
+  }, []);
 
   const refreshSnapshots = React.useCallback(() => {
     if (STRATA_HOSTED) return;
@@ -1624,6 +1635,12 @@ function CompanionDialog() {
       refreshSnapshots();
     }
   }, [companionOpen, refreshSnapshots]);
+
+  // Tear the live watch down whenever the dialog closes or unmounts.
+  React.useEffect(() => {
+    if (!companionOpen) stopWatch();
+    return stopWatch;
+  }, [companionOpen, stopWatch]);
 
   if (!companionOpen) return null;
 
@@ -1657,8 +1674,13 @@ function CompanionDialog() {
     });
 
   // Apply a graph to the canvas; for a plan, also drive the change overlay.
-  const apply = async (graph: Parameters<typeof importDiscoveredGraph>[0], diff?: PlanDiff) => {
-    await importDiscoveredGraph(graph, "replace");
+  // `live` (watch ticks) skips the unsaved-work prompt and status-bar spam.
+  const apply = async (
+    graph: Parameters<typeof importDiscoveredGraph>[0],
+    diff?: PlanDiff,
+    live = false,
+  ) => {
+    await importDiscoveredGraph(graph, "replace", live ? { confirm: false, silent: true } : {});
     if (diff) {
       flow.setPlanChanges(diff.changes);
       flow.setActiveOverlay("plan");
@@ -1667,6 +1689,46 @@ function CompanionDialog() {
       flow.setPlanChanges({});
       flow.setActiveOverlay("none");
     }
+  };
+
+  // Live watch: subscribe to the SSE stream and re-apply on every re-plan.
+  const startWatch = () => {
+    if (!firstSelected) return;
+    stopWatch();
+    setError(null);
+    const qs = new URLSearchParams({ repoPath: path.trim(), root: firstSelected });
+    const es = new EventSource(`/api/plan/watch?${qs.toString()}`);
+    esRef.current = es;
+    setWatching(firstSelected);
+    es.addEventListener("status", (e) => {
+      try {
+        setWatchPhase(JSON.parse((e as MessageEvent).data).phase);
+      } catch {
+        /* ignore */
+      }
+    });
+    es.addEventListener("plan", (e) => {
+      try {
+        const r = JSON.parse((e as MessageEvent).data) as { graph: unknown; diff: PlanDiff };
+        void apply(r.graph as never, r.diff, true);
+        setPlanCounts(r.diff.counts);
+        setLastUpdated(new Date().toLocaleTimeString());
+      } catch {
+        /* ignore malformed frame */
+      }
+    });
+    es.addEventListener("error", (e) => {
+      const data = (e as MessageEvent).data;
+      if (data) {
+        try {
+          setError(JSON.parse(data).message);
+        } catch {
+          /* ignore */
+        }
+      }
+      // A transport-level error (no data) just means the stream dropped; stop.
+      if (!data) stopWatch();
+    });
   };
 
   const doConnect = async () => {
@@ -1883,9 +1945,31 @@ function CompanionDialog() {
                   >
                     {`Plan ${firstSelected ?? ""}`.trim()}
                   </button>
+                  {watching ? (
+                    <button onClick={stopWatch} title="Stop watching for changes">
+                      ⏹ Stop watch
+                    </button>
+                  ) : (
+                    <button
+                      disabled={!firstSelected || busy}
+                      onClick={startWatch}
+                      title="Re-run plan automatically when .tf files change (live)"
+                    >
+                      ⟳ Watch
+                    </button>
+                  )}
                 </>
               )}
             </div>
+
+            {watching && (
+              <p className="companion-watching">
+                <span className={`watch-dot ${watchPhase === "planning" ? "planning" : ""}`} />
+                {watchPhase === "planning"
+                  ? `Re-planning ${watching}…`
+                  : `Watching ${watching}${lastUpdated ? ` · updated ${lastUpdated}` : ""}`}
+              </p>
+            )}
 
             <details className="companion-advanced">
               <summary>Visualize a plan JSON (no credentials)</summary>

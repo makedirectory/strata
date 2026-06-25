@@ -2484,6 +2484,34 @@ button.drift-item:hover {
 .companion-snap:hover {
   background: #131d36;
 }
+.companion-watching {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 8px 0 12px;
+}
+.watch-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5fd08a;
+  flex: none;
+}
+.watch-dot.planning {
+  background: #e0a85f;
+  animation: watch-pulse 1s ease-in-out infinite;
+}
+@keyframes watch-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
 .connect-actions {
   display: flex;
   gap: 8px;
