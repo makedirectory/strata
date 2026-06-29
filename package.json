@@ -26,7 +26,7 @@
     "strata": "npx -y tsx src/cli/bin.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudcontrol": "^3.1068.0",
+    "@aws-sdk/client-cloudcontrol": "^3.1075.0",
     "@azure/arm-resourcegraph": "^4.2.1",
     "@azure/identity": "^4.13.1",
     "@cdktf/hcl2json": "^0.21.0",
