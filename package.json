@@ -31,7 +31,7 @@
     "@azure/identity": "^4.13.1",
     "@cdktf/hcl2json": "^0.21.0",
     "@google-cloud/asset": "^6.3.3",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^5.2.0",
     "next": "^15.5.19",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
