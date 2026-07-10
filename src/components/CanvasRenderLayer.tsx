@@ -17,8 +17,12 @@ import { buildCanvasScene, paintScene, type SceneNode } from "../canvas/canvasSc
  * visible set, with world rects + depth) and `viewport`. Colour/icon come from
  * the registry; drawing reuses the shared `drawPrimitives`, so what this paints
  * matches the SVG export.
+ *
+ * Flag: `NEXT_PUBLIC_STRATA_CANVAS_RENDERER=1|canvas`. The `webgl|pixi` value
+ * instead selects the PixiJS layer (`PixiRenderLayer`).
  */
-const ENABLED = process.env.NEXT_PUBLIC_STRATA_CANVAS_RENDERER === "1";
+const MODE = process.env.NEXT_PUBLIC_STRATA_CANVAS_RENDERER;
+const ENABLED = MODE === "1" || MODE === "canvas";
 
 export const CanvasRenderLayer: React.FC = () => {
   const { a11yNodes, selectedIds, state } = useFlow();

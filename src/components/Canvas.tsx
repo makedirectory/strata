@@ -5,6 +5,7 @@ import { PALETTE_ADD_EVENT } from "./Palette";
 import { AccessibleNodes } from "./AccessibleNodes";
 import { AnnotationLayer } from "./AnnotationLayer";
 import { CanvasRenderLayer } from "./CanvasRenderLayer";
+import { PixiRenderLayer } from "./PixiRenderLayer";
 import { worldToScreen } from "../canvas/geometry";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
@@ -259,9 +260,11 @@ export const Canvas: React.FC = () => {
         }}
       />
       <div className="overlay" aria-hidden="true" />
-      {/* Mode A canvas draw layer — flag-gated (off by default), read-only over
-          the DOM path; the DOM still owns interaction. */}
+      {/* Mode A draw layers — flag-gated (off by default), read-only over the
+          DOM path; the DOM still owns interaction. Canvas-2D vs PixiJS/WebGL are
+          selected by NEXT_PUBLIC_STRATA_CANVAS_RENDERER; each self-gates. */}
       <CanvasRenderLayer />
+      <PixiRenderLayer />
       <AnnotationLayer />
       {(guides.length > 0 || marquee) && (
         <svg
