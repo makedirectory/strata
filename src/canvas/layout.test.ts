@@ -9,6 +9,11 @@ import {
   DEFAULT_LEAF_H,
 } from "./layout";
 import type { ResourceInstance } from "../aws/model";
+import type { Rect } from "./geometry";
+
+/** Axis-aligned rectangle overlap (touching edges do not count as overlap). */
+const overlaps = (a: Rect, b: Rect): boolean =>
+  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 function res(id: string, over: Partial<ResourceInstance> = {}, x = 0, y = 0): ResourceInstance {
   return {
@@ -190,5 +195,39 @@ describe("computeLayout", () => {
     const compact = computeLayout([res("a")], { isContainer, density: "compact" });
     expect(comfy.rects.get("a")!.h).toBe(DEFAULT_LEAF_H);
     expect(compact.rects.get("a")!.h).toBe(COMPACT_LEAF_H);
+  });
+
+  it("grid-packs multiple position-less roots instead of stacking at (0,0)", () => {
+    // Three roots with NO stored position (e.g. freshly merged graphs).
+    const roots = ["a", "b", "c"].map((id) => res(id, { position: undefined }));
+    const { rects } = computeLayout(roots, { isContainer });
+    const ra = rects.get("a")!;
+    const rb = rects.get("b")!;
+    const rc = rects.get("c")!;
+    for (const r of [ra, rb, rc]) expect(r).toBeDefined();
+    // No two roots overlap (they'd all be at (0,0) without the grid).
+    expect(overlaps(ra, rb)).toBe(false);
+    expect(overlaps(ra, rc)).toBe(false);
+    expect(overlaps(rb, rc)).toBe(false);
+    // At least one root is off the origin — proof they were spread out.
+    expect([ra, rb, rc].some((r) => r.x !== 0 || r.y !== 0)).toBe(true);
+  });
+
+  it("honors positioned roots and packs position-less ones clear of them", () => {
+    const fixed = res("fixed", {}, 100, 120); // carries a stored position
+    const p1 = res("p1", { position: undefined });
+    const p2 = res("p2", { position: undefined });
+    const { rects } = computeLayout([fixed, p1, p2], { isContainer });
+    // The positioned root keeps its exact coordinates.
+    expect(rects.get("fixed")).toEqual({ x: 100, y: 120, w: 240, h: 100 });
+    // The packed roots don't overlap the positioned root or each other.
+    const rf = rects.get("fixed")!;
+    const r1 = rects.get("p1")!;
+    const r2 = rects.get("p2")!;
+    expect(overlaps(rf, r1)).toBe(false);
+    expect(overlaps(rf, r2)).toBe(false);
+    expect(overlaps(r1, r2)).toBe(false);
+    // The grid is anchored below the positioned root (clear of it).
+    expect(r1.y).toBeGreaterThanOrEqual(rf.y + rf.h);
   });
 });
