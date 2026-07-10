@@ -9,6 +9,7 @@ const meta = {
   validation: "Validation & Rules",
   drift: "Drift Detection",
   cost: "Estimated Cost",
+  "multi-account-cost": "Multi-Account Cost Model",
   saving: "Saving & Loading",
   shortcuts: "Keyboard & Commands",
   troubleshooting: "Troubleshooting",

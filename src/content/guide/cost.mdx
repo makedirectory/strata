@@ -31,9 +31,27 @@ Structural, free resources (VPC, subnet, route table, security group, …) count
 **$0**. Services Strata can't price yet show **—** and don't contribute to the
 total.
 
-> The estimate intentionally ignores data transfer, request volume, commitment
-> discounts (Reserved/Savings Plans), and regional price differences. Treat it as
-> a way to compare designs and find cost hotspots — **not** as a quote.
+## The total is a floor, not a bill
+
+Unpriced resources fall into two classes, and Strata keeps them honest:
+
+- **Free / control-plane** services (IAM, ACM, CloudFormation, Organizations, …)
+  legitimately cost ~$0 and don't affect the total.
+- **Billable-but-unmapped** services are real spend Strata can't price yet. When
+  any are present, the total is marked as a **FLOOR** (a lower bound) and the
+  unmapped types are listed — so a redundant serverless minimum repeated across
+  many accounts can never masquerade as **$0**.
+
+The MCP `estimate_cost` tool and the `strata cost` CLI both surface the floor
+flag and the unmapped types explicitly. See
+[Multi-Account Cost Model](/docs/guide/multi-account-cost) for the offline,
+all-environments workflow.
+
+> By default the estimate ignores data transfer, request volume, commitment
+> discounts, and regional price differences. The `estimate_cost` tool and
+> `strata cost` accept **assumptions** — `regionMultiplier`, `hoursPerMonth`, and
+> `discountPct` (Savings Plan / RI) — to bring the figure closer to a real bill.
+> Treat it as a way to compare designs and find cost hotspots — **not** a quote.
 
 ## Deeper cost optimization
 
