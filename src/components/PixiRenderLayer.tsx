@@ -3,14 +3,19 @@ import React, { useEffect, useRef, useState } from "react";
 import type { Application, Container as PixiContainer, Graphics, Sprite, Texture } from "pixi.js";
 import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { serviceColor, serviceIcon } from "../aws/registry";
-import { lodTier } from "../canvas/geometry";
+import { lodTier, screenToWorld } from "../canvas/geometry";
 import { rectCenter, edgeAnchor } from "../canvas/drawPrimitives";
+import { hitTest, type HitNode } from "../canvas/hitTest";
+import type { A11yNode } from "../hooks/useFlow";
+import type { Viewport } from "../aws/model";
 
 /**
  * Mode A — WebGL renderer via PixiJS (renderer-scale spec, the "kick it up a
  * level" path). Gated behind `NEXT_PUBLIC_STRATA_CANVAS_RENDERER=webgl` (or
- * `pixi`); off by default → zero regression. Read-only over the DOM path, which
- * still owns all interaction.
+ * `pixi`); off by default → zero regression. Stage 2 gives it its OWN pointer
+ * interaction (click-select, hover, empty-space pan, drag-to-move roots); zoom
+ * rides the shared canvas-wrap wheel listener. Marquee/connect/reparent and the
+ * rich node chrome (pills, badges, summaries) are later stages.
  *
  * The performance model is a game engine's: build the node/edge display objects
  * ONCE into a retained scene graph, then **move the camera, not the objects**.
@@ -39,8 +44,8 @@ const LABEL_FONT = "strata-label";
 let bitmapFontInstalled = false;
 
 export const PixiRenderLayer: React.FC = () => {
-  const { a11yNodes, selectedIds, state } = useFlow();
-  const { viewport } = useFlowCanvas();
+  const { a11yNodes, selectedIds, state, selectNode } = useFlow();
+  const { viewport, setViewport, moveResource } = useFlowCanvas();
   const hostRef = useRef<HTMLDivElement>(null);
 
   // Pixi runtime handles (kept in refs; typed via type-only imports).
@@ -56,7 +61,19 @@ export const PixiRenderLayer: React.FC = () => {
   // Emoji → shared Texture cache, so N nodes with the same icon batch into one
   // draw (rasterise each unique glyph once, reuse across the whole scene).
   const iconTexRef = useRef<Map<string, Texture>>(new Map());
+  // id → node Container, so a live drag can move one node without a full rebuild.
+  const nodesByIdRef = useRef<Map<string, PixiContainer>>(new Map());
   const [ready, setReady] = useState(false);
+
+  // Always-current inputs for the (once-installed) pointer handlers.
+  const a11yNodesRef = useRef<A11yNode[]>(a11yNodes);
+  a11yNodesRef.current = a11yNodes;
+  const selectNodeRef = useRef(selectNode);
+  selectNodeRef.current = selectNode;
+  const setViewportRef = useRef(setViewport);
+  setViewportRef.current = setViewport;
+  const moveResourceRef = useRef(moveResource);
+  moveResourceRef.current = moveResource;
 
   // Always-current transient state, read by the rebuild without becoming a dep —
   // so a rebuild only ever fires on a STRUCTURAL change (nodes/edges), never on
@@ -144,6 +161,7 @@ export const PixiRenderLayer: React.FC = () => {
     for (const c of edgeLayer.removeChildren()) c.destroy({ children: true });
     ringsRef.current.clear();
     labelsRef.current = [];
+    nodesByIdRef.current.clear();
 
     // Edges: one Graphics for all wires, clipped to node borders (shared geom).
     const rectById = new Map(a11yNodes.map((n) => [n.id, n]));
@@ -232,6 +250,7 @@ export const PixiRenderLayer: React.FC = () => {
       node.addChild(ring);
 
       nodeLayer.addChild(node);
+      nodesByIdRef.current.set(n.id, node);
     }
     lastTierRef.current = tierNow;
   }, [ready, a11yNodes, state.relationships]);
@@ -242,6 +261,108 @@ export const PixiRenderLayer: React.FC = () => {
     const selected = new Set(selectedIds);
     for (const [id, ring] of ringsRef.current) ring.visible = selected.has(id);
   }, [ready, selectedIds]);
+
+  // ---- interaction (Stage 2): hit-test select, hover, drag-move, pan ----
+  // The WebGL layer OWNS pointer input (the DOM path is off in this mode). Zoom
+  // rides the existing canvas-wrap wheel listener via bubbling; here we handle
+  // click-select, hover cursor, empty-space pan, and drag-to-move for root nodes
+  // (nested children are laid out by the engine, so they select but don't drag).
+  useEffect(() => {
+    if (!ENABLED || !ready) return;
+    const host = hostRef.current;
+    if (!host) return;
+
+    const hitNodes = (): HitNode[] =>
+      a11yNodesRef.current.map((n) => ({
+        id: n.id,
+        rect: { x: n.x, y: n.y, w: n.w, h: n.h },
+        depth: n.depth,
+      }));
+    const toWorld = (e: PointerEvent) => {
+      const rect = host.getBoundingClientRect();
+      return screenToWorld(
+        { x: e.clientX - rect.left, y: e.clientY - rect.top },
+        viewportRef.current,
+      );
+    };
+
+    let mode: "none" | "pan" | "drag" = "none";
+    let dragId: string | null = null;
+    let grabDX = 0;
+    let grabDY = 0;
+    let panVp: Viewport = viewportRef.current;
+    let panSX = 0;
+    let panSY = 0;
+    let lastDrag: { id: string; x: number; y: number } | null = null;
+    let moved = false;
+
+    const onDown = (e: PointerEvent) => {
+      host.setPointerCapture(e.pointerId);
+      moved = false;
+      const w = toWorld(e);
+      const id = hitTest(hitNodes(), w.x, w.y);
+      if (id) {
+        selectNodeRef.current(id);
+        const n = a11yNodesRef.current.find((x) => x.id === id);
+        if (n && n.depth === 0) {
+          mode = "drag";
+          dragId = id;
+          grabDX = w.x - n.x;
+          grabDY = w.y - n.y;
+        } else {
+          mode = "none";
+        }
+      } else {
+        mode = "pan";
+        panVp = { ...viewportRef.current };
+        const rect = host.getBoundingClientRect();
+        panSX = e.clientX - rect.left;
+        panSY = e.clientY - rect.top;
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      const rect = host.getBoundingClientRect();
+      if (mode === "pan") {
+        moved = true;
+        setViewportRef.current({
+          x: panVp.x + (e.clientX - rect.left - panSX),
+          y: panVp.y + (e.clientY - rect.top - panSY),
+          scale: panVp.scale,
+        });
+      } else if (mode === "drag" && dragId) {
+        moved = true;
+        const w = toWorld(e);
+        const nx = w.x - grabDX;
+        const ny = w.y - grabDY;
+        // Live-move the node's Container (world coords) without a store rebuild;
+        // commit on pointerup.
+        nodesByIdRef.current.get(dragId)?.position.set(nx, ny);
+        lastDrag = { id: dragId, x: nx, y: ny };
+      } else {
+        const w = toWorld(e);
+        host.style.cursor = hitTest(hitNodes(), w.x, w.y) ? "pointer" : "grab";
+      }
+    };
+    const onUp = () => {
+      if (mode === "drag" && lastDrag && moved) {
+        moveResourceRef.current(lastDrag.id, lastDrag.x, lastDrag.y);
+      }
+      mode = "none";
+      dragId = null;
+      lastDrag = null;
+    };
+
+    host.addEventListener("pointerdown", onDown);
+    host.addEventListener("pointermove", onMove);
+    host.addEventListener("pointerup", onUp);
+    host.addEventListener("pointercancel", onUp);
+    return () => {
+      host.removeEventListener("pointerdown", onDown);
+      host.removeEventListener("pointermove", onMove);
+      host.removeEventListener("pointerup", onUp);
+      host.removeEventListener("pointercancel", onUp);
+    };
+  }, [ready]);
 
   // ---- camera: move the world, not the nodes (O(1) pan/zoom) ----
   useEffect(() => {
@@ -266,7 +387,7 @@ export const PixiRenderLayer: React.FC = () => {
       ref={hostRef}
       className="pixi-render-layer"
       aria-hidden="true"
-      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+      style={{ position: "absolute", inset: 0, pointerEvents: "auto", cursor: "grab" }}
     />
   );
 };

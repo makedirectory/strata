@@ -133,6 +133,10 @@ interface FlowCanvasContextValue {
   onWheelZoom: (e: WheelEvent) => void;
   addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
   minimapNavigate: (clientX: number, clientY: number) => void;
+  /** Set the pan/zoom viewport directly (used by the WebGL layer's own pan). */
+  setViewport: (vp: FlowCanvasContextValue["viewport"]) => void;
+  /** Move a resource to a world position (WebGL-layer drag-to-move). */
+  moveResource: (id: string, x: number, y: number) => void;
 }
 
 interface FlowContextValue {
@@ -2277,6 +2281,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       onWheelZoom,
       addResourceFromPalette,
       minimapNavigate,
+      setViewport: storeSetViewport,
+      moveResource: (id: string, x: number, y: number) => updateResourcePosition(id, { x, y }),
     }),
     [
       store.viewport,
@@ -2290,6 +2296,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       onWheelZoom,
       addResourceFromPalette,
       minimapNavigate,
+      storeSetViewport,
+      updateResourcePosition,
     ],
   );
 
