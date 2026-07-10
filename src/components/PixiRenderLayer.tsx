@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { Application, Container as PixiContainer, Graphics, Sprite, Texture } from "pixi.js";
 import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { serviceColor, serviceIcon } from "../aws/registry";
-import { lodTier, screenToWorld } from "../canvas/geometry";
+import { lodTier, screenToWorld, nodesInRect } from "../canvas/geometry";
 import { rectCenter, edgeAnchor } from "../canvas/drawPrimitives";
 import { hitTest, type HitNode } from "../canvas/hitTest";
 import { useRenderMode } from "../canvas/renderMode";
@@ -13,10 +13,12 @@ import type { Viewport } from "../aws/model";
 /**
  * Mode A — WebGL renderer via PixiJS (renderer-scale spec, the "kick it up a
  * level" path). Gated behind `NEXT_PUBLIC_STRATA_CANVAS_RENDERER=webgl` (or
- * `pixi`) or the 2D⚡ view toggle. Stage 2 = its own pointer interaction
- * (click-select, hover, pan, drag-move roots; zoom via the shared wheel listener).
- * Stage 3 = node chrome (provider / child-count badge + config pills). Marquee,
- * connect, drag-to-reparent and leaf summaries are Stage 4+.
+ * `pixi`) or the 2D⚡ view toggle. It owns its own interaction: click-select,
+ * hover, pan (zoom via the shared wheel listener), drag-to-move with live subtree
+ * follow, drag-to-reparent (containerAt), shift-drag marquee, connect-mode drag,
+ * and double-click container focus. Node chrome = provider / child-count badge +
+ * config pills. Remaining vs the DOM view: leaf summarization (the WebGL layer
+ * renders every node instead).
  *
  * The performance model is a game engine's: build the node/edge display objects
  * ONCE into a retained scene graph, then **move the camera, not the objects**.
@@ -42,8 +44,9 @@ const LABEL_FONT = "strata-label";
 let bitmapFontInstalled = false;
 
 export const PixiRenderLayer: React.FC = () => {
-  const { a11yNodes, selectedIds, state, selectNode } = useFlow();
-  const { viewport, setViewport, moveResource } = useFlowCanvas();
+  const { a11yNodes, selectedIds, state, selectNode, onNodeDoubleClick } = useFlow();
+  const { viewport, setViewport, moveResource, setSelectedIds, connect, setParent, containerAt } =
+    useFlowCanvas();
   const enabled = useRenderMode() === "webgl";
   const hostRef = useRef<HTMLDivElement>(null);
 
@@ -75,6 +78,18 @@ export const PixiRenderLayer: React.FC = () => {
   setViewportRef.current = setViewport;
   const moveResourceRef = useRef(moveResource);
   moveResourceRef.current = moveResource;
+  const modeRef = useRef(state.mode);
+  modeRef.current = state.mode;
+  const onDoubleClickRef = useRef(onNodeDoubleClick);
+  onDoubleClickRef.current = onNodeDoubleClick;
+  const setSelectedIdsRef = useRef(setSelectedIds);
+  setSelectedIdsRef.current = setSelectedIds;
+  const connectRef = useRef(connect);
+  connectRef.current = connect;
+  const setParentRef = useRef(setParent);
+  setParentRef.current = setParent;
+  const containerAtRef = useRef(containerAt);
+  containerAtRef.current = containerAt;
 
   // Always-current transient state, read by the rebuild without becoming a dep —
   // so a rebuild only ever fires on a STRUCTURAL change (nodes/edges), never on
@@ -293,22 +308,20 @@ export const PixiRenderLayer: React.FC = () => {
     for (const [id, ring] of ringsRef.current) ring.visible = selected.has(id);
   }, [enabled, ready, selectedIds]);
 
-  // ---- interaction (Stage 2): hit-test select, hover, drag-move, pan ----
-  // The WebGL layer OWNS pointer input (the DOM path is off in this mode). Zoom
-  // rides the existing canvas-wrap wheel listener via bubbling; here we handle
-  // click-select, hover cursor, empty-space pan, and drag-to-move for root nodes
-  // (nested children are laid out by the engine, so they select but don't drag).
+  // ---- interaction (Stage 2 + 4): the WebGL layer OWNS pointer input ----
+  // select/hover, empty-space pan (zoom rides the canvas-wrap wheel listener),
+  // drag-to-move with live subtree follow + drag-to-reparent, shift-drag marquee,
+  // connect-mode drag to create a relationship, and double-click container focus.
   useEffect(() => {
     if (!enabled || !ready) return;
     const host = hostRef.current;
+    const PIXI = pixiRef.current;
     if (!host) return;
 
+    const nodes = () => a11yNodesRef.current;
     const hitNodes = (): HitNode[] =>
-      a11yNodesRef.current.map((n) => ({
-        id: n.id,
-        rect: { x: n.x, y: n.y, w: n.w, h: n.h },
-        depth: n.depth,
-      }));
+      nodes().map((n) => ({ id: n.id, rect: { x: n.x, y: n.y, w: n.w, h: n.h }, depth: n.depth }));
+    const nodeById = (id: string) => nodes().find((n) => n.id === id);
     const toWorld = (e: PointerEvent) => {
       const rect = host.getBoundingClientRect();
       return screenToWorld(
@@ -316,15 +329,43 @@ export const PixiRenderLayer: React.FC = () => {
         viewportRef.current,
       );
     };
+    // id + all descendants (so dragging a container moves its whole subtree).
+    const subtree = (id: string): Set<string> => {
+      const set = new Set<string>([id]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const n of nodes()) {
+          if (n.parentId && set.has(n.parentId) && !set.has(n.id)) {
+            set.add(n.id);
+            grew = true;
+          }
+        }
+      }
+      return set;
+    };
 
-    let mode: "none" | "pan" | "drag" = "none";
-    let dragId: string | null = null;
+    // Transient overlay (marquee rect / connect line) in world coords.
+    let overlay: Graphics | null = null;
+    const ensureOverlay = (): Graphics | null => {
+      if (!overlay && PIXI && worldRef.current) {
+        overlay = new PIXI.Graphics();
+        worldRef.current.addChild(overlay);
+      }
+      return overlay;
+    };
+
+    let mode: "none" | "pan" | "drag" | "marquee" | "connect" = "none";
+    let dragRoot: string | null = null;
+    let dragStart: { id: string; sx: number; sy: number }[] = [];
     let grabDX = 0;
     let grabDY = 0;
     let panVp: Viewport = viewportRef.current;
     let panSX = 0;
     let panSY = 0;
-    let lastDrag: { id: string; x: number; y: number } | null = null;
+    let mqStart = { x: 0, y: 0 };
+    let connectFrom: string | null = null;
+    let last = { x: 0, y: 0 };
     let moved = false;
 
     const onDown = (e: PointerEvent) => {
@@ -334,15 +375,23 @@ export const PixiRenderLayer: React.FC = () => {
       const id = hitTest(hitNodes(), w.x, w.y);
       if (id) {
         selectNodeRef.current(id);
-        const n = a11yNodesRef.current.find((x) => x.id === id);
-        if (n && n.depth === 0) {
+        if (modeRef.current === "connect") {
+          mode = "connect";
+          connectFrom = id;
+        } else {
           mode = "drag";
-          dragId = id;
+          dragRoot = id;
+          const n = nodeById(id)!;
           grabDX = w.x - n.x;
           grabDY = w.y - n.y;
-        } else {
-          mode = "none";
+          const sub = subtree(id);
+          dragStart = nodes()
+            .filter((n2) => sub.has(n2.id))
+            .map((n2) => ({ id: n2.id, sx: n2.x, sy: n2.y }));
         }
+      } else if (e.shiftKey) {
+        mode = "marquee";
+        mqStart = w;
       } else {
         mode = "pan";
         panVp = { ...viewportRef.current };
@@ -353,6 +402,8 @@ export const PixiRenderLayer: React.FC = () => {
     };
     const onMove = (e: PointerEvent) => {
       const rect = host.getBoundingClientRect();
+      const w = toWorld(e);
+      last = w;
       if (mode === "pan") {
         moved = true;
         setViewportRef.current({
@@ -360,38 +411,89 @@ export const PixiRenderLayer: React.FC = () => {
           y: panVp.y + (e.clientY - rect.top - panSY),
           scale: panVp.scale,
         });
-      } else if (mode === "drag" && dragId) {
+      } else if (mode === "drag" && dragRoot) {
         moved = true;
-        const w = toWorld(e);
-        const nx = w.x - grabDX;
-        const ny = w.y - grabDY;
-        // Live-move the node's Container (world coords) without a store rebuild;
-        // commit on pointerup.
-        nodesByIdRef.current.get(dragId)?.position.set(nx, ny);
-        lastDrag = { id: dragId, x: nx, y: ny };
+        const root = nodeById(dragRoot);
+        if (!root) return;
+        const dx = w.x - grabDX - root.x;
+        const dy = w.y - grabDY - root.y;
+        for (const d of dragStart)
+          nodesByIdRef.current.get(d.id)?.position.set(d.sx + dx, d.sy + dy);
+      } else if (mode === "marquee") {
+        const g = ensureOverlay();
+        g?.clear()
+          .rect(
+            Math.min(mqStart.x, w.x),
+            Math.min(mqStart.y, w.y),
+            Math.abs(w.x - mqStart.x),
+            Math.abs(w.y - mqStart.y),
+          )
+          .fill({ color: SELECT_RING, alpha: 0.08 })
+          .stroke({ width: 1, color: SELECT_RING });
+      } else if (mode === "connect" && connectFrom) {
+        const from = nodeById(connectFrom);
+        const g = ensureOverlay();
+        if (from && g)
+          g.clear()
+            .moveTo(from.x + from.w / 2, from.y + from.h / 2)
+            .lineTo(w.x, w.y)
+            .stroke({ width: 2, color: SELECT_RING });
       } else {
-        const w = toWorld(e);
         host.style.cursor = hitTest(hitNodes(), w.x, w.y) ? "pointer" : "grab";
       }
     };
     const onUp = () => {
-      if (mode === "drag" && lastDrag && moved) {
-        moveResourceRef.current(lastDrag.id, lastDrag.x, lastDrag.y);
+      if (mode === "drag" && dragRoot && moved) {
+        const root = nodeById(dragRoot);
+        const dropX = last.x - grabDX; // new top-left of the dragged node
+        const dropY = last.y - grabDY;
+        // Reparent when dropped into a different container; else move (roots only —
+        // a child's position is engine-owned, so it snaps back on rebuild).
+        const target = containerAtRef.current(last, dragRoot);
+        const cur = root?.parentId ?? null;
+        if (target !== cur)
+          setParentRef.current(dragRoot, target ?? undefined, { x: dropX, y: dropY });
+        else moveResourceRef.current(dragRoot, dropX, dropY);
+      } else if (mode === "marquee") {
+        const rect = {
+          x: Math.min(mqStart.x, last.x),
+          y: Math.min(mqStart.y, last.y),
+          w: Math.abs(last.x - mqStart.x),
+          h: Math.abs(last.y - mqStart.y),
+        };
+        setSelectedIdsRef.current(nodesInRect(nodes(), rect));
+      } else if (mode === "connect" && connectFrom) {
+        const target = hitTest(hitNodes(), last.x, last.y);
+        if (target && target !== connectFrom) connectRef.current(connectFrom, target);
       }
+      overlay?.clear();
       mode = "none";
-      dragId = null;
-      lastDrag = null;
+      dragRoot = null;
+      dragStart = [];
+      connectFrom = null;
+    };
+    const onDbl = (e: MouseEvent) => {
+      const rect = host.getBoundingClientRect();
+      const w = screenToWorld(
+        { x: e.clientX - rect.left, y: e.clientY - rect.top },
+        viewportRef.current,
+      );
+      const id = hitTest(hitNodes(), w.x, w.y);
+      if (id) onDoubleClickRef.current(id);
     };
 
     host.addEventListener("pointerdown", onDown);
     host.addEventListener("pointermove", onMove);
     host.addEventListener("pointerup", onUp);
     host.addEventListener("pointercancel", onUp);
+    host.addEventListener("dblclick", onDbl);
     return () => {
       host.removeEventListener("pointerdown", onDown);
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerup", onUp);
       host.removeEventListener("pointercancel", onUp);
+      host.removeEventListener("dblclick", onDbl);
+      overlay?.destroy();
     };
   }, [enabled, ready]);
 

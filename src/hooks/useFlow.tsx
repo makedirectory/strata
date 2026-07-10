@@ -91,6 +91,8 @@ export interface A11yNode {
   isContainer: boolean;
   /** Containment depth from the layout (0 = root) — for canvas z-ordering. */
   depth: number;
+  /** Id of the containing node, when nested (for WebGL reparent / subtree drag). */
+  parentId: string | null;
   /** Name of the containing node, when this node is nested. */
   parentName: string | null;
   /** Short "label: value" config pills (≤3) — WebGL/canvas node chrome. */
@@ -165,6 +167,14 @@ interface FlowCanvasContextValue {
   setViewport: (vp: FlowCanvasContextValue["viewport"]) => void;
   /** Move a resource to a world position (WebGL-layer drag-to-move). */
   moveResource: (id: string, x: number, y: number) => void;
+  /** Replace the multi-selection (WebGL marquee). */
+  setSelectedIds: (ids: string[]) => void;
+  /** Create a relationship (WebGL connect-mode drag). */
+  connect: (fromId: string, toId: string) => void;
+  /** Reparent a node into a container (or to root), at an optional drop pos. */
+  setParent: (id: string, parentId: string | undefined, dropPos?: { x: number; y: number }) => void;
+  /** Deepest container under a world point, excluding a node's own subtree. */
+  containerAt: (point: { x: number; y: number }, excludeId: string) => string | null;
 }
 
 interface FlowContextValue {
@@ -722,6 +732,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         h: rect.h,
         isContainer: layout.isContainerNode(r.id),
         depth: layout.depth.get(r.id) ?? 0,
+        parentId: r.parentId ?? null,
         parentName: r.parentId ? (nameById.get(r.parentId) ?? null) : null,
         pills: nodePills(r),
         childCount: layout.isContainerNode(r.id) ? layout.childCount(r.id) : 0,
@@ -2313,6 +2324,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       minimapNavigate,
       setViewport: storeSetViewport,
       moveResource: (id: string, x: number, y: number) => updateResourcePosition(id, { x, y }),
+      setSelectedIds: storeSetSelectedIds,
+      connect: (fromId: string, toId: string) => storeConnect(fromId, toId),
+      setParent: store.setParent,
+      containerAt,
     }),
     [
       store.viewport,
@@ -2328,6 +2343,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       minimapNavigate,
       storeSetViewport,
       updateResourcePosition,
+      storeSetSelectedIds,
+      storeConnect,
+      store.setParent,
+      containerAt,
     ],
   );
 
