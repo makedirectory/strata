@@ -132,6 +132,13 @@ export interface AccountReview {
   estimatedCount: number;
   /** How many resources had NO cost estimate (carried, never hidden). */
   unknownCount: number;
+  /**
+   * Distinct billable-but-unmapped serviceIds — the coverage gaps that make the
+   * total a floor. Empty when every unpriced resource is a known-free service.
+   */
+  unmappedBillableTypes: string[];
+  /** True when `unmappedBillableTypes` is non-empty: `estimatedMonthly` is a floor. */
+  isFloor: boolean;
   tagCoverage: { tagged: number; untagged: number; coverage: number };
   orphanIds: string[];
   findings: ReviewFinding[];
@@ -248,13 +255,18 @@ export function reviewAccount(graph: InfrastructureGraph): AccountReview {
     });
   }
   if (cost.unknown > 0) {
+    const floorNote = cost.isFloor
+      ? ` The $${Math.round(cost.total)}/mo total is a FLOOR (lower bound) — it is missing real spend for ${
+          cost.unmappedBillableTypes.length
+        } unpriced billable type(s): ${cost.unmappedBillableTypes.join(", ")}.`
+      : "";
     findings.push({
       id: "",
       level: "info",
       category: "cost",
       message: `${cost.unknown} resource(s) have no cost estimate and are excluded from the $${Math.round(
         cost.total,
-      )}/mo total.`,
+      )}/mo total.${floorNote}`,
       score: LEVEL_SCORE.info,
     });
   }
@@ -318,6 +330,8 @@ export function reviewAccount(graph: InfrastructureGraph): AccountReview {
     estimatedMonthly: cost.total,
     estimatedCount: cost.estimated,
     unknownCount: cost.unknown,
+    unmappedBillableTypes: cost.unmappedBillableTypes,
+    isFloor: cost.isFloor,
     tagCoverage: { tagged, untagged, coverage },
     orphanIds,
     findings,

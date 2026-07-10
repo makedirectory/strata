@@ -43,6 +43,10 @@ export interface CostDelta {
   beforeUnknown: number;
   /** Resources with no cost model in `after`. */
   afterUnknown: number;
+  /** `before` has billable-but-unmapped types → its total is a floor. */
+  beforeIsFloor: boolean;
+  /** `after` has billable-but-unmapped types → its total is a floor. */
+  afterIsFloor: boolean;
 }
 
 /** Full receipt: drift + cost delta + findings delta + plain-English summary. */
@@ -102,6 +106,8 @@ export function changeReceipt(
     delta: afterTotal.total - beforeTotal.total,
     beforeUnknown: beforeTotal.unknown,
     afterUnknown: afterTotal.unknown,
+    beforeIsFloor: beforeTotal.isFloor,
+    afterIsFloor: afterTotal.isFloor,
   };
 
   const beforeFindings = actionableFindings(before);
@@ -153,6 +159,14 @@ function buildSummaryLines(drift: DriftResult, cost: CostDelta, findings: Findin
   if (cost.beforeUnknown || cost.afterUnknown) {
     lines.push(`Unpriced resources: ${cost.beforeUnknown} -> ${cost.afterUnknown}`);
   }
+  if (cost.beforeIsFloor || cost.afterIsFloor) {
+    // A delta across an incomplete model is itself a floor — say so.
+    lines.push(
+      `Totals are a FLOOR (billable types unmapped): before ${
+        cost.beforeIsFloor ? "yes" : "no"
+      } -> after ${cost.afterIsFloor ? "yes" : "no"}`,
+    );
+  }
 
   // --- findings movement ---
   if (findings.resolved.length || findings.introduced.length) {
@@ -195,8 +209,17 @@ export function renderMarkdown(receipt: ChangeReceipt): string {
   out.push("");
 
   out.push("## Cost", "");
-  out.push(`- Before: ${formatMonthly(cost.before)} (${cost.beforeUnknown} unpriced)`);
-  out.push(`- After: ${formatMonthly(cost.after)} (${cost.afterUnknown} unpriced)`);
+  const floorTag = (isFloor: boolean): string => (isFloor ? ", FLOOR" : "");
+  out.push(
+    `- Before: ${formatMonthly(cost.before)} (${cost.beforeUnknown} unpriced${floorTag(
+      cost.beforeIsFloor,
+    )})`,
+  );
+  out.push(
+    `- After: ${formatMonthly(cost.after)} (${cost.afterUnknown} unpriced${floorTag(
+      cost.afterIsFloor,
+    )})`,
+  );
   const deltaLabel =
     cost.delta === 0
       ? "no change"

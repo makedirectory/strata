@@ -272,8 +272,12 @@ export const TOOLS: McpTool[] = [
       const graph = coerceGraph(a.graph);
       const totals = estimateTotal(graph.resources);
       return {
-        currency: "USD/month (rough)",
+        currency: totals.isFloor
+          ? `USD/month (rough FLOOR — ${totals.unmappedBillableTypes.length} billable type(s) unmapped)`
+          : "USD/month (rough)",
         total: Math.round(totals.total),
+        isFloor: totals.isFloor,
+        unmappedBillableTypes: totals.unmappedBillableTypes,
         estimatedResources: totals.estimated,
         unknownResources: totals.unknown,
         resources: graph.resources.map((r) => ({

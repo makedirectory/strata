@@ -64,6 +64,56 @@ describe("estimateMonthlyCost", () => {
     // 200 GiB gp3 ($0.08) = 16
     expect(estimateMonthlyCost(res("ebs-volume", { sizeGiB: 200, volumeType: "gp3" }))).toBe(16);
   });
+
+  it("prices OpenSearch Serverless by OCU floor; ENABLED standby ≈ 2× DISABLED", () => {
+    // DISABLED → 2 OCU × $0.24 × 730 = 350.4; ENABLED → 4 OCU = 700.8.
+    const disabled = estimateMonthlyCost(
+      res("opensearch-serverless", { standbyReplicas: "DISABLED" }),
+    )!;
+    const enabled = estimateMonthlyCost(
+      res("opensearch-serverless", { standbyReplicas: "ENABLED" }),
+    )!;
+    expect(disabled).toBeCloseTo(350.4);
+    expect(enabled).toBeCloseTo(700.8);
+    expect(enabled).toBeCloseTo(disabled * 2);
+    // Unset defaults to the redundant (ENABLED) floor — never a silent $0.
+    expect(estimateMonthlyCost(res("opensearch-serverless"))).toBeCloseTo(700.8);
+  });
+
+  it("prices Fargate by vCPU + memory × desiredCount, base when unsized", () => {
+    // 0.5 vCPU (512 units) + 1 GB (1024 MiB): (0.5×0.04048 + 1×0.004445) × 730 ≈ 18.02
+    expect(estimateMonthlyCost(res("fargate", { cpu: "512", memory: "1024" }))).toBeCloseTo(
+      18.02,
+      1,
+    );
+    // desiredCount scales it (only meaningful when cpu/mem are present on the node).
+    expect(
+      estimateMonthlyCost(res("fargate", { cpu: "512", memory: "1024", desiredCount: 3 })),
+    ).toBeCloseTo(54.06, 1);
+    // An ecs-service without task dimensions falls back to the flat base (30).
+    expect(estimateMonthlyCost(res("ecs-service", { desiredCount: 4 }))).toBe(30);
+  });
+
+  it("prices Elastic IP as the hourly public-IPv4 charge (never $0)", () => {
+    // $0.005/hr × 730 = 3.65, idle or attached.
+    expect(estimateMonthlyCost(res("elastic-ip", { attached: false }))).toBeCloseTo(3.65);
+    expect(estimateMonthlyCost(res("elastic-ip", { attached: true }))).toBeCloseTo(3.65);
+  });
+
+  it("prices VPC Flow Logs conservatively by destination + retention", () => {
+    // cloud-watch-logs, 30d: 5×0.5 + 5×0.03 = 2.65; s3 is cheaper per GB.
+    expect(estimateMonthlyCost(res("vpc-flow-logs"))).toBeCloseTo(2.65);
+    const s3 = estimateMonthlyCost(res("vpc-flow-logs", { destinationType: "s3" }))!;
+    expect(s3).toBeLessThan(2.65);
+    // Longer retention grows the storage component.
+    expect(estimateMonthlyCost(res("vpc-flow-logs", { retentionDays: 90 }))!).toBeGreaterThan(2.65);
+  });
+
+  it("prices the kickoff-named billables (sagemaker, bedrock) instead of $0", () => {
+    expect(estimateMonthlyCost(res("sagemaker"))).toBeGreaterThan(0);
+    expect(estimateMonthlyCost(res("bedrock"))).toBeGreaterThan(0);
+    expect(estimateMonthlyCost(res("bedrock-knowledge-base"))).toBeGreaterThan(0);
+  });
 });
 
 describe("estimateTotal", () => {
@@ -77,6 +127,36 @@ describe("estimateTotal", () => {
     expect(r.total).toBe(40);
     expect(r.estimated).toBe(3);
     expect(r.unknown).toBe(1);
+  });
+
+  it("flags the total as a FLOOR when a billable type is unmapped", () => {
+    const r = estimateTotal([
+      res("ec2-instance", { instanceType: "t3.micro" }), // priced
+      res("app-runner"), // billable but unpriced
+      res("kendra"), // billable but unpriced
+    ]);
+    expect(r.isFloor).toBe(true);
+    // Sorted, de-duplicated list of the gaps.
+    expect(r.unmappedBillableTypes).toEqual(["app-runner", "kendra"]);
+  });
+
+  it("does NOT flag a floor for priced + known-free services", () => {
+    const r = estimateTotal([
+      res("ec2-instance", { instanceType: "t3.micro" }), // priced
+      res("iam-role"), // known-free (null, but not a gap)
+      res("cloudformation"), // known-free
+      res("vpc"), // free/structural (priced 0)
+    ]);
+    expect(r.isFloor).toBe(false);
+    expect(r.unmappedBillableTypes).toEqual([]);
+    // Known-free services still count as unknown (unpriced), just not as a gap.
+    expect(r.unknown).toBe(2);
+  });
+
+  it("de-duplicates repeated unmapped billable types (multi-account floor)", () => {
+    const r = estimateTotal([res("kendra"), res("kendra"), res("kendra")]);
+    expect(r.unmappedBillableTypes).toEqual(["kendra"]);
+    expect(r.isFloor).toBe(true);
   });
 });
 
