@@ -398,6 +398,8 @@ interface FlowContextValue {
   listSavedGraphs: () => Promise<GraphSummary[]>;
   /** Load a saved graph by id. */
   loadGraph: (id: string) => Promise<void>;
+  /** Replace the whole diagram from an in-memory graph (dev perf harness / tests). */
+  loadGraphObject: (graph: InfrastructureGraph) => void;
   /** Delete a saved graph by id. */
   deleteSavedGraph: (id: string) => Promise<void>;
   /** Structured validation findings, or `null` before the first run. */
@@ -2086,6 +2088,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [storeReplaceAll, confirmReplaceIfDirty, storeMarkSaved],
   );
 
+  /** Load a graph object directly into the store (dev perf harness / tests). */
+  const loadGraphObject = useCallback(
+    (graph: InfrastructureGraph) => {
+      storeReplaceAll({
+        resources: graph.resources ?? [],
+        relationships: graph.relationships ?? [],
+        annotations: graph.annotations,
+        viewport: graph.viewport,
+        accounts: graph.accounts ?? [],
+        graphName: graph.name || "Perf harness",
+      });
+    },
+    [storeReplaceAll],
+  );
+
   /** Delete a saved graph by id (clears graphId if it was the open one). */
   const deleteSavedGraph = useCallback(
     async (id: string) => {
@@ -2528,6 +2545,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveGraph,
       listSavedGraphs,
       loadGraph,
+      loadGraphObject,
       deleteSavedGraph,
       validationResults,
       liveFindings,
@@ -2675,6 +2693,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveGraph,
       listSavedGraphs,
       loadGraph,
+      loadGraphObject,
       deleteSavedGraph,
       validationResults,
       liveFindings,
