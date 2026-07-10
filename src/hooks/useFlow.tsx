@@ -101,6 +101,20 @@ export interface A11yNode {
   childCount: number;
 }
 
+/** A collapsed leaf group ("N× Service") for the WebGL layer's summarization. */
+export interface A11ySummary {
+  /** Synthetic summary id (`summary::${parentId}::${serviceId}`). */
+  id: string;
+  parentId: string;
+  serviceId: string;
+  serviceName: string;
+  count: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /** Up to 3 short "label: value" pills from a resource's modeled config. */
 function nodePills(r: ResourceInstance): string[] {
   const svc = getService(r.serviceId);
@@ -167,6 +181,8 @@ interface FlowCanvasContextValue {
   setViewport: (vp: FlowCanvasContextValue["viewport"]) => void;
   /** Move a resource to a world position (WebGL-layer drag-to-move). */
   moveResource: (id: string, x: number, y: number) => void;
+  /** Resize a resource (WebGL-layer resize handle). */
+  resizeResource: (id: string, w: number, h: number) => void;
   /** Replace the multi-selection (WebGL marquee). */
   setSelectedIds: (ids: string[]) => void;
   /** Create a relationship (WebGL connect-mode drag). */
@@ -230,6 +246,10 @@ interface FlowContextValue {
   screenToWorld: (pt: { x: number; y: number }, pan: Viewport) => { x: number; y: number };
   /** Visible nodes projected for the accessible keyboard/screen-reader overlay. */
   a11yNodes: A11yNode[];
+  /** Collapsed leaf groups ("N× Service") for the WebGL layer's summarization. */
+  a11ySummaries: A11ySummary[];
+  /** Expand a summarized leaf group (WebGL summary click). */
+  expandSummary: (parentId: string, serviceId: string) => void;
   /** Setter for the live search-match highlight (read by the renderer only). */
   setSearchMatches: (ids: ReadonlySet<string>) => void;
   /** Ancestor path of the focus target, root → leaf (clickable crumbs). */
@@ -741,6 +761,30 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return out;
   }, [store.resources, layout]);
 
+  // Synthetic summary nodes (e.g. "7× Security Group") the layout collapsed —
+  // consumed by the WebGL layer so it matches the DOM's leaf summarization.
+  // Clicking one expands the group (see onExpandGroup).
+  const a11ySummaries = React.useMemo<A11ySummary[]>(() => {
+    const out: A11ySummary[] = [];
+    for (const s of layout.summaries) {
+      const rect = layout.rects.get(s.id);
+      if (!rect) continue;
+      const svc = getService(s.serviceId);
+      out.push({
+        id: s.id,
+        parentId: s.parentId,
+        serviceId: s.serviceId,
+        serviceName: svc?.name ?? s.serviceId,
+        count: s.count,
+        x: rect.x,
+        y: rect.y,
+        w: rect.w,
+        h: rect.h,
+      });
+    }
+    return out;
+  }, [layout]);
+
   // Drift markers (top-left corner) for nodes that are new (added) or changed vs
   // the loaded baseline. Removed resources aren't on the canvas — the panel lists them.
   const driftMarkers = React.useMemo(() => {
@@ -996,6 +1040,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSelection: storeSetSelection,
     setSelectedIds: storeSetSelectedIds,
     connect: storeConnect,
+    setParent: storeSetParent,
+    updateResourceSize: storeUpdateResourceSize,
   } = store;
 
   // ---- selection helpers (single + multi kept consistent) ----------------
@@ -2324,9 +2370,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       minimapNavigate,
       setViewport: storeSetViewport,
       moveResource: (id: string, x: number, y: number) => updateResourcePosition(id, { x, y }),
+      resizeResource: (id: string, w: number, h: number) => storeUpdateResourceSize(id, { w, h }),
       setSelectedIds: storeSetSelectedIds,
       connect: (fromId: string, toId: string) => storeConnect(fromId, toId),
-      setParent: store.setParent,
+      setParent: storeSetParent,
       containerAt,
     }),
     [
@@ -2343,9 +2390,10 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       minimapNavigate,
       storeSetViewport,
       updateResourcePosition,
+      storeUpdateResourceSize,
       storeSetSelectedIds,
       storeConnect,
-      store.setParent,
+      storeSetParent,
       containerAt,
     ],
   );
@@ -2383,6 +2431,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       commitAnnotationDrag,
       screenToWorld,
       a11yNodes,
+      a11ySummaries,
+      expandSummary: onExpandGroup,
       setSearchMatches: store.setSearchMatches,
       breadcrumb,
       focusedContainerId: store.focusedContainerId,
@@ -2535,6 +2585,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       commitAnnotationDrag,
       screenToWorld,
       a11yNodes,
+      a11ySummaries,
+      onExpandGroup,
       store.setSearchMatches,
       breadcrumb,
       store.focusedContainerId,

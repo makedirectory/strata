@@ -7,7 +7,7 @@ import { lodTier, screenToWorld, nodesInRect } from "../canvas/geometry";
 import { rectCenter, edgeAnchor } from "../canvas/drawPrimitives";
 import { hitTest, type HitNode } from "../canvas/hitTest";
 import { useRenderMode } from "../canvas/renderMode";
-import type { A11yNode } from "../hooks/useFlow";
+import type { A11yNode, A11ySummary } from "../hooks/useFlow";
 import type { Viewport } from "../aws/model";
 
 /**
@@ -16,9 +16,9 @@ import type { Viewport } from "../aws/model";
  * `pixi`) or the 2D⚡ view toggle. It owns its own interaction: click-select,
  * hover, pan (zoom via the shared wheel listener), drag-to-move with live subtree
  * follow, drag-to-reparent (containerAt), shift-drag marquee, connect-mode drag,
- * and double-click container focus. Node chrome = provider / child-count badge +
- * config pills. Remaining vs the DOM view: leaf summarization (the WebGL layer
- * renders every node instead).
+ * double-click container focus, resize + connect handles on the selected node,
+ * and leaf summarization ("N× Service", click to expand). Node chrome = provider
+ * / child-count badge + config pills. At feature parity with the DOM view.
  *
  * The performance model is a game engine's: build the node/edge display objects
  * ONCE into a retained scene graph, then **move the camera, not the objects**.
@@ -44,9 +44,25 @@ const LABEL_FONT = "strata-label";
 let bitmapFontInstalled = false;
 
 export const PixiRenderLayer: React.FC = () => {
-  const { a11yNodes, selectedIds, state, selectNode, onNodeDoubleClick } = useFlow();
-  const { viewport, setViewport, moveResource, setSelectedIds, connect, setParent, containerAt } =
-    useFlowCanvas();
+  const {
+    a11yNodes,
+    a11ySummaries,
+    expandSummary,
+    selectedIds,
+    state,
+    selectNode,
+    onNodeDoubleClick,
+  } = useFlow();
+  const {
+    viewport,
+    setViewport,
+    moveResource,
+    resizeResource,
+    setSelectedIds,
+    connect,
+    setParent,
+    containerAt,
+  } = useFlowCanvas();
   const enabled = useRenderMode() === "webgl";
   const hostRef = useRef<HTMLDivElement>(null);
 
@@ -67,11 +83,19 @@ export const PixiRenderLayer: React.FC = () => {
   const iconTexRef = useRef<Map<string, Texture>>(new Map());
   // id → node Container, so a live drag can move one node without a full rebuild.
   const nodesByIdRef = useRef<Map<string, PixiContainer>>(new Map());
+  // Resize + connect handles for the single selected node (shared, repositioned).
+  const handlesRef = useRef<{ resize: Graphics; connect: Graphics } | null>(null);
   const [ready, setReady] = useState(false);
 
   // Always-current inputs for the (once-installed) pointer handlers.
   const a11yNodesRef = useRef<A11yNode[]>(a11yNodes);
   a11yNodesRef.current = a11yNodes;
+  const summariesRef = useRef<A11ySummary[]>(a11ySummaries);
+  summariesRef.current = a11ySummaries;
+  const expandSummaryRef = useRef(expandSummary);
+  expandSummaryRef.current = expandSummary;
+  const resizeResourceRef = useRef(resizeResource);
+  resizeResourceRef.current = resizeResource;
   const selectNodeRef = useRef(selectNode);
   selectNodeRef.current = selectNode;
   const setViewportRef = useRef(setViewport);
@@ -159,6 +183,7 @@ export const PixiRenderLayer: React.FC = () => {
       pixiRef.current = null;
       rings.clear();
       labelsRef.current = [];
+      handlesRef.current = null; // destroyed with the world; recreate on remount
       for (const t of iconTex.values()) t.destroy(true);
       iconTex.clear();
       setReady(false);
@@ -298,15 +323,64 @@ export const PixiRenderLayer: React.FC = () => {
       nodeLayer.addChild(node);
       nodesByIdRef.current.set(n.id, node);
     }
-    lastTierRef.current = tierNow;
-  }, [enabled, ready, a11yNodes, state.relationships]);
 
-  // ---- selection: toggle rings only (no rebuild) ----
+    // Summary boxes ("N× Service") — collapsed leaf groups, matching the DOM.
+    // Dashed card + icon + count label; a click expands the group (see onDown).
+    for (const s of a11ySummaries) {
+      const box = new PIXI.Container();
+      box.position.set(s.x, s.y);
+      const g = new PIXI.Graphics();
+      g.roundRect(0, 0, s.w, s.h, 14).fill({ color: LEAF_FILL, alpha: 0.85 });
+      g.stroke({ width: 1.25, color: LEAF_STROKE });
+      box.addChild(g);
+      const icon = new PIXI.Sprite(iconTexture(serviceIcon(s.serviceId)));
+      icon.width = 16;
+      icon.height = 16;
+      icon.position.set(16, s.h / 2 - 9);
+      const text = new PIXI.BitmapText({
+        text: `${s.count}× ${s.serviceName}`,
+        style: { fontFamily: LABEL_FONT, fontSize: 13 },
+      });
+      text.tint = 0xb8c4dc;
+      text.position.set(38, s.h / 2 - 7);
+      box.addChild(icon, text);
+      box.visible = labelsVisible;
+      labelsRef.current.push(box);
+      nodeLayer.addChild(box);
+    }
+    lastTierRef.current = tierNow;
+  }, [enabled, ready, a11yNodes, a11ySummaries, state.relationships]);
+
+  // ---- selection: toggle rings + position the resize/connect handles ----
   useEffect(() => {
     if (!enabled || !ready) return;
     const selected = new Set(selectedIds);
     for (const [id, ring] of ringsRef.current) ring.visible = selected.has(id);
-  }, [enabled, ready, selectedIds]);
+
+    const PIXI = pixiRef.current;
+    const world = worldRef.current;
+    if (!PIXI || !world) return;
+    if (!handlesRef.current) {
+      const resize = new PIXI.Graphics().rect(-5, -5, 10, 10).fill(SELECT_RING);
+      const connect = new PIXI.Graphics().circle(0, 0, 5).fill(SELECT_RING);
+      world.addChild(resize, connect);
+      handlesRef.current = { resize, connect };
+    }
+    const { resize, connect } = handlesRef.current;
+    // Only for a single selection; a container's box is a min-size, so resizing
+    // it is meaningful too.
+    const one =
+      selectedIds.length === 1 ? a11yNodes.find((n) => n.id === selectedIds[0]) : undefined;
+    if (one) {
+      resize.position.set(one.x + one.w, one.y + one.h);
+      connect.position.set(one.x + one.w, one.y + one.h / 2);
+      resize.visible = true;
+      connect.visible = true;
+    } else {
+      resize.visible = false;
+      connect.visible = false;
+    }
+  }, [enabled, ready, selectedIds, a11yNodes]);
 
   // ---- interaction (Stage 2 + 4): the WebGL layer OWNS pointer input ----
   // select/hover, empty-space pan (zoom rides the canvas-wrap wheel listener),
@@ -355,9 +429,11 @@ export const PixiRenderLayer: React.FC = () => {
       return overlay;
     };
 
-    let mode: "none" | "pan" | "drag" | "marquee" | "connect" = "none";
+    let mode: "none" | "pan" | "drag" | "marquee" | "connect" | "resize" = "none";
     let dragRoot: string | null = null;
     let dragStart: { id: string; sx: number; sy: number }[] = [];
+    let resizeId: string | null = null;
+    let lastResize: { w: number; h: number } | null = null;
     let grabDX = 0;
     let grabDY = 0;
     let panVp: Viewport = viewportRef.current;
@@ -372,6 +448,32 @@ export const PixiRenderLayer: React.FC = () => {
       host.setPointerCapture(e.pointerId);
       moved = false;
       const w = toWorld(e);
+      // Summary box hit → expand the collapsed group (no drag/select).
+      const summary = summariesRef.current.find(
+        (s) => w.x >= s.x && w.x <= s.x + s.w && w.y >= s.y && w.y <= s.y + s.h,
+      );
+      if (summary) {
+        expandSummaryRef.current(summary.parentId, summary.serviceId);
+        mode = "none";
+        return;
+      }
+      // Resize / connect handles of the single selected node take priority.
+      const selIds = selectedRef.current;
+      const selOne = selIds.length === 1 ? nodeById(selIds[0]) : undefined;
+      if (selOne) {
+        const near = (hx: number, hy: number) =>
+          Math.abs(w.x - hx) <= 10 && Math.abs(w.y - hy) <= 10;
+        if (near(selOne.x + selOne.w, selOne.y + selOne.h)) {
+          mode = "resize";
+          resizeId = selOne.id;
+          return;
+        }
+        if (near(selOne.x + selOne.w, selOne.y + selOne.h / 2)) {
+          mode = "connect";
+          connectFrom = selOne.id;
+          return;
+        }
+      }
       const id = hitTest(hitNodes(), w.x, w.y);
       if (id) {
         selectNodeRef.current(id);
@@ -438,6 +540,16 @@ export const PixiRenderLayer: React.FC = () => {
             .moveTo(from.x + from.w / 2, from.y + from.h / 2)
             .lineTo(w.x, w.y)
             .stroke({ width: 2, color: SELECT_RING });
+      } else if (mode === "resize" && resizeId) {
+        moved = true;
+        const n = nodeById(resizeId);
+        if (n) {
+          const nw = Math.max(80, w.x - n.x);
+          const nh = Math.max(48, w.y - n.y);
+          lastResize = { w: nw, h: nh };
+          const g = ensureOverlay();
+          g?.clear().rect(n.x, n.y, nw, nh).stroke({ width: 1.5, color: SELECT_RING });
+        }
       } else {
         host.style.cursor = hitTest(hitNodes(), w.x, w.y) ? "pointer" : "grab";
       }
@@ -465,12 +577,16 @@ export const PixiRenderLayer: React.FC = () => {
       } else if (mode === "connect" && connectFrom) {
         const target = hitTest(hitNodes(), last.x, last.y);
         if (target && target !== connectFrom) connectRef.current(connectFrom, target);
+      } else if (mode === "resize" && resizeId && lastResize) {
+        resizeResourceRef.current(resizeId, lastResize.w, lastResize.h);
       }
       overlay?.clear();
       mode = "none";
       dragRoot = null;
       dragStart = [];
       connectFrom = null;
+      resizeId = null;
+      lastResize = null;
     };
     const onDbl = (e: MouseEvent) => {
       const rect = host.getBoundingClientRect();
