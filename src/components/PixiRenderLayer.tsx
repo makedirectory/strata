@@ -6,6 +6,7 @@ import { serviceColor, serviceIcon } from "../aws/registry";
 import { lodTier, screenToWorld } from "../canvas/geometry";
 import { rectCenter, edgeAnchor } from "../canvas/drawPrimitives";
 import { hitTest, type HitNode } from "../canvas/hitTest";
+import { useRenderMode } from "../canvas/renderMode";
 import type { A11yNode } from "../hooks/useFlow";
 import type { Viewport } from "../aws/model";
 
@@ -29,9 +30,6 @@ import type { Viewport } from "../aws/model";
  * geometry from the shared `drawPrimitives`. Pixi is loaded via dynamic import
  * so it stays out of the main bundle (and off the SSR path) unless enabled.
  */
-const MODE = process.env.NEXT_PUBLIC_STRATA_CANVAS_RENDERER;
-const ENABLED = MODE === "webgl" || MODE === "pixi";
-
 const EDGE_COLOR = "#3a4a6b";
 const LEAF_FILL = "#0f1a31";
 const LEAF_STROKE = "#24406b";
@@ -46,6 +44,7 @@ let bitmapFontInstalled = false;
 export const PixiRenderLayer: React.FC = () => {
   const { a11yNodes, selectedIds, state, selectNode } = useFlow();
   const { viewport, setViewport, moveResource } = useFlowCanvas();
+  const enabled = useRenderMode() === "webgl";
   const hostRef = useRef<HTMLDivElement>(null);
 
   // Pixi runtime handles (kept in refs; typed via type-only imports).
@@ -85,7 +84,7 @@ export const PixiRenderLayer: React.FC = () => {
 
   // ---- init once (client-only; Pixi dynamically imported) ----
   useEffect(() => {
-    if (!ENABLED) return;
+    if (!enabled) return;
     let disposed = false;
     // Capture the stable ref maps for the cleanup closure (they're created once).
     const rings = ringsRef.current;
@@ -147,11 +146,13 @@ export const PixiRenderLayer: React.FC = () => {
       iconTex.clear();
       setReady(false);
     };
-  }, []);
+    // Re-run on toggle: mount the WebGL app when 2D-fast is chosen, tear down on leave.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
 
   // ---- rebuild the retained scene graph when nodes/edges change ----
   useEffect(() => {
-    if (!ENABLED || !ready) return;
+    if (!enabled || !ready) return;
     const PIXI = pixiRef.current;
     const nodeLayer = nodeLayerRef.current;
     const edgeLayer = edgeLayerRef.current;
@@ -253,14 +254,14 @@ export const PixiRenderLayer: React.FC = () => {
       nodesByIdRef.current.set(n.id, node);
     }
     lastTierRef.current = tierNow;
-  }, [ready, a11yNodes, state.relationships]);
+  }, [enabled, ready, a11yNodes, state.relationships]);
 
   // ---- selection: toggle rings only (no rebuild) ----
   useEffect(() => {
-    if (!ENABLED || !ready) return;
+    if (!enabled || !ready) return;
     const selected = new Set(selectedIds);
     for (const [id, ring] of ringsRef.current) ring.visible = selected.has(id);
-  }, [ready, selectedIds]);
+  }, [enabled, ready, selectedIds]);
 
   // ---- interaction (Stage 2): hit-test select, hover, drag-move, pan ----
   // The WebGL layer OWNS pointer input (the DOM path is off in this mode). Zoom
@@ -268,7 +269,7 @@ export const PixiRenderLayer: React.FC = () => {
   // click-select, hover cursor, empty-space pan, and drag-to-move for root nodes
   // (nested children are laid out by the engine, so they select but don't drag).
   useEffect(() => {
-    if (!ENABLED || !ready) return;
+    if (!enabled || !ready) return;
     const host = hostRef.current;
     if (!host) return;
 
@@ -362,11 +363,11 @@ export const PixiRenderLayer: React.FC = () => {
       host.removeEventListener("pointerup", onUp);
       host.removeEventListener("pointercancel", onUp);
     };
-  }, [ready]);
+  }, [enabled, ready]);
 
   // ---- camera: move the world, not the nodes (O(1) pan/zoom) ----
   useEffect(() => {
-    if (!ENABLED || !ready) return;
+    if (!enabled || !ready) return;
     const world = worldRef.current;
     if (!world) return;
     world.position.set(viewport.x, viewport.y);
@@ -379,9 +380,9 @@ export const PixiRenderLayer: React.FC = () => {
       for (const label of labelsRef.current) label.visible = show;
       lastTierRef.current = tierNow;
     }
-  }, [ready, viewport]);
+  }, [enabled, ready, viewport]);
 
-  if (!ENABLED) return null;
+  if (!enabled) return null;
   return (
     <div
       ref={hostRef}

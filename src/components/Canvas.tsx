@@ -281,19 +281,30 @@ export const Canvas: React.FC = () => {
 
   return (
     <>
-      {/* View toggle: 2D (DOM diagram — detailed, print/embed) ⇄ 3D orbit. */}
+      {/* View toggle: 2D (DOM — detailed, print/embed), 2D⚡ (WebGL — scales to
+          thousands, experimental), 3D orbit. */}
       <div className="view-toggle" role="group" aria-label="View mode">
         {[
-          { m: "dom" as RenderMode, label: "2D" },
-          { m: "3d" as RenderMode, label: "3D" },
-        ].map(({ m, label }) => {
-          const active = (m === "3d") === threeD;
+          {
+            m: "dom" as RenderMode,
+            label: "2D",
+            title: "Detailed 2D diagram (edit / print / embed)",
+          },
+          {
+            m: "webgl" as RenderMode,
+            label: "2D⚡",
+            title: "WebGL 2D — scales to thousands (experimental)",
+          },
+          { m: "3d" as RenderMode, label: "3D", title: "3D orbit view" },
+        ].map(({ m, label, title }) => {
+          const active = renderModeValue === m;
           return (
             <button
               key={m}
               type="button"
               className={active ? "view-toggle-btn active" : "view-toggle-btn"}
               aria-pressed={active}
+              title={title}
               onClick={() => setRenderMode(m)}
             >
               {label}
