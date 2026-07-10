@@ -123,12 +123,55 @@ describe("MCP server — tools", () => {
     expect(new Set(ids).size).toBe(2); // no collision despite shared "vpc" id
   });
 
-  it("import_iac parses CloudFormation", async () => {
+  it("import_iac parses CloudFormation and returns a graphId handle", async () => {
     const { data } = await call("import_iac", {
       content: JSON.stringify({ Resources: { V: { Type: "AWS::EC2::VPC", Properties: {} } } }),
     });
     expect(data.format).toBe("cloudformation");
     expect(data.resourceCount).toBe(1);
+    expect(typeof data.graphId).toBe("string");
+  });
+
+  it("import_iac reads a local path and its graphId feeds estimate_cost", async () => {
+    const os = await import("node:os");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const file = path.join(os.tmpdir(), `strata-mcp-${process.pid}.tf.json`);
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        format_version: "1.0",
+        values: {
+          root_module: {
+            resources: [{ address: "aws_nat_gateway.n", type: "aws_nat_gateway", name: "n" }],
+          },
+        },
+      }),
+    );
+    try {
+      const imported = await call("import_iac", { path: file });
+      expect(imported.data.format).toBe("terraform");
+      expect(imported.data.resourceCount).toBe(1);
+      const graphId = imported.data.graphId;
+      // The handle round-trips: estimate_cost accepts it with no inline graph.
+      const cost = await call("estimate_cost", { graphId });
+      expect(cost.data.total).toBe(32); // one NAT gateway
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  });
+
+  it("import_iac rejects both/neither of content and path", async () => {
+    const neither = await call("import_iac", {});
+    expect(neither.isError).toBe(true);
+    const both = await call("import_iac", { content: "{}", path: "/tmp/x" });
+    expect(both.isError).toBe(true);
+  });
+
+  it("estimate_cost errors on an unknown graphId handle", async () => {
+    const { isError, data } = await call("estimate_cost", { graphId: "graph-does-not-exist" });
+    expect(isError).toBe(true);
+    expect(data).toMatch(/Unknown graphId/);
   });
 
   it("export_iac generates Terraform", async () => {
