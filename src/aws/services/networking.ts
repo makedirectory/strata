@@ -404,6 +404,89 @@ const networking: ServiceDefinition[] = [
     ],
     commonConnections: [{ to: "s3-bucket", relationship: "connects_to" }],
   },
+  {
+    id: "elastic-ip",
+    name: "Elastic IP",
+    fullName: "Amazon EC2 Elastic IP Address",
+    abbreviation: "EIP",
+    category: "networking",
+    description:
+      "A static public IPv4 address. Public IPv4 is billed hourly whether idle or attached.",
+    icon: "📍",
+    scope: "region",
+    cfnType: "AWS::EC2::EIP",
+    arnPattern: "arn:aws:ec2:{region}:{account}:elastic-ip/{id}",
+    keywords: ["eip", "elastic ip", "public ip", "ipv4", "static"],
+    configFields: [
+      {
+        key: "domain",
+        label: "Domain",
+        type: "select",
+        default: "vpc",
+        options: [
+          { value: "vpc", label: "VPC" },
+          { value: "standard", label: "EC2-Classic" },
+        ],
+      },
+      {
+        key: "attached",
+        label: "Attached",
+        type: "boolean",
+        default: true,
+        help: "Idle (unattached) addresses still incur the public-IPv4 hourly charge.",
+      },
+    ],
+    commonConnections: [
+      { to: "nat-gateway", relationship: "attached_to", description: "Fronts a NAT Gateway" },
+      { to: "ec2-instance", relationship: "attached_to", description: "Assigned to an instance" },
+    ],
+  },
+  {
+    id: "cloud-map",
+    name: "Cloud Map",
+    fullName: "AWS Cloud Map Service Discovery",
+    category: "networking",
+    description:
+      "Service discovery for cloud resources, mapping named services to dynamic targets.",
+    icon: "🗺️",
+    scope: "region",
+    cfnType: "AWS::ServiceDiscovery::Service",
+    arnPattern: "arn:aws:servicediscovery:{region}:{account}:service/{id}",
+    keywords: ["cloud map", "service discovery", "dns", "namespace", "registry"],
+    configFields: [
+      {
+        key: "namespaceType",
+        label: "Namespace Type",
+        type: "select",
+        default: "PrivateDns",
+        options: [
+          { value: "PrivateDns", label: "Private DNS" },
+          { value: "PublicDns", label: "Public DNS" },
+          { value: "Http", label: "HTTP" },
+        ],
+      },
+      {
+        key: "dnsRecordType",
+        label: "DNS Record Type",
+        type: "select",
+        default: "A",
+        options: [
+          { value: "A", label: "A" },
+          { value: "AAAA", label: "AAAA" },
+          { value: "SRV", label: "SRV" },
+          { value: "CNAME", label: "CNAME" },
+        ],
+      },
+    ],
+    commonConnections: [
+      {
+        to: "ecs-service",
+        relationship: "connects_to",
+        description: "Registers ECS service instances for discovery",
+      },
+      { to: "route53", relationship: "depends_on", description: "Backed by a Route 53 namespace" },
+    ],
+  },
 ];
 
 export default networking;

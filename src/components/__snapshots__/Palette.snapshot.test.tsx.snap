@@ -574,6 +574,31 @@ exports[`Palette DOM snapshots > renders the filtered view for a keyword query 1
             AWS
           </span>
         </button>
+        <button
+          aria-label="Add Amazon OpenSearch Serverless Collection"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon OpenSearch Serverless Collection"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🛰️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            OpenSearch Serverless
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
       </div>
     </div>
     <div
@@ -1057,6 +1082,56 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             VPC Endpoint
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon EC2 Elastic IP Address"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="Amazon EC2 Elastic IP Address"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            📍
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Elastic IP
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add AWS Cloud Map Service Discovery"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(79, 209, 197);"
+          title="AWS Cloud Map Service Discovery"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(79, 209, 197);"
+          >
+            🗺️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Cloud Map
           </span>
           <span
             class="palette-item-provider"
@@ -4174,6 +4249,31 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             AWS
           </span>
         </button>
+        <button
+          aria-label="Add Amazon VPC Flow Logs"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(96, 165, 250);"
+          title="Amazon VPC Flow Logs"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(96, 165, 250);"
+          >
+            🌊
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            VPC Flow Logs
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
       </div>
     </div>
     <div
@@ -4412,6 +4512,31 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             MSK
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon OpenSearch Serverless Collection"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(56, 189, 248);"
+          title="Amazon OpenSearch Serverless Collection"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(56, 189, 248);"
+          >
+            🛰️
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            OpenSearch Serverless
           </span>
           <span
             class="palette-item-provider"
@@ -4882,6 +5007,31 @@ exports[`Palette DOM snapshots > renders the full registry-driven palette 1`] = 
             class="palette-item-name"
           >
             Kendra
+          </span>
+          <span
+            class="palette-item-provider"
+          >
+            AWS
+          </span>
+        </button>
+        <button
+          aria-label="Add Amazon Bedrock Knowledge Base"
+          class="item"
+          draggable="true"
+          style="border-color: rgb(192, 132, 252);"
+          title="Amazon Bedrock Knowledge Base"
+          type="button"
+        >
+          <span
+            class="palette-item-icon"
+            style="color: rgb(192, 132, 252);"
+          >
+            📚
+          </span>
+          <span
+            class="palette-item-name"
+          >
+            Bedrock KB
           </span>
           <span
             class="palette-item-provider"
