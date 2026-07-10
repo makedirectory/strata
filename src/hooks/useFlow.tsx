@@ -93,6 +93,34 @@ export interface A11yNode {
   depth: number;
   /** Name of the containing node, when this node is nested. */
   parentName: string | null;
+  /** Short "label: value" config pills (≤3) — WebGL/canvas node chrome. */
+  pills: string[];
+  /** Visible child count for a container (0 for leaves) — header badge. */
+  childCount: number;
+}
+
+/** Up to 3 short "label: value" pills from a resource's modeled config. */
+function nodePills(r: ResourceInstance): string[] {
+  const svc = getService(r.serviceId);
+  const pills: string[] = [];
+  if (r.region) pills.push(r.region);
+  if (svc) {
+    for (const f of svc.configFields) {
+      if (pills.length >= 3) break;
+      const v = r.config[f.key];
+      if (v === undefined || v === null || v === "") continue;
+      let text = Array.isArray(v)
+        ? v.join(",")
+        : typeof v === "boolean"
+          ? v
+            ? "yes"
+            : "no"
+          : String(v);
+      if (text.length > 22) text = text.slice(0, 21) + "…";
+      pills.push(`${f.label}: ${text}`);
+    }
+  }
+  return pills.slice(0, 3);
 }
 
 /** A user-saved view (layer state) persisted to localStorage. */
@@ -695,6 +723,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isContainer: layout.isContainerNode(r.id),
         depth: layout.depth.get(r.id) ?? 0,
         parentName: r.parentId ? (nameById.get(r.parentId) ?? null) : null,
+        pills: nodePills(r),
+        childCount: layout.isContainerNode(r.id) ? layout.childCount(r.id) : 0,
       });
     }
     return out;

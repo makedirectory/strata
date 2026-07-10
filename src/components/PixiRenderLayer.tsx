@@ -13,10 +13,10 @@ import type { Viewport } from "../aws/model";
 /**
  * Mode A — WebGL renderer via PixiJS (renderer-scale spec, the "kick it up a
  * level" path). Gated behind `NEXT_PUBLIC_STRATA_CANVAS_RENDERER=webgl` (or
- * `pixi`); off by default → zero regression. Stage 2 gives it its OWN pointer
- * interaction (click-select, hover, empty-space pan, drag-to-move roots); zoom
- * rides the shared canvas-wrap wheel listener. Marquee/connect/reparent and the
- * rich node chrome (pills, badges, summaries) are later stages.
+ * `pixi`) or the 2D⚡ view toggle. Stage 2 = its own pointer interaction
+ * (click-select, hover, pan, drag-move roots; zoom via the shared wheel listener).
+ * Stage 3 = node chrome (provider / child-count badge + config pills). Marquee,
+ * connect, drag-to-reparent and leaf summaries are Stage 4+.
  *
  * The performance model is a game engine's: build the node/edge display objects
  * ONCE into a retained scene graph, then **move the camera, not the objects**.
@@ -56,6 +56,8 @@ export const PixiRenderLayer: React.FC = () => {
   // Per-node handles for cheap, targeted updates without a full rebuild.
   const ringsRef = useRef<Map<string, Graphics>>(new Map());
   const labelsRef = useRef<PixiContainer[]>([]);
+  // Config pills toggle at the NEAR tier only (labels show at near + mid).
+  const pillsRef = useRef<PixiContainer[]>([]);
   const lastTierRef = useRef<string>("");
   // Emoji → shared Texture cache, so N nodes with the same icon batch into one
   // draw (rasterise each unique glyph once, reuse across the whole scene).
@@ -162,6 +164,7 @@ export const PixiRenderLayer: React.FC = () => {
     for (const c of edgeLayer.removeChildren()) c.destroy({ children: true });
     ringsRef.current.clear();
     labelsRef.current = [];
+    pillsRef.current = [];
     nodesByIdRef.current.clear();
 
     // Edges: one Graphics for all wires, clipped to node borders (shared geom).
@@ -243,6 +246,33 @@ export const PixiRenderLayer: React.FC = () => {
       label.visible = labelsVisible;
       labelsRef.current.push(label);
       node.addChild(label);
+
+      // Top-right badge: container child-count, else provider (AWS/GCP/Azure).
+      const badgeText = n.isContainer ? String(n.childCount) : n.provider.toUpperCase();
+      if (badgeText) {
+        const badge = new PIXI.BitmapText({
+          text: badgeText,
+          style: { fontFamily: LABEL_FONT, fontSize: 10 },
+        });
+        badge.tint = 0x8ba0c8;
+        badge.position.set(n.w - 10 - badge.width, 10); // right-aligned
+        badge.visible = labelsVisible;
+        labelsRef.current.push(badge);
+        node.addChild(badge);
+      }
+
+      // Config pills (leaves, near tier only) — one muted line along the bottom.
+      if (!n.isContainer && n.pills.length > 0) {
+        const pills = new PIXI.BitmapText({
+          text: n.pills.join("   ·   "),
+          style: { fontFamily: LABEL_FONT, fontSize: 10 },
+        });
+        pills.tint = 0x7c8aa5;
+        pills.position.set(16, n.h - 16);
+        pills.visible = tierNow === "near";
+        pillsRef.current.push(pills);
+        node.addChild(pills);
+      }
 
       const ring = new PIXI.Graphics();
       ring.roundRect(-2, -2, n.w + 4, n.h + 4, 14).stroke({ width: 2, color: SELECT_RING });
@@ -378,6 +408,8 @@ export const PixiRenderLayer: React.FC = () => {
     if (tierNow !== lastTierRef.current) {
       const show = tierNow !== "far";
       for (const label of labelsRef.current) label.visible = show;
+      // Pills are detail — only at the near tier.
+      for (const pill of pillsRef.current) pill.visible = tierNow === "near";
       lastTierRef.current = tierNow;
     }
   }, [enabled, ready, viewport]);
