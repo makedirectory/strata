@@ -1,6 +1,7 @@
 const meta = {
   index: "Overview",
   "getting-started": "Getting Started",
+  "install-and-mcp": "Installing & MCP Setup",
   canvas: "Navigating the Canvas",
   views: "Views, Layers & Overlays",
   "importing-iac": "Importing & Exporting IaC",

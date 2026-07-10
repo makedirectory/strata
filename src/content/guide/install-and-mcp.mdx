@@ -1,0 +1,89 @@
+---
+title: Installing & MCP Setup
+---
+
+# Installing, Running & Connecting an Agent (MCP)
+
+Strata is a **Next.js** app with a set of pure engines and a companion **MCP
+server**. This page covers how to run it and how to point an AI agent (Claude
+Desktop, Cursor, …) at the MCP server. Packaging Strata as a one-click desktop
+app is on the [roadmap](/docs/architecture/roadmap) — the notes below describe how
+it runs today and where it's headed.
+
+## Run the app
+
+Prerequisites: **Node 22+** and a clone of the repo.
+
+```bash
+npm install
+npm run dev      # product at http://localhost:3000/ , docs at /docs
+```
+
+For a production build:
+
+```bash
+npm run build && npm run start
+```
+
+Diagrams are saved in your browser's **localStorage** — no database or account
+required (see [Saving & Loading](/docs/guide/saving)). The **local-only** features
+— live cloud discovery, the Terraform companion, and the CLI — need the app to run
+on your own machine (they read the filesystem and, for plans, shell out to
+`terraform`/`tofu`).
+
+## Headless CLI
+
+The same pure engines are available offline, no browser:
+
+```bash
+npm run strata -- cost   ./terraform-state.json     # total + per-category + FLOOR flag
+npm run strata -- render ./graph.json -o out.svg    # lay out + write an SVG
+npm run strata -- connect ./infra                   # map a Terraform repo
+npm run strata -- plan    ./infra --root prod        # visualize a plan diff
+```
+
+See the [Terraform Companion](/docs/guide/terraform-companion) and
+[Multi-Account Cost Model](/docs/guide/multi-account-cost) guides.
+
+## Connect an AI agent (MCP)
+
+Strata ships an **MCP server** (stdio) that exposes the same engines the UI uses —
+`list_services`, `validate_architecture`, `import_iac`, `merge_graphs`,
+`estimate_cost`, `review_account`, `export_iac`, and more (see
+[Live Discovery & MCP](/docs/architecture/mcp-integration)). Run it with:
+
+```bash
+npm run mcp        # JSON-RPC 2.0 over stdio
+```
+
+Point your MCP client at that command. For **Claude Desktop**, add this to
+`claude_desktop_config.json` (macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "strata": {
+      "command": "npm",
+      "args": ["run", "mcp"],
+      "cwd": "/absolute/path/to/strata"
+    }
+  }
+}
+```
+
+Cursor and other MCP clients take the same `command` / `args` / `cwd`. Restart the
+client and the Strata tools appear. The server is **local-only and uses no cloud
+credentials**; the `import_iac` `path` param + returned `graphId` handle let an
+agent work over a multi-MB `terraform show -json` estate without pasting it into
+the conversation.
+
+## Packaging (roadmap)
+
+Because the local features depend on a Node runtime (child-process `terraform`,
+provider SDKs, the MCP stdio server), the intended "install as an app" path is a
+**desktop shell** (Electron or Tauri-with-Node-sidecar) that bundles the Next
+server + MCP server and can **write the MCP client config for you** (one-click
+"Connect to Claude Desktop"). Until that lands, use `npm run dev` + the config
+snippet above. The renderer (2D / 2D⚡ / 3D) is entirely client-side and works
+unchanged in any shell.
