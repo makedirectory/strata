@@ -79,6 +79,8 @@ export type ViewPreset = "all" | "network" | "security" | "data" | "high-level";
 export interface A11yNode {
   id: string;
   name: string;
+  /** Registry service id — for the canvas draw layer's colour/icon lookup. */
+  serviceId: string;
   serviceName: string;
   provider: CloudProvider;
   x: number;
@@ -86,6 +88,8 @@ export interface A11yNode {
   w: number;
   h: number;
   isContainer: boolean;
+  /** Containment depth from the layout (0 = root) — for canvas z-ordering. */
+  depth: number;
   /** Name of the containing node, when this node is nested. */
   parentName: string | null;
 }
@@ -672,6 +676,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       out.push({
         id: r.id,
         name: r.name,
+        serviceId: r.serviceId,
         serviceName: svc?.name ?? r.serviceId,
         provider: svc ? serviceProvider(svc) : "aws",
         x: rect.x,
@@ -679,6 +684,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         w: rect.w,
         h: rect.h,
         isContainer: layout.isContainerNode(r.id),
+        depth: layout.depth.get(r.id) ?? 0,
         parentName: r.parentId ? (nameById.get(r.parentId) ?? null) : null,
       });
     }

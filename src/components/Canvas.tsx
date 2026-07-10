@@ -4,6 +4,7 @@ import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { PALETTE_ADD_EVENT } from "./Palette";
 import { AccessibleNodes } from "./AccessibleNodes";
 import { AnnotationLayer } from "./AnnotationLayer";
+import { CanvasRenderLayer } from "./CanvasRenderLayer";
 import { worldToScreen } from "../canvas/geometry";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
@@ -258,6 +259,9 @@ export const Canvas: React.FC = () => {
         }}
       />
       <div className="overlay" aria-hidden="true" />
+      {/* Mode A canvas draw layer — flag-gated (off by default), read-only over
+          the DOM path; the DOM still owns interaction. */}
+      <CanvasRenderLayer />
       <AnnotationLayer />
       {(guides.length > 0 || marquee) && (
         <svg
