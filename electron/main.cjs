@@ -5,26 +5,135 @@
  * ADDITIVE ONLY: this does not touch the web app or its build. It reuses the
  * exact same Next.js app two ways:
  *   - dev  → loads a running `next dev` (ELECTRON_START_URL), for a fast loop.
- *   - prod → boots the bundled Next **standalone** server (produced by
- *            `BUILD_TARGET=electron next build`, shipped as an extraResource),
- *            then loads it. All the Node-only local features (Terraform
- *            child-process, provider SDKs) work because Electron carries Node.
+ *   - prod → boots the bundled Next **standalone** server, then loads it.
  *
- * Nothing here runs during a normal web build/deploy.
+ * It also provides two desktop-only capabilities:
+ *   - Durable storage: a JSON file in the OS user-data dir, exposed to the page
+ *     via the preload (so diagrams persist outside the browser).
+ *   - One-click "Connect to Claude Desktop / Cursor": merge the Strata MCP server
+ *     into the client's config file.
  */
-const { app, BrowserWindow, shell, Menu } = require("electron");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
+
+// --- MCP stdio mode: `Strata --mcp` (what the config we write invokes). MUST run
+// before requiring electron: the config sets ELECTRON_RUN_AS_NODE=1, under which
+// require("electron") returns a path string rather than the module.
+if (process.argv.includes("--mcp") || process.env.STRATA_MCP === "1") {
+  try {
+    require("./mcp.cjs"); // bundled by electron/build-mcp.cjs; boots the stdio server
+  } catch (err) {
+    console.error("Strata MCP bundle unavailable:", err && err.message);
+    process.exit(1);
+  }
+  return;
+}
+
+const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require("electron");
 const http = require("http");
 const { fork } = require("child_process");
 
-/** Dev: URL of a running `next dev`. Prod: undefined (we boot our own server). */
 const DEV_URL = process.env.ELECTRON_START_URL || "";
 const PORT = Number(process.env.STRATA_PORT || 34115);
 
 /** @type {import('child_process').ChildProcess | null} */
 let serverProc = null;
 
-/** Poll `url` until it answers (server booted), or reject after ~20s. */
+// ---- durable storage (JSON file in userData; bridged to the page via preload) ----
+function storageFile() {
+  return path.join(app.getPath("userData"), "graphs.json");
+}
+ipcMain.on("strata-storage-read", (e) => {
+  try {
+    const f = storageFile();
+    e.returnValue = fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null;
+  } catch {
+    e.returnValue = null;
+  }
+});
+ipcMain.on("strata-storage-write", (e, json) => {
+  try {
+    const f = storageFile();
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, typeof json === "string" ? json : "{}");
+    e.returnValue = true;
+  } catch {
+    e.returnValue = false;
+  }
+});
+
+// ---- one-click "Connect to Claude Desktop / Cursor" ----
+/** How the client should launch the Strata MCP server. */
+function mcpServerSpec() {
+  if (app.isPackaged) {
+    // Re-invoke this app binary in MCP mode (see the --mcp guard above).
+    return {
+      command: process.execPath,
+      args: ["--mcp"],
+      env: { ELECTRON_RUN_AS_NODE: "1", STRATA_MCP: "1" },
+    };
+  }
+  // Dev: run the repo's MCP server (cwd = the repo where `npm run app:dev` ran).
+  return { command: "npm", args: ["run", "mcp"], cwd: process.cwd() };
+}
+function clientConfigPath(client) {
+  const home = os.homedir();
+  if (client === "cursor") return path.join(home, ".cursor", "mcp.json");
+  if (process.platform === "darwin")
+    return path.join(
+      home,
+      "Library",
+      "Application Support",
+      "Claude",
+      "claude_desktop_config.json",
+    );
+  if (process.platform === "win32")
+    return path.join(
+      process.env.APPDATA || path.join(home, "AppData", "Roaming"),
+      "Claude",
+      "claude_desktop_config.json",
+    );
+  return path.join(home, ".config", "Claude", "claude_desktop_config.json");
+}
+/** Merge the Strata server into the client config (never clobbering other servers). */
+function connectClient(client) {
+  const file = clientConfigPath(client);
+  let cfg = {};
+  try {
+    if (fs.existsSync(file)) cfg = JSON.parse(fs.readFileSync(file, "utf8")) || {};
+  } catch {
+    cfg = {};
+  }
+  if (!cfg.mcpServers || typeof cfg.mcpServers !== "object") cfg.mcpServers = {};
+  cfg.mcpServers.strata = mcpServerSpec();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(cfg, null, 2));
+  return file;
+}
+ipcMain.handle("strata-connect-mcp", (_e, client) => {
+  const c = client === "cursor" ? "cursor" : "claude";
+  try {
+    return { ok: true, path: connectClient(c) };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+});
+function connectAndReport(client) {
+  const label = client === "cursor" ? "Cursor" : "Claude Desktop";
+  try {
+    const p = connectClient(client);
+    dialog.showMessageBox({
+      type: "info",
+      message: `Added the Strata MCP server to ${label}.`,
+      detail: `Wrote ${p}\n\nRestart ${label} to load the Strata tools.`,
+    });
+  } catch (err) {
+    dialog.showErrorBox("Connect failed", String((err && err.message) || err));
+  }
+}
+
+// ---- server + window ----
 function waitForServer(url) {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + 20000;
@@ -42,20 +151,15 @@ function waitForServer(url) {
     tick();
   });
 }
-
-/** Start the bundled Next standalone server and return its URL. */
 async function startProdServer() {
-  // Shipped via electron-builder `extraResources` → <resources>/standalone.
   const dir = path.join(process.resourcesPath, "standalone");
-  const serverJs = path.join(dir, "server.js");
-  serverProc = fork(serverJs, [], {
+  serverProc = fork(path.join(dir, "server.js"), [], {
     cwd: dir,
     env: {
       ...process.env,
       NODE_ENV: "production",
       PORT: String(PORT),
       HOSTNAME: "127.0.0.1",
-      // Run server.js as plain Node under the Electron binary.
       ELECTRON_RUN_AS_NODE: "1",
     },
     stdio: "inherit",
@@ -64,7 +168,19 @@ async function startProdServer() {
   await waitForServer(url);
   return url;
 }
-
+function buildMenu() {
+  const template = [];
+  if (process.platform === "darwin") template.push({ role: "appMenu" });
+  template.push({ role: "fileMenu" }, { role: "editMenu" }, { role: "viewMenu" });
+  template.push({
+    label: "Tools",
+    submenu: [
+      { label: "Connect to Claude Desktop…", click: () => connectAndReport("claude") },
+      { label: "Connect to Cursor…", click: () => connectAndReport("cursor") },
+    ],
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 function createWindow(url) {
   const win = new BrowserWindow({
     width: 1440,
@@ -77,7 +193,6 @@ function createWindow(url) {
       preload: path.join(__dirname, "preload.cjs"),
     },
   });
-  // Open target=_blank / external links in the user's browser, not a new window.
   win.webContents.setWindowOpenHandler(({ url: u }) => {
     shell.openExternal(u);
     return { action: "deny" };
@@ -86,17 +201,15 @@ function createWindow(url) {
 }
 
 app.whenReady().then(async () => {
-  Menu.setApplicationMenu(Menu.getApplicationMenu()); // default menu (copy/paste, devtools)
+  buildMenu();
   try {
     const url = DEV_URL || (await startProdServer());
     createWindow(url);
   } catch (err) {
-    // Surface a boot failure instead of a blank window.
     // eslint-disable-next-line no-console
     console.error("Strata failed to start:", err);
     app.quit();
   }
-
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0 && (DEV_URL || serverProc)) {
       createWindow(DEV_URL || `http://127.0.0.1:${PORT}`);
@@ -107,7 +220,6 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
-
 app.on("quit", () => {
   if (serverProc) serverProc.kill();
 });

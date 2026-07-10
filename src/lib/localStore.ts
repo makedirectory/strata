@@ -22,6 +22,46 @@ import { SCHEMA_VERSION, summarize } from "../aws/model";
 const STORAGE_KEY = "strata:graphs:v1";
 
 /**
+ * Durable-storage seam. In the Electron desktop shell, the preload exposes a
+ * synchronous `strataDesktop.storage` bridge backed by a JSON file in the OS
+ * user-data dir, so diagrams persist outside the browser and survive a reinstall.
+ * On the web it's absent and we fall back to `localStorage` — this module's whole
+ * read/write surface funnels through `readRaw`/`writeRaw`, so nothing else
+ * changes between the two.
+ */
+interface DesktopStorageBridge {
+  read(): string | null;
+  write(json: string): void;
+}
+function desktopStorage(): DesktopStorageBridge | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { strataDesktop?: { storage?: DesktopStorageBridge } };
+  return w.strataDesktop?.storage ?? null;
+}
+function readRaw(): string | null {
+  const ds = desktopStorage();
+  if (ds) return ds.read();
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(STORAGE_KEY);
+}
+function writeRaw(json: string): void {
+  const ds = desktopStorage();
+  if (ds) {
+    ds.write(json);
+    return;
+  }
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, json);
+  } catch (err) {
+    if (err instanceof DOMException && /quota/i.test(err.name)) {
+      throw new Error("Browser storage is full — delete a saved diagram or export to JSON.");
+    }
+    throw err;
+  }
+}
+
+/**
  * Minimal shape guard for a stored record. We only assert the fields the read
  * path actually dereferences (id/name strings, resources/relationships arrays),
  * so a corrupt or hand-edited entry is rejected at this boundary instead of
@@ -44,9 +84,8 @@ function isValidRecord(v: unknown): v is InfrastructureGraph {
  * entry can't take down listing/loading.
  */
 function readAll(): Record<string, InfrastructureGraph> {
-  if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = readRaw();
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -60,17 +99,9 @@ function readAll(): Record<string, InfrastructureGraph> {
   }
 }
 
-/** Persist the whole map, surfacing a quota overflow as a friendly error. */
+/** Persist the whole map (desktop file or localStorage — see readRaw/writeRaw). */
 function writeAll(map: Record<string, InfrastructureGraph>): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-  } catch (err) {
-    if (err instanceof DOMException && /quota/i.test(err.name)) {
-      throw new Error("Browser storage is full — delete a saved diagram or export to JSON.");
-    }
-    throw err;
-  }
+  writeRaw(JSON.stringify(map));
 }
 
 /** GET-equivalent: list saved-graph summaries, newest first. */

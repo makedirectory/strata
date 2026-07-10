@@ -94,6 +94,16 @@ It works because the local features need Node (child-process `terraform`, provid
 SDKs, the MCP stdio server); Electron carries one. The renderer (2D / 2D⚡ / 3D)
 is entirely client-side and runs unchanged.
 
+**One-click MCP setup.** In the desktop app, **Tools ▸ Connect to Claude Desktop…**
+(or **Cursor**) merges the Strata MCP server into the client's config for you — no
+hand-editing. In the packaged app it points the client at the app binary in MCP
+mode (`Strata --mcp`, a bundled stdio server); in dev it points at `npm run mcp`.
+It only adds/updates the `strata` entry, leaving your other MCP servers untouched.
+
+**Durable storage.** The desktop app persists diagrams to a JSON file in the OS
+user-data dir instead of the browser's `localStorage`, so they survive reinstalls
+and aren't capped by browser quota. The web app is unchanged (still `localStorage`).
+
 **Still to finish** (needs your machine / keys): code signing + notarization,
-auto-update, a one-click "Connect to Claude Desktop" that writes the MCP config,
-and durable local storage (SQLite/file) in place of `localStorage`.
+auto-update, and — optionally — moving desktop storage from a JSON file to SQLite
+for very large libraries.

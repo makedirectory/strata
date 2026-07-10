@@ -26,7 +26,7 @@
     "mcp": "npx -y tsx src/mcp/bin.ts",
     "strata": "npx -y tsx src/cli/bin.ts",
     "app:dev": "cross-env ELECTRON_START_URL=http://localhost:3000 electron electron/main.cjs",
-    "app:build": "cross-env BUILD_TARGET=electron next build && node electron/prepare-standalone.cjs",
+    "app:build": "cross-env BUILD_TARGET=electron next build && node electron/prepare-standalone.cjs && node electron/build-mcp.cjs",
     "app:dist": "npm run app:build && electron-builder"
   },
   "dependencies": {

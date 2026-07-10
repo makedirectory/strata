@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { listGraphs, getGraph } from "./localStore";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { listGraphs, getGraph, createGraph } from "./localStore";
 import type { InfrastructureGraph } from "../aws/model";
 
 const STORAGE_KEY = "strata:graphs:v1";
@@ -53,5 +53,30 @@ describe("localStore readAll hardening", () => {
     expect(await listGraphs()).toEqual([]);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([1, 2, 3]));
     expect(await listGraphs()).toEqual([]);
+  });
+});
+
+describe("localStore durable desktop bridge", () => {
+  const w = window as unknown as { strataDesktop?: unknown };
+  beforeEach(() => window.localStorage.clear());
+  afterEach(() => delete w.strataDesktop);
+
+  it("reads/writes through window.strataDesktop.storage instead of localStorage", async () => {
+    let file: string | null = null;
+    w.strataDesktop = {
+      storage: {
+        read: () => file,
+        write: (json: string) => {
+          file = json;
+        },
+      },
+    };
+    const g = await createGraph(valid("ignored", "Desktop graph"));
+    // Persisted to the bridge, NOT to localStorage.
+    expect(file).toContain("Desktop graph");
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    // And reads come back from the bridge.
+    expect((await listGraphs()).some((s) => s.name === "Desktop graph")).toBe(true);
+    expect((await getGraph(g.id)).name).toBe("Desktop graph");
   });
 });
