@@ -56,6 +56,7 @@ describe("MCP server — protocol", () => {
         "connect_repo",
         "list_repo_roots",
         "import_plan",
+        "merge_graphs",
       ]),
     );
   });
@@ -102,6 +103,24 @@ describe("MCP server — tools", () => {
     });
     expect(data.total).toBe(32);
     expect(data.currency).toMatch(/USD/);
+  });
+
+  it("merge_graphs namespaces ids and preserves per-source roots", async () => {
+    const one = {
+      resources: [{ id: "vpc", serviceId: "vpc", name: "vpc", config: {}, source: "imported" }],
+      relationships: [],
+    };
+    const { data } = await call("merge_graphs", {
+      graphs: [
+        { name: "prod", graph: one },
+        { name: "staging", graph: one },
+      ],
+    });
+    expect(data.sources).toBe(2);
+    expect(data.resourceCount).toBe(2);
+    expect(data.rootCount).toBe(2);
+    const ids = data.graph.resources.map((r: { id: string }) => r.id);
+    expect(new Set(ids).size).toBe(2); // no collision despite shared "vpc" id
   });
 
   it("import_iac parses CloudFormation", async () => {

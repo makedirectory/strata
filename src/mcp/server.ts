@@ -29,6 +29,7 @@ import { connectRepo, detectRepoRoots, type ConnectStrategy } from "../server/co
 import { importPlanJson, runRepoPlan } from "../server/runPlan";
 import { exportIaC, type ExportFormat } from "../aws/iacExport";
 import { graphToDsl, dslToGraph } from "../aws/dsl";
+import { combineGraphs, type CombineSource } from "../aws/combine";
 import type { CloudProvider } from "../aws/types";
 
 /** MCP protocol revision this server speaks. */
@@ -286,6 +287,49 @@ export const TOOLS: McpTool[] = [
           serviceId: r.serviceId,
           monthly: estimateMonthlyCost(r),
         })),
+      };
+    },
+  },
+  {
+    name: "merge_graphs",
+    description:
+      "Combine several independently-imported graphs (e.g. one per account/environment) into one canvas. Ids are namespaced per source so they never collide; roots are left position-less so the layout grids them side-by-side (no origin stacking). Pass wrapAs:'container' to nest each source under a labeled block.",
+    inputSchema: objectSchema(
+      {
+        graphs: {
+          type: "array",
+          description: "Sources to combine, each { name, graph }.",
+          items: {
+            type: "object",
+            properties: { name: { type: "string" }, graph: GRAPH_SCHEMA },
+            required: ["name", "graph"],
+          },
+        },
+        wrapAs: { type: "string", enum: ["container"] },
+        name: { type: "string" },
+      },
+      ["graphs"],
+    ),
+    run: (a) => {
+      const raw = Array.isArray(a.graphs) ? a.graphs : [];
+      const sources: CombineSource[] = raw.map((entry, i) => {
+        const e = (typeof entry === "object" && entry !== null ? entry : {}) as {
+          name?: unknown;
+          graph?: unknown;
+        };
+        return {
+          name: typeof e.name === "string" ? e.name : `source-${i}`,
+          graph: coerceGraph(e.graph),
+        };
+      });
+      const wrapAs = str(a, "wrapAs") === "container" ? "container" : undefined;
+      const graph = combineGraphs(sources, { wrapAs, name: str(a, "name") });
+      return {
+        graph,
+        sources: sources.length,
+        resourceCount: graph.resources.length,
+        relationshipCount: graph.relationships.length,
+        rootCount: graph.resources.filter((r) => !r.parentId).length,
       };
     },
   },
