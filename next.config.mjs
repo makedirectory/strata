@@ -15,6 +15,10 @@ const nextConfig = {
   // (e.g. `performance`) which webpack can't bundle. It's only used server-side
   // by the repo/plan routes, so keep it external (required at runtime).
   serverExternalPackages: ["@cdktf/hcl2json"],
+  // Electron packaging only: emit a self-contained server under
+  // `.next/standalone`. Gated on BUILD_TARGET so the normal web build/deploy is
+  // completely unchanged (see `electron/` + `npm run app:build`).
+  ...(process.env.BUILD_TARGET === "electron" ? { output: "standalone" } : {}),
 };
 
 export default withNextra(nextConfig);

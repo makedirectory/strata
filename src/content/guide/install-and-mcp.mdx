@@ -78,12 +78,22 @@ credentials**; the `import_iac` `path` param + returned `graphId` handle let an
 agent work over a multi-MB `terraform show -json` estate without pasting it into
 the conversation.
 
-## Packaging (roadmap)
+## Desktop app (Electron)
 
-Because the local features depend on a Node runtime (child-process `terraform`,
-provider SDKs, the MCP stdio server), the intended "install as an app" path is a
-**desktop shell** (Electron or Tauri-with-Node-sidecar) that bundles the Next
-server + MCP server and can **write the MCP client config for you** (one-click
-"Connect to Claude Desktop"). Until that lands, use `npm run dev` + the config
-snippet above. The renderer (2D / 2D⚡ / 3D) is entirely client-side and works
-unchanged in any shell.
+An **additive** Electron shell bundles the same Next.js app + a Node runtime so it
+can ship as an installable desktop app — without changing the web build/deploy at
+all. See [`electron/README.md`](https://github.com/) for details.
+
+```bash
+npm run dev && npm run app:dev   # dev: shell loads the running dev server
+npm run app:build                # BUILD_TARGET=electron next build (standalone)
+npm run app:dist                 # + electron-builder → installers in ./release
+```
+
+It works because the local features need Node (child-process `terraform`, provider
+SDKs, the MCP stdio server); Electron carries one. The renderer (2D / 2D⚡ / 3D)
+is entirely client-side and runs unchanged.
+
+**Still to finish** (needs your machine / keys): code signing + notarization,
+auto-update, a one-click "Connect to Claude Desktop" that writes the MCP config,
+and durable local storage (SQLite/file) in place of `localStorage`.
