@@ -187,7 +187,14 @@ export const PixiRenderLayer: React.FC = () => {
     const selected = new Set(selectedRef.current);
     const tierNow = lodTier(viewportRef.current.scale);
     const labelsVisible = tierNow !== "far";
-    for (const n of a11yNodes) {
+    // Paint order = z-order: containers first (shallow→deep) so their translucent
+    // backplates sit BENEATH the leaves nested in them, then leaves on top.
+    const ordered = [...a11yNodes].sort((a, b) => {
+      const ac = a.isContainer ? 0 : 1;
+      const bc = b.isContainer ? 0 : 1;
+      return ac !== bc ? ac - bc : a.depth - b.depth;
+    });
+    for (const n of ordered) {
       const node = new PIXI.Container();
       node.position.set(n.x, n.y);
       const color = serviceColor(n.serviceId);
