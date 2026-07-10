@@ -62,7 +62,12 @@ export function buildCameraBasis(cam: OrbitCamera, W: number, H: number): Camera
   };
   const eye = add(cam.target, scl(dir, cam.dist));
   const fwd = norm(sub(cam.target, eye));
-  const right = norm(cross(fwd, { x: 0, y: 1, z: 0 }));
+  // Guard the top-down singularity: when fwd is (nearly) parallel to world-up,
+  // cross(fwd, up) collapses to zero — pick a different reference axis so a
+  // straight-down "top" view still yields an orthonormal basis (no NaNs).
+  let right = cross(fwd, { x: 0, y: 1, z: 0 });
+  if (len(right) < 1e-4) right = cross(fwd, { x: 0, y: 0, z: 1 });
+  right = norm(right);
   const up = cross(right, fwd);
   const focal = H / 2 / Math.tan(cam.fov / 2);
   return { eye, right, up, fwd, focal, W, H };

@@ -36,6 +36,10 @@ const ENABLED = renderMode() === "3d";
 
 const LAYER_GAP = 3.0;
 const LIGHT = norm({ x: -0.4, y: 1, z: 0.35 });
+/** Elevation angles for the two camera presets (radians). */
+const ORBIT_EL = 0.62;
+const TOP_EL = Math.PI / 2 - 0.001; // straight down (guarded in buildCameraBasis)
+const ORBIT_AZ = 0.72;
 
 /** Relationship-kind → wire colour (falls back to a neutral slate). */
 const EDGE_COLOR: Record<string, string> = {
@@ -64,6 +68,7 @@ export const Orbit3DLayer: React.FC = () => {
   const [explode, setExplode] = useState(1.4);
   const [autoOrbit, setAutoOrbit] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
+  const [topView, setTopView] = useState(false);
 
   // ---- derive the 3D scene from the pure layout + registry ----
   const nodes = useMemo<Node3D[]>(
@@ -128,11 +133,40 @@ export const Orbit3DLayer: React.FC = () => {
   const rafRef = useRef<number | null>(null);
   const autoOrbitRef = useRef(autoOrbit);
   autoOrbitRef.current = autoOrbit;
+  const topViewRef = useRef(topView);
+  topViewRef.current = topView;
   const selectNodeRef = useRef(selectNode);
   selectNodeRef.current = selectNode;
 
   const requestRender = () => {
     dirtyRef.current = true;
+  };
+
+  // Switch between the 3/4 orbit preset and a straight-down top view (which reads
+  // like the flat 2D layout and, in this mode, drag-pans).
+  const toggleTop = () => {
+    setTopView((prev) => {
+      const next = !prev;
+      const cam = camRef.current;
+      cam.el = next ? TOP_EL : ORBIT_EL;
+      if (next) cam.az = 0;
+      else cam.az = ORBIT_AZ;
+      requestRender();
+      return next;
+    });
+  };
+  const zoomBy = (factor: number) => {
+    const cam = camRef.current;
+    cam.dist = Math.min(140, Math.max(8, cam.dist * factor));
+    requestRender();
+  };
+  const resetView = () => {
+    const cam = camRef.current;
+    cam.az = topViewRef.current ? 0 : ORBIT_AZ;
+    cam.el = topViewRef.current ? TOP_EL : ORBIT_EL;
+    cam.dist = 46;
+    cam.target = { x: 0, y: (layout.maxDepth * LAYER_GAP * explode) / 2, z: 0 };
+    requestRender();
   };
   // Re-centre the camera vertically as depth/explode change, then repaint.
   useEffect(() => {
@@ -176,7 +210,9 @@ export const Orbit3DLayer: React.FC = () => {
     const onDown = (e: PointerEvent) => {
       canvas.setPointerCapture(e.pointerId);
       dragging = true;
-      panning = e.button === 2 || e.shiftKey || e.button === 1;
+      // In top view a plain drag pans (there's nothing to orbit from overhead);
+      // otherwise pan needs shift / right / middle button.
+      panning = topViewRef.current || e.button === 2 || e.shiftKey || e.button === 1;
       moved = false;
       lastX = downX = e.clientX;
       lastY = downY = e.clientY;
@@ -219,7 +255,17 @@ export const Orbit3DLayer: React.FC = () => {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const cam = camRef.current;
-      cam.dist = Math.min(140, Math.max(8, cam.dist * (1 + Math.sign(e.deltaY) * 0.08)));
+      // Pinch (ctrl/cmd + wheel) zooms; a plain two-finger scroll pans in the
+      // camera's screen plane — the natural trackpad gestures.
+      if (e.ctrlKey || e.metaKey) {
+        cam.dist = Math.min(140, Math.max(8, cam.dist * (1 + e.deltaY * 0.01)));
+      } else {
+        const s = cam.dist * 0.0016;
+        cam.target = add(
+          cam.target,
+          add(scl(basis.right, e.deltaX * s), scl(basis.up, -e.deltaY * s)),
+        );
+      }
       requestRender();
     };
     const onCtx = (e: Event) => e.preventDefault();
@@ -565,6 +611,13 @@ export const Orbit3DLayer: React.FC = () => {
     padding: "6px 10px",
     cursor: "pointer",
   };
+  const activeBtn = { color: "#04140f", background: "#4fd1c5", borderColor: "#4fd1c5" };
+  const sep: React.CSSProperties = {
+    width: 1,
+    height: 22,
+    background: "rgba(120,150,200,0.18)",
+    margin: "0 2px",
+  };
   return (
     <>
       <canvas
@@ -576,12 +629,29 @@ export const Orbit3DLayer: React.FC = () => {
       <div
         style={{
           position: "absolute",
+          top: 16,
+          left: "50%",
+          transform: "translateX(-50%)",
+          font: "11px ui-sans-serif, system-ui, sans-serif",
+          color: "#536078",
+          letterSpacing: "0.03em",
+          pointerEvents: "none",
+          zIndex: 11,
+        }}
+      >
+        {topView
+          ? "drag to pan · scroll to pan · pinch/⌘-scroll to zoom · click a node"
+          : "drag to orbit · scroll to pan · pinch/⌘-scroll to zoom · click a node"}
+      </div>
+      <div
+        style={{
+          position: "absolute",
           bottom: 20,
           left: "50%",
           transform: "translateX(-50%)",
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 6,
           padding: 8,
           borderRadius: 12,
           background: "rgba(14,21,38,0.72)",
@@ -592,18 +662,27 @@ export const Orbit3DLayer: React.FC = () => {
       >
         <button
           type="button"
-          style={{ ...dockBtn, ...(autoOrbit ? { color: "#04140f", background: "#4fd1c5" } : {}) }}
-          onClick={() => setAutoOrbit((v) => !v)}
+          style={{ ...dockBtn, ...(topView ? activeBtn : {}) }}
+          onClick={toggleTop}
+          title="Top-down view"
         >
-          ◐ orbit
+          ⬓ top
         </button>
         <button
           type="button"
-          style={{ ...dockBtn, ...(showLabels ? { color: "#04140f", background: "#4fd1c5" } : {}) }}
+          style={{ ...dockBtn, ...(autoOrbit ? activeBtn : {}) }}
+          onClick={() => setAutoOrbit((v) => !v)}
+        >
+          ◐ auto-orbit
+        </button>
+        <button
+          type="button"
+          style={{ ...dockBtn, ...(showLabels ? activeBtn : {}) }}
           onClick={() => setShowLabels((v) => !v)}
         >
           A labels
         </button>
+        <div style={sep} />
         <label
           style={{
             pointerEvents: "auto",
@@ -625,6 +704,16 @@ export const Orbit3DLayer: React.FC = () => {
             onChange={(e) => setExplode(parseFloat(e.target.value))}
           />
         </label>
+        <div style={sep} />
+        <button type="button" style={dockBtn} onClick={() => zoomBy(0.85)} title="Zoom in">
+          +
+        </button>
+        <button type="button" style={dockBtn} onClick={() => zoomBy(1.18)} title="Zoom out">
+          −
+        </button>
+        <button type="button" style={dockBtn} onClick={resetView} title="Reset view">
+          ⟲ reset
+        </button>
       </div>
     </>
   );

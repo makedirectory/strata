@@ -35,6 +35,22 @@ describe("project", () => {
   });
 });
 
+describe("buildCameraBasis top-down guard", () => {
+  it("yields a finite, orthonormal basis looking straight down (no singularity)", () => {
+    const top: OrbitCamera = { ...cam, el: Math.PI / 2 - 0.001, az: 0 };
+    const b = buildCameraBasis(top, 800, 600);
+    for (const v of [b.right, b.up, b.fwd]) {
+      expect(Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z)).toBe(true);
+      expect(Math.hypot(v.x, v.y, v.z)).toBeCloseTo(1); // unit length
+    }
+    // right ⟂ up (orthonormal)
+    expect(b.right.x * b.up.x + b.right.y * b.up.y + b.right.z * b.up.z).toBeCloseTo(0);
+    // A ground point still projects into the viewport.
+    const p = project(b, { x: 0, y: 0, z: 0 });
+    expect(p).not.toBeNull();
+  });
+});
+
 describe("nodeGeom", () => {
   it("maps world rect to the ground plane and depth to elevation × explode", () => {
     const opts = {
