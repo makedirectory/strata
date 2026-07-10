@@ -6,6 +6,7 @@ import { AccessibleNodes } from "./AccessibleNodes";
 import { AnnotationLayer } from "./AnnotationLayer";
 import { CanvasRenderLayer } from "./CanvasRenderLayer";
 import { PixiRenderLayer } from "./PixiRenderLayer";
+import { Orbit3DLayer } from "./Orbit3DLayer";
 import { worldToScreen } from "../canvas/geometry";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
@@ -265,6 +266,7 @@ export const Canvas: React.FC = () => {
           selected by NEXT_PUBLIC_STRATA_CANVAS_RENDERER; each self-gates. */}
       <CanvasRenderLayer />
       <PixiRenderLayer />
+      <Orbit3DLayer />
       <AnnotationLayer />
       {(guides.length > 0 || marquee) && (
         <svg
