@@ -62,6 +62,19 @@ interface Node3D {
   container: boolean;
 }
 
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+/** easeInOutCubic — smooth accelerate/decelerate for the fly-to tween. */
+const easeInOut = (k: number): number =>
+  k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+
+/** An in-flight camera tween toward a selected node. */
+interface Fly {
+  from: { tx: number; ty: number; tz: number; dist: number };
+  to: { tx: number; ty: number; tz: number; dist: number };
+  startT: number | null;
+  dur: number;
+}
+
 export const Orbit3DLayer: React.FC = () => {
   const { a11yNodes, selectedIds, state, selectNode, findingMarkers, driftMarkers, costMarkers } =
     useFlow();
@@ -176,6 +189,11 @@ export const Orbit3DLayer: React.FC = () => {
   // Held navigation intents (keyboard + on-screen d-pad), applied each frame for
   // smooth, game-like continuous motion.
   const navRef = useRef<Set<string>>(new Set());
+  // Fly-to-node camera tween + selection-origin tracking so an in-canvas click
+  // doesn't yank the camera, but a search/inspector selection flies to it.
+  const flyRef = useRef<Fly | null>(null);
+  const prevSelRef = useRef<string | null>(selectedIds[0] ?? null);
+  const lastClickSelectRef = useRef<string | null>(null);
   const sizeRef = useRef({ W: 0, H: 0, DPR: 1 });
   const topFacesRef = useRef<Map<string, [number, number][]>>(new Map());
   const hoverRef = useRef<string | null>(null);
@@ -238,6 +256,43 @@ export const Orbit3DLayer: React.FC = () => {
     camRef.current.target.y = (layout.maxDepth * LAYER_GAP * explode) / 2;
     requestRender();
   }, [nodes, edges, layout, explode, showLabels, overlays, selectedIds]);
+
+  // Fly to a node when the selection changes from OUTSIDE the 3D view (search,
+  // inspector). An in-canvas click sets lastClickSelectRef first, so it doesn't
+  // trigger a camera move.
+  useEffect(() => {
+    if (!ENABLED) return;
+    const cur = selectedIds[0] ?? null;
+    if (cur === prevSelRef.current) return;
+    const fromClick = cur === lastClickSelectRef.current;
+    if (cur && !fromClick) {
+      const rec = nodes.find((n) => n.id === cur);
+      if (rec) {
+        const g = nodeGeom(rec.rect, rec.depth, {
+          worldScale: layout.worldScale,
+          center: layout.center,
+          layerGap: LAYER_GAP,
+          explode,
+          container: rec.container,
+        });
+        const cam = camRef.current;
+        flyRef.current = {
+          from: { tx: cam.target.x, ty: cam.target.y, tz: cam.target.z, dist: cam.dist },
+          to: {
+            tx: g.x0 + g.w / 2,
+            ty: g.y + g.thick / 2,
+            tz: g.z0 + g.d / 2,
+            dist: Math.max(16, Math.min(cam.dist, 34)),
+          },
+          startT: null,
+          dur: 500,
+        };
+        requestRender();
+      }
+    }
+    lastClickSelectRef.current = null;
+    prevSelRef.current = cur;
+  }, [selectedIds, nodes, layout, explode]);
 
   useEffect(() => {
     if (!ENABLED) return;
@@ -314,7 +369,11 @@ export const Orbit3DLayer: React.FC = () => {
       if (!moved) {
         const rect = canvas.getBoundingClientRect();
         const id = pick(e.clientX - rect.left, e.clientY - rect.top);
-        if (id) selectNodeRef.current(id);
+        if (id) {
+          // Mark this as a click-origin selection so the fly-to effect skips it.
+          lastClickSelectRef.current = id;
+          selectNodeRef.current(id);
+        }
       }
     };
     const onWheel = (e: WheelEvent) => {
@@ -743,8 +802,23 @@ export const Orbit3DLayer: React.FC = () => {
     }
 
     // ---- render-on-demand loop: repaint only when dirty (or moving) ----
-    const loop = () => {
+    const loop = (t: number) => {
       const cam = camRef.current;
+      // Fly-to tween: ease the camera target/distance toward the selected node.
+      const fly = flyRef.current;
+      if (fly) {
+        if (fly.startT == null) fly.startT = t;
+        const k = Math.min(1, (t - fly.startT) / fly.dur);
+        const e = easeInOut(k);
+        cam.target = {
+          x: lerp(fly.from.tx, fly.to.tx, e),
+          y: lerp(fly.from.ty, fly.to.ty, e),
+          z: lerp(fly.from.tz, fly.to.tz, e),
+        };
+        cam.dist = lerp(fly.from.dist, fly.to.dist, e);
+        dirtyRef.current = true;
+        if (k >= 1) flyRef.current = null;
+      }
       if (autoOrbitRef.current) {
         cam.az += 0.0016;
         dirtyRef.current = true;
