@@ -437,6 +437,8 @@ function TopBar() {
     runRulesUI,
     exportJSON,
     exportImage,
+    exportInventory,
+    exportBom,
     shareDiagram,
     openCompare,
     openVersions,
@@ -578,6 +580,20 @@ function TopBar() {
             title="Generate Terraform / CloudFormation from the diagram"
           >
             Export to IaC…
+          </MenuItem>
+          <div className="menu-divider" />
+          <MenuItem
+            onClick={() => exportInventory("csv")}
+            title="One row per resource — asset inventory / manifest / config baseline"
+          >
+            Resource inventory (CSV)
+          </MenuItem>
+          <MenuItem onClick={() => exportInventory("json")}>Resource inventory (JSON)</MenuItem>
+          <MenuItem
+            onClick={exportBom}
+            title="Counts + rough monthly cost rolled up per service type"
+          >
+            Bill of materials (CSV)
           </MenuItem>
           <div className="menu-divider" />
           <MenuItem
