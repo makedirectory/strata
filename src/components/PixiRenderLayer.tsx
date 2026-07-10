@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
-import type { Application, Container as PixiContainer, Graphics, Text } from "pixi.js";
+import type { Application, Container as PixiContainer, Graphics, Sprite, Texture } from "pixi.js";
 import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { serviceColor, serviceIcon } from "../aws/registry";
 import { lodTier } from "../canvas/geometry";
@@ -33,6 +33,11 @@ const LEAF_STROKE = "#24406b";
 const LABEL_FILL = "#e6edf7";
 const SELECT_RING = "#38bdf8";
 
+/** Installed bitmap-font name for node labels (batched — scales to thousands). */
+const LABEL_FONT = "strata-label";
+/** Bitmap fonts install globally; guard against re-installing on remount. */
+let bitmapFontInstalled = false;
+
 export const PixiRenderLayer: React.FC = () => {
   const { a11yNodes, selectedIds, state } = useFlow();
   const { viewport } = useFlowCanvas();
@@ -46,8 +51,11 @@ export const PixiRenderLayer: React.FC = () => {
   const nodeLayerRef = useRef<PixiContainer | null>(null);
   // Per-node handles for cheap, targeted updates without a full rebuild.
   const ringsRef = useRef<Map<string, Graphics>>(new Map());
-  const labelsRef = useRef<Text[]>([]);
+  const labelsRef = useRef<PixiContainer[]>([]);
   const lastTierRef = useRef<string>("");
+  // Emoji → shared Texture cache, so N nodes with the same icon batch into one
+  // draw (rasterise each unique glyph once, reuse across the whole scene).
+  const iconTexRef = useRef<Map<string, Texture>>(new Map());
   const [ready, setReady] = useState(false);
 
   // Always-current transient state, read by the rebuild without becoming a dep —
@@ -64,10 +72,26 @@ export const PixiRenderLayer: React.FC = () => {
     let disposed = false;
     // Capture the stable ref maps for the cleanup closure (they're created once).
     const rings = ringsRef.current;
+    const iconTex = iconTexRef.current;
     void (async () => {
       const PIXI = await import("pixi.js");
       const host = hostRef.current;
       if (disposed || !host) return;
+      // Install a batched bitmap font for labels once (a glyph atlas, so text is
+      // drawn as textured quads instead of one texture per node — the key to
+      // scaling labels to thousands of nodes).
+      if (!bitmapFontInstalled) {
+        PIXI.BitmapFont.install({
+          name: LABEL_FONT,
+          style: {
+            fontFamily: "ui-sans-serif, system-ui, sans-serif",
+            fontSize: 28,
+            fill: LABEL_FILL,
+            fontWeight: "600",
+          },
+        });
+        bitmapFontInstalled = true;
+      }
       const app = new PIXI.Application();
       await app.init({
         resizeTo: host,
@@ -102,6 +126,8 @@ export const PixiRenderLayer: React.FC = () => {
       pixiRef.current = null;
       rings.clear();
       labelsRef.current = [];
+      for (const t of iconTex.values()) t.destroy(true);
+      iconTex.clear();
       setReady(false);
     };
   }, []);
@@ -136,6 +162,27 @@ export const PixiRenderLayer: React.FC = () => {
     edges.stroke({ width: 1.5, color: EDGE_COLOR });
     edgeLayer.addChild(edges);
 
+    // Rasterise an emoji into a shared Texture the first time it's seen.
+    const iconTexture = (emoji: string): Texture => {
+      const cache = iconTexRef.current;
+      const hit = cache.get(emoji);
+      if (hit) return hit;
+      const c = document.createElement("canvas");
+      const size = 48;
+      c.width = size;
+      c.height = size;
+      const cx = c.getContext("2d");
+      if (cx) {
+        cx.font = `${Math.round(size * 0.8)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+        cx.textAlign = "center";
+        cx.textBaseline = "middle";
+        cx.fillText(emoji, size / 2, size / 2);
+      }
+      const tex = PIXI.Texture.from(c);
+      cache.set(emoji, tex);
+      return tex;
+    };
+
     // Nodes: one Container each (card + accent + label + hidden selection ring).
     const selected = new Set(selectedRef.current);
     const tierNow = lodTier(viewportRef.current.scale);
@@ -154,15 +201,18 @@ export const PixiRenderLayer: React.FC = () => {
       }
       node.addChild(card);
 
-      const label = new PIXI.Text({
-        text: `${serviceIcon(n.serviceId)}  ${n.name}`,
-        style: {
-          fill: LABEL_FILL,
-          fontSize: 14,
-          fontFamily: "ui-sans-serif, system-ui, sans-serif",
-          fontWeight: n.isContainer ? "700" : "600",
-        },
+      // Label group: batched icon Sprite (shared texture) + bitmap-font name.
+      const label = new PIXI.Container();
+      const iconSprite = new PIXI.Sprite(iconTexture(serviceIcon(n.serviceId)));
+      iconSprite.width = 16;
+      iconSprite.height = 16;
+      iconSprite.position.set(0, -1);
+      const name = new PIXI.BitmapText({
+        text: n.name,
+        style: { fontFamily: LABEL_FONT, fontSize: 14 },
       });
+      name.position.set(20, 1);
+      label.addChild(iconSprite, name);
       label.position.set(n.isContainer ? 14 : 16, n.isContainer ? 10 : n.h / 2 - 9);
       label.visible = labelsVisible;
       labelsRef.current.push(label);
