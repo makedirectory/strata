@@ -442,6 +442,28 @@ export function panToCenter(
   };
 }
 
+// ---- HiDPI ----------------------------------------------------------------
+
+/**
+ * Backing-store pixel size for a canvas of CSS size `cssW × cssH` at device
+ * pixel ratio `dpr`. The canvas element stays `cssW × cssH` in layout while its
+ * `width`/`height` attributes use the returned (rounded) pixel size; the 2D
+ * context is then scaled by `dpr` so drawing stays crisp on HiDPI displays. `dpr`
+ * is clamped to a sane range so a bogus value can't blow up the backing store.
+ */
+export function dprBackingSize(
+  cssW: number,
+  cssH: number,
+  dpr: number,
+): { width: number; height: number; ratio: number } {
+  const ratio = Math.min(4, Math.max(1, Number.isFinite(dpr) ? dpr : 1));
+  return {
+    width: Math.max(0, Math.round(cssW * ratio)),
+    height: Math.max(0, Math.round(cssH * ratio)),
+    ratio,
+  };
+}
+
 // ---- semantic level-of-detail --------------------------------------------
 
 /** Effective-scale thresholds for LOD tier boundaries. */
