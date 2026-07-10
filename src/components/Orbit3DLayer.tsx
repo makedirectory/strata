@@ -21,7 +21,7 @@ import {
   dot,
   norm,
 } from "../canvas/orbit3d";
-import { renderMode } from "../canvas/renderMode";
+import { useRenderMode } from "../canvas/renderMode";
 
 /**
  * Mode B — 3D orbit view. Containment depth becomes elevation, so a deeply
@@ -30,10 +30,9 @@ import { renderMode } from "../canvas/renderMode";
  * when it's active (see renderMode), and this canvas is opaque + owns pointer
  * input, so there's no double-paint. Reprojects the same pure layout
  * (`a11yNodes`: world rect + depth) every other renderer uses; colour/icon come
- * from the registry; picking routes to the same selection store.
+ * from the registry; picking routes to the same selection store. Enabled at
+ * runtime by the 2D⇄3D view toggle (see renderMode).
  */
-const ENABLED = renderMode() === "3d";
-
 const LAYER_GAP = 3.0;
 const LIGHT = norm({ x: -0.4, y: 1, z: 0.35 });
 /** Elevation angles for the two camera presets (radians). */
@@ -78,6 +77,7 @@ interface Fly {
 export const Orbit3DLayer: React.FC = () => {
   const { a11yNodes, selectedIds, state, selectNode, findingMarkers, driftMarkers, costMarkers } =
     useFlow();
+  const enabled = useRenderMode() === "3d";
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [explode, setExplode] = useState(1.4);
   const [autoOrbit, setAutoOrbit] = useState(false);
@@ -261,7 +261,7 @@ export const Orbit3DLayer: React.FC = () => {
   // inspector). An in-canvas click sets lastClickSelectRef first, so it doesn't
   // trigger a camera move.
   useEffect(() => {
-    if (!ENABLED) return;
+    if (!enabled) return;
     const cur = selectedIds[0] ?? null;
     if (cur === prevSelRef.current) return;
     const fromClick = cur === lastClickSelectRef.current;
@@ -292,10 +292,10 @@ export const Orbit3DLayer: React.FC = () => {
     }
     lastClickSelectRef.current = null;
     prevSelRef.current = cur;
-  }, [selectedIds, nodes, layout, explode]);
+  }, [enabled, selectedIds, nodes, layout, explode]);
 
   useEffect(() => {
-    if (!ENABLED) return;
+    if (!enabled) return;
     const canvas = canvasRef.current;
     const parent = canvas?.parentElement;
     if (!canvas || !parent) return;
@@ -854,9 +854,11 @@ export const Orbit3DLayer: React.FC = () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, []);
+    // Re-run on toggle: sets up when 3D becomes active, tears down when it leaves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
 
-  if (!ENABLED) return null;
+  if (!enabled) return null;
   const dockBtn: React.CSSProperties = {
     pointerEvents: "auto",
     font: "600 11px ui-sans-serif, system-ui, sans-serif",

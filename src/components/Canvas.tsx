@@ -8,10 +8,13 @@ import { CanvasRenderLayer } from "./CanvasRenderLayer";
 import { PixiRenderLayer } from "./PixiRenderLayer";
 import { Orbit3DLayer } from "./Orbit3DLayer";
 import { worldToScreen } from "../canvas/geometry";
-import { renderMode } from "../canvas/renderMode";
-
-/** The 3D orbit view owns the whole viewport, so 2D-only chrome is hidden. */
-const THREE_D = renderMode() === "3d";
+import {
+  useRenderMode,
+  setRenderMode,
+  getRenderMode,
+  RENDER_MODE_STORAGE_KEY,
+  type RenderMode,
+} from "../canvas/renderMode";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
 const GRID_MAJOR = 80;
@@ -59,9 +62,24 @@ export const Canvas: React.FC = () => {
     driftMarkers,
   } = useFlow();
 
+  // Active render mode (2D DOM vs 3D orbit) — runtime, driven by the view toggle.
+  const renderModeValue = useRenderMode();
+  const threeD = renderModeValue === "3d";
+
   // Whether a minimap click-drag is in progress (window-level so the drag keeps
   // navigating even when the pointer leaves the small minimap box).
   const minimapDragRef = useRef(false);
+
+  // Restore the persisted view choice once on mount (kept out of the initial
+  // render to avoid an SSR/hydration mismatch — see renderMode.ts).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(RENDER_MODE_STORAGE_KEY) as RenderMode | null;
+      if (saved && saved !== getRenderMode()) setRenderMode(saved);
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
 
   // Drag and drop — scoped to the canvas element so drops elsewhere in the
   // window (e.g. over the palette or inspector) are not swallowed.
@@ -123,11 +141,20 @@ export const Canvas: React.FC = () => {
     return () => window.removeEventListener(PALETTE_ADD_EVENT, handler);
   }, [addResourceFromPalette, worldRef, presentation]);
 
-  // Redraw when state changes
+  // Redraw when state changes (or the view mode toggles, so the DOM path repaints
+  // when switching back to 2D and clears itself when switching to 3D).
   useEffect(() => {
     draw();
     drawMinimap();
-  }, [state.resources, state.relationships, viewport, state.mode, draw, drawMinimap]);
+  }, [
+    state.resources,
+    state.relationships,
+    viewport,
+    state.mode,
+    renderModeValue,
+    draw,
+    drawMinimap,
+  ]);
 
   // Make the visible grid track the viewport so "snap to the visible grid" is
   // honest at any pan/zoom: background-position follows pan, size scales with
@@ -250,6 +277,26 @@ export const Canvas: React.FC = () => {
 
   return (
     <>
+      {/* View toggle: 2D (DOM diagram — detailed, print/embed) ⇄ 3D orbit. */}
+      <div className="view-toggle" role="group" aria-label="View mode">
+        {[
+          { m: "dom" as RenderMode, label: "2D" },
+          { m: "3d" as RenderMode, label: "3D" },
+        ].map(({ m, label }) => {
+          const active = (m === "3d") === threeD;
+          return (
+            <button
+              key={m}
+              type="button"
+              className={active ? "view-toggle-btn active" : "view-toggle-btn"}
+              aria-pressed={active}
+              onClick={() => setRenderMode(m)}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
       <div className="grid" ref={gridRef} aria-hidden="true" />
       <svg className="edges" ref={svgRef} aria-hidden="true" />
       {/* Pointer-only canvas surface; node interactions are delivered via the
@@ -271,8 +318,8 @@ export const Canvas: React.FC = () => {
       <CanvasRenderLayer />
       <PixiRenderLayer />
       <Orbit3DLayer />
-      {!THREE_D && <AnnotationLayer />}
-      {!THREE_D && (guides.length > 0 || marquee) && (
+      {!threeD && <AnnotationLayer />}
+      {!threeD && (guides.length > 0 || marquee) && (
         <svg
           className="guides"
           aria-hidden="true"
@@ -315,7 +362,7 @@ export const Canvas: React.FC = () => {
           )}
         </svg>
       )}
-      {!THREE_D && findingMarkers.length > 0 && (
+      {!threeD && findingMarkers.length > 0 && (
         <svg className="findings-overlay" aria-hidden="true">
           {findingMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -335,7 +382,7 @@ export const Canvas: React.FC = () => {
           })}
         </svg>
       )}
-      {!THREE_D && driftMarkers.length > 0 && (
+      {!threeD && driftMarkers.length > 0 && (
         <svg className="findings-overlay" aria-hidden="true">
           {driftMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -355,7 +402,7 @@ export const Canvas: React.FC = () => {
           })}
         </svg>
       )}
-      {!THREE_D && costMarkers.length > 0 && (
+      {!threeD && costMarkers.length > 0 && (
         <div className="cost-overlay" aria-hidden="true">
           {costMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -380,7 +427,7 @@ export const Canvas: React.FC = () => {
           </button>
         </div>
       )}
-      {!THREE_D && breadcrumb.length > 0 && (
+      {!threeD && breadcrumb.length > 0 && (
         <div className="breadcrumb" role="navigation" aria-label="Containment path">
           {breadcrumb.map((c, i) => (
             <React.Fragment key={c.id}>
@@ -401,7 +448,7 @@ export const Canvas: React.FC = () => {
           )}
         </div>
       )}
-      {!THREE_D && (
+      {!threeD && (
         <div className="zoom-controls" role="group" aria-label="Zoom controls">
           <button type="button" onClick={zoomIn} title="Zoom in" aria-label="Zoom in">
             +
@@ -436,7 +483,7 @@ export const Canvas: React.FC = () => {
           </button>
         </div>
       )}
-      {!THREE_D && (
+      {!threeD && (
         <div className="minimap" title="Click or drag to navigate">
           <canvas
             ref={minimapRef}

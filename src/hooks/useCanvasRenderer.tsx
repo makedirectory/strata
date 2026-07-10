@@ -27,7 +27,7 @@ import {
   type Rect,
 } from "../canvas/geometry";
 import type { LayoutResult } from "../canvas/layout";
-import { DOM_RENDER_ACTIVE } from "../canvas/renderMode";
+import { isDomRenderActive } from "../canvas/renderMode";
 
 /** Render up to N config entries (and region) as short key:value pill strings. */
 function configPills(r: ResourceInstance): string[] {
@@ -902,7 +902,7 @@ export function useCanvasRenderer(
       // When an alternate renderer (canvas / webgl / 3d) is active it OWNS the
       // node/edge painting; the DOM structural render must stand down entirely so
       // the two don't double-paint (ghosted labels) or double the frame cost.
-      if (!DOM_RENDER_ACTIVE) {
+      if (!isDomRenderActive()) {
         if (world.childElementCount) world.replaceChildren();
         if (svg.childElementCount) svg.replaceChildren();
         return;
