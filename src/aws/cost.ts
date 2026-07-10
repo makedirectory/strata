@@ -181,6 +181,35 @@ const RDS_STORAGE_GB = 0.115; // gp-SSD $/GiB-month
 
 /** Approx. hours in a month, us-east-1 baseline for all hourly conversions. */
 const HOURS_PER_MONTH = 730;
+
+/**
+ * Realism knobs applied on top of the us-east-1 heuristic. All optional and
+ * defaulted, so existing callers/tests are unaffected: the defaults reproduce
+ * the historical (us-east-1, 730 hrs, no discount) figure exactly.
+ */
+export interface CostAssumptions {
+  /** Region price multiplier (1.0 = us-east-1 baseline). */
+  regionMultiplier?: number;
+  /** Billable hours per month (default 730). Scales hourly-derived cases only. */
+  hoursPerMonth?: number;
+  /** Savings Plan / Reserved Instance discount, 0–100 % (default 0). */
+  discountPct?: number;
+}
+
+interface NormalizedAssumptions {
+  regionMultiplier: number;
+  hoursPerMonth: number;
+  discountPct: number;
+}
+
+/** Resolve assumptions to concrete, sanitized values (defaults = historical). */
+function normalizeAssumptions(a?: CostAssumptions): NormalizedAssumptions {
+  return {
+    regionMultiplier: Math.max(0, a?.regionMultiplier ?? 1),
+    hoursPerMonth: Math.max(0, a?.hoursPerMonth ?? HOURS_PER_MONTH),
+    discountPct: Math.min(100, Math.max(0, a?.discountPct ?? 0)),
+  };
+}
 /** OpenSearch Serverless price per OCU-hour (us-east-1). */
 const AOSS_OCU_HR = 0.24;
 /** Fargate per-vCPU-hour and per-GB-hour (us-east-1, Linux/x86). */
@@ -213,8 +242,12 @@ const lookup = (table: Record<string, number>, key: string | undefined, fallback
  * actually move spend: instance/node **size**, **count** (ASG capacity, cache
  * nodes, replicas), **multi-AZ** doubling, and **storage GiB**. Still a rough,
  * us-east-1 baseline (no data-transfer, request, or commitment pricing).
+ *
+ * Inner function: returns the raw us-east-1 figure using `hours` for hourly
+ * conversions. The public {@link estimateMonthlyCost} applies the region and
+ * discount multipliers on top.
  */
-export function estimateMonthlyCost(r: ResourceInstance): number | null {
+function baseMonthlyCost(r: ResourceInstance, hours: number): number | null {
   switch (r.serviceId) {
     case "ec2-instance":
       return lookup(EC2_BY_TYPE, str(r, "instanceType"), BASE_MONTHLY["ec2-instance"]);
@@ -259,7 +292,7 @@ export function estimateMonthlyCost(r: ResourceInstance): number | null {
       // ENABLED (the AWS default) holds a 4-OCU minimum (2 primary + 2 standby);
       // anything else (DISABLED / unset-to-conservative) holds a 2-OCU minimum.
       const ocus = str(r, "standbyReplicas") === "DISABLED" ? 2 : 4;
-      return ocus * AOSS_OCU_HR * HOURS_PER_MONTH;
+      return ocus * AOSS_OCU_HR * hours;
     }
 
     case "ecs-service":
@@ -276,13 +309,13 @@ export function estimateMonthlyCost(r: ResourceInstance): number | null {
       const vcpu = Math.max(0, cpuUnits) / 1024;
       const memGB = Math.max(0, memMiB) / 1024;
       const count = Math.max(1, num(r, "desiredCount", 1));
-      return (vcpu * FARGATE_VCPU_HR + memGB * FARGATE_GB_HR) * HOURS_PER_MONTH * count;
+      return (vcpu * FARGATE_VCPU_HR + memGB * FARGATE_GB_HR) * hours * count;
     }
 
     case "elastic-ip":
       // Public IPv4 is billed hourly (~$0.005/hr) whether idle or attached since
       // Feb 2024; `attached` is retained in config for future differentiation.
-      return 0.005 * HOURS_PER_MONTH;
+      return 0.005 * hours;
 
     case "vpc-flow-logs": {
       // Ingestion + retained storage. Volume is workload-specific and unmodeled,
@@ -307,6 +340,22 @@ export function estimateMonthlyCost(r: ResourceInstance): number | null {
       return base === undefined ? null : base;
     }
   }
+}
+
+/**
+ * Estimated monthly USD for a resource, or `null` when not modeled. Applies the
+ * optional {@link CostAssumptions} (region multiplier, hours/month, SP/RI
+ * discount) on top of the us-east-1 heuristic; with defaults the result is the
+ * historical figure unchanged. Never returns a negative number.
+ */
+export function estimateMonthlyCost(
+  r: ResourceInstance,
+  assumptions?: CostAssumptions,
+): number | null {
+  const { regionMultiplier, hoursPerMonth, discountPct } = normalizeAssumptions(assumptions);
+  const base = baseMonthlyCost(r, hoursPerMonth);
+  if (base === null) return null;
+  return Math.max(0, base) * regionMultiplier * (1 - discountPct / 100);
 }
 
 /**
@@ -361,13 +410,16 @@ export interface CostTotal {
  * is. When any billable-but-unmapped serviceId is present, `isFloor` is true and
  * the total should be presented as a lower bound, never a final number.
  */
-export function estimateTotal(resources: readonly ResourceInstance[]): CostTotal {
+export function estimateTotal(
+  resources: readonly ResourceInstance[],
+  assumptions?: CostAssumptions,
+): CostTotal {
   let total = 0;
   let estimated = 0;
   let unknown = 0;
   const unmapped = new Set<string>();
   for (const r of resources) {
-    const c = estimateMonthlyCost(r);
+    const c = estimateMonthlyCost(r, assumptions);
     if (c === null) {
       unknown++;
       if (!FREE_SERVICE_IDS.has(r.serviceId)) unmapped.add(r.serviceId);

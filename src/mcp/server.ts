@@ -19,7 +19,7 @@ import { emptyGraph } from "../aws/model";
 import { allServices, getService, searchServices, serviceProvider } from "../aws/registry";
 import { validateArchitecture, suggestRules } from "../aws/rules";
 import { evaluateReachability } from "../aws/reachability";
-import { estimateMonthlyCost, estimateTotal } from "../aws/cost";
+import { estimateMonthlyCost, estimateTotal, type CostAssumptions } from "../aws/cost";
 import { reviewAccount } from "../aws/review";
 import { mapToCloud } from "../aws/cloudMap";
 import { detectFixes, applyFix } from "../aws/autofix";
@@ -115,6 +115,29 @@ const GRAPH_ID_SCHEMA = {
 
 /** Schema props for a tool accepting EITHER an inline `graph` OR a `graphId`. */
 const graphOrHandleProps = { graph: GRAPH_SCHEMA, graphId: GRAPH_ID_SCHEMA };
+
+const ASSUMPTIONS_SCHEMA = {
+  type: "object",
+  description: "Cost realism knobs (all optional; defaults = us-east-1, 730 hrs, no discount).",
+  properties: {
+    regionMultiplier: { type: "number", description: "Region price multiplier (1.0 = us-east-1)." },
+    hoursPerMonth: { type: "number", description: "Billable hours per month (default 730)." },
+    discountPct: { type: "number", description: "SP/RI discount, 0–100 % (default 0)." },
+  },
+};
+
+/** Read an optional CostAssumptions object from tool args. */
+function readAssumptions(a: Args): CostAssumptions | undefined {
+  const v = a.assumptions;
+  if (typeof v !== "object" || v === null) return undefined;
+  const o = v as Record<string, unknown>;
+  const numOr = (k: string) => (typeof o[k] === "number" ? (o[k] as number) : undefined);
+  return {
+    regionMultiplier: numOr("regionMultiplier"),
+    hoursPerMonth: numOr("hoursPerMonth"),
+    discountPct: numOr("discountPct"),
+  };
+}
 
 /** The tools an MCP client can list and call. */
 export const TOOLS: McpTool[] = [
@@ -320,11 +343,12 @@ export const TOOLS: McpTool[] = [
   {
     name: "estimate_cost",
     description:
-      "Rough monthly USD estimate per resource + diagram total (us-east-1 baseline; ignores usage/transfer/discounts). Accepts an inline `graph` or a `graphId` handle.",
-    inputSchema: objectSchema(graphOrHandleProps),
+      "Rough monthly USD estimate per resource + diagram total (us-east-1 baseline). Accepts an inline `graph` or a `graphId` handle, and optional `assumptions` (regionMultiplier / hoursPerMonth / discountPct).",
+    inputSchema: objectSchema({ ...graphOrHandleProps, assumptions: ASSUMPTIONS_SCHEMA }),
     run: (a) => {
       const graph = resolveGraph(a);
-      const totals = estimateTotal(graph.resources);
+      const assumptions = readAssumptions(a);
+      const totals = estimateTotal(graph.resources, assumptions);
       return {
         currency: totals.isFloor
           ? `USD/month (rough FLOOR — ${totals.unmappedBillableTypes.length} billable type(s) unmapped)`
@@ -338,7 +362,7 @@ export const TOOLS: McpTool[] = [
           id: r.id,
           name: r.name,
           serviceId: r.serviceId,
-          monthly: estimateMonthlyCost(r),
+          monthly: estimateMonthlyCost(r, assumptions),
         })),
       };
     },

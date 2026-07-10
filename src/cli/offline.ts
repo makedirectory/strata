@@ -9,7 +9,7 @@
  * registry" invariant.
  */
 import type { InfrastructureGraph } from "../aws/model";
-import { estimateMonthlyCost, estimateTotal } from "../aws/cost";
+import { estimateMonthlyCost, estimateTotal, type CostAssumptions } from "../aws/cost";
 import { getService, serviceColor, serviceIcon } from "../aws/registry";
 import { computeLayout } from "../canvas/layout";
 import { buildSvg } from "../canvas/imageExport";
@@ -36,11 +36,14 @@ export interface CostReport {
 }
 
 /** Roll a graph up into a cost report: total, per-category, and floor honesty. */
-export function buildCostReport(graph: InfrastructureGraph): CostReport {
-  const totals = estimateTotal(graph.resources);
+export function buildCostReport(
+  graph: InfrastructureGraph,
+  assumptions?: CostAssumptions,
+): CostReport {
+  const totals = estimateTotal(graph.resources, assumptions);
   const byCategory = new Map<string, { total: number; count: number }>();
   for (const r of graph.resources) {
-    const c = estimateMonthlyCost(r);
+    const c = estimateMonthlyCost(r, assumptions);
     if (c === null) continue;
     const category = getService(r.serviceId)?.category ?? "other";
     const agg = byCategory.get(category) ?? { total: 0, count: 0 };

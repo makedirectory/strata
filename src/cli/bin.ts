@@ -21,7 +21,7 @@ import { watchRepoPlan } from "../server/watchPlan";
 import { saveSnapshot } from "../server/strataStore";
 import type { InfrastructureGraph } from "../aws/model";
 import { importAnyIaC } from "../lib/importIac";
-import { formatMonthly } from "../aws/cost";
+import { formatMonthly, type CostAssumptions } from "../aws/cost";
 import { buildCostReport, renderGraphSvg } from "./offline";
 
 interface Flags {
@@ -31,6 +31,9 @@ interface Flags {
   save: boolean;
   dir?: string;
   out?: string;
+  regionMultiplier?: number;
+  hours?: number;
+  discount?: number;
 }
 
 function parse(argv: string[]): Flags {
@@ -42,9 +45,21 @@ function parse(argv: string[]): Flags {
     else if (a === "--root") f.root = argv[++i];
     else if (a === "--strategy") f.strategy = argv[++i] as ConnectStrategy;
     else if (a === "-o" || a === "--out") f.out = argv[++i];
+    else if (a === "--region-multiplier") f.regionMultiplier = Number(argv[++i]);
+    else if (a === "--hours") f.hours = Number(argv[++i]);
+    else if (a === "--discount") f.discount = Number(argv[++i]);
     else if (!a.startsWith("--") && !f.dir) f.dir = a;
   }
   return f;
+}
+
+/** Build CostAssumptions from flags, omitting any that weren't provided. */
+function assumptionsFromFlags(f: Flags): CostAssumptions | undefined {
+  const a: CostAssumptions = {};
+  if (Number.isFinite(f.regionMultiplier)) a.regionMultiplier = f.regionMultiplier;
+  if (Number.isFinite(f.hours)) a.hoursPerMonth = f.hours;
+  if (Number.isFinite(f.discount)) a.discountPct = f.discount;
+  return Object.keys(a).length > 0 ? a : undefined;
 }
 
 /** Load a graph for `cost`: import a single IaC file, or connect a repo dir. */
@@ -62,7 +77,7 @@ Usage:
   npm run strata -- connect <dir> [--root NAME] [--strategy auto|static|resolved] [--json] [--save]
   npm run strata -- plan    <dir> [--root NAME] [--json] [--save]
   npm run strata -- watch   <dir> [--root NAME] [--save]
-  npm run strata -- cost    <file|dir> [--json]
+  npm run strata -- cost    <file|dir> [--region-multiplier N] [--hours N] [--discount PCT] [--json]
   npm run strata -- render  <graph.json> -o <out.svg> [--json]
 
 Notes:
@@ -193,7 +208,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "cost") {
-    const report = buildCostReport(await loadGraphForCost(dir));
+    const report = buildCostReport(await loadGraphForCost(dir), assumptionsFromFlags(flags));
     if (flags.json) {
       process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     } else {

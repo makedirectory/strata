@@ -114,6 +114,33 @@ describe("estimateMonthlyCost", () => {
     expect(estimateMonthlyCost(res("bedrock"))).toBeGreaterThan(0);
     expect(estimateMonthlyCost(res("bedrock-knowledge-base"))).toBeGreaterThan(0);
   });
+
+  it("applies CostAssumptions: region multiplier and SP/RI discount", () => {
+    // Region multiplier scales a flat base (NAT gateway = 32).
+    expect(estimateMonthlyCost(res("nat-gateway"), { regionMultiplier: 1.5 })).toBeCloseTo(48);
+    // Discount reduces the figure; 25% off 32 = 24.
+    expect(estimateMonthlyCost(res("nat-gateway"), { discountPct: 25 })).toBeCloseTo(24);
+    // Both compose: 32 × 1.5 × 0.75 = 36.
+    expect(
+      estimateMonthlyCost(res("nat-gateway"), { regionMultiplier: 1.5, discountPct: 25 }),
+    ).toBeCloseTo(36);
+    // Defaults reproduce the historical figure exactly.
+    expect(estimateMonthlyCost(res("nat-gateway"))).toBe(32);
+  });
+
+  it("applies hoursPerMonth to hourly-derived cases only", () => {
+    // Elastic IP is 0.005 × hours; halving hours halves it.
+    expect(estimateMonthlyCost(res("elastic-ip"), { hoursPerMonth: 365 })).toBeCloseTo(1.825);
+    // A flat base (NAT) is a monthly figure — hours does not scale it.
+    expect(estimateMonthlyCost(res("nat-gateway"), { hoursPerMonth: 365 })).toBe(32);
+  });
+
+  it("clamps out-of-range assumptions (never negative, discount capped at 100%)", () => {
+    // Negative region multiplier is floored at 0.
+    expect(estimateMonthlyCost(res("nat-gateway"), { regionMultiplier: -5 })).toBe(0);
+    // Discount above 100% is capped, so the figure floors at 0 (not negative).
+    expect(estimateMonthlyCost(res("nat-gateway"), { discountPct: 150 })).toBe(0);
+  });
 });
 
 describe("estimateTotal", () => {
