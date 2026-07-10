@@ -65,6 +65,9 @@ export const Canvas: React.FC = () => {
   // Active render mode (2D DOM vs 3D orbit) — runtime, driven by the view toggle.
   const renderModeValue = useRenderMode();
   const threeD = renderModeValue === "3d";
+  // Read the current mode from inside long-lived listeners without re-binding.
+  const threeDRef = useRef(threeD);
+  threeDRef.current = threeD;
 
   // Whether a minimap click-drag is in progress (window-level so the drag keeps
   // navigating even when the pointer leaves the small minimap box).
@@ -104,12 +107,13 @@ export const Canvas: React.FC = () => {
         ) {
           // Convert window coords to canvas-wrap-local coords before passing to
           // screenToWorld (which only undoes pan/scale relative to that origin).
+          // In 3D the drop point has no meaningful 2D position, so drop at the
+          // viewport centre; addResource auto-selects it and the 3D camera flies
+          // to frame it.
           const rect = el.getBoundingClientRect();
-          addResourceFromPalette(
-            (item as { serviceId: string }).serviceId,
-            e.clientX - rect.left,
-            e.clientY - rect.top,
-          );
+          const x = threeDRef.current ? rect.width / 2 : e.clientX - rect.left;
+          const y = threeDRef.current ? rect.height / 2 : e.clientY - rect.top;
+          addResourceFromPalette((item as { serviceId: string }).serviceId, x, y);
         }
       } catch (err) {
         console.error("Canvas: failed to parse drag-and-drop payload", err);
