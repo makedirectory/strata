@@ -8,6 +8,10 @@ import { CanvasRenderLayer } from "./CanvasRenderLayer";
 import { PixiRenderLayer } from "./PixiRenderLayer";
 import { Orbit3DLayer } from "./Orbit3DLayer";
 import { worldToScreen } from "../canvas/geometry";
+import { renderMode } from "../canvas/renderMode";
+
+/** The 3D orbit view owns the whole viewport, so 2D-only chrome is hidden. */
+const THREE_D = renderMode() === "3d";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
 const GRID_MAJOR = 80;
@@ -267,8 +271,8 @@ export const Canvas: React.FC = () => {
       <CanvasRenderLayer />
       <PixiRenderLayer />
       <Orbit3DLayer />
-      <AnnotationLayer />
-      {(guides.length > 0 || marquee) && (
+      {!THREE_D && <AnnotationLayer />}
+      {!THREE_D && (guides.length > 0 || marquee) && (
         <svg
           className="guides"
           aria-hidden="true"
@@ -311,7 +315,7 @@ export const Canvas: React.FC = () => {
           )}
         </svg>
       )}
-      {findingMarkers.length > 0 && (
+      {!THREE_D && findingMarkers.length > 0 && (
         <svg className="findings-overlay" aria-hidden="true">
           {findingMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -331,7 +335,7 @@ export const Canvas: React.FC = () => {
           })}
         </svg>
       )}
-      {driftMarkers.length > 0 && (
+      {!THREE_D && driftMarkers.length > 0 && (
         <svg className="findings-overlay" aria-hidden="true">
           {driftMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -351,7 +355,7 @@ export const Canvas: React.FC = () => {
           })}
         </svg>
       )}
-      {costMarkers.length > 0 && (
+      {!THREE_D && costMarkers.length > 0 && (
         <div className="cost-overlay" aria-hidden="true">
           {costMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -376,7 +380,7 @@ export const Canvas: React.FC = () => {
           </button>
         </div>
       )}
-      {breadcrumb.length > 0 && (
+      {!THREE_D && breadcrumb.length > 0 && (
         <div className="breadcrumb" role="navigation" aria-label="Containment path">
           {breadcrumb.map((c, i) => (
             <React.Fragment key={c.id}>
@@ -397,51 +401,55 @@ export const Canvas: React.FC = () => {
           )}
         </div>
       )}
-      <div className="zoom-controls" role="group" aria-label="Zoom controls">
-        <button type="button" onClick={zoomIn} title="Zoom in" aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={zoomOut} title="Zoom out" aria-label="Zoom out">
-          −
-        </button>
-        <button
-          type="button"
-          className="zoom-level"
-          onClick={zoomReset}
-          title="Reset to 100%"
-          aria-label="Reset zoom to 100%"
-        >
-          {Math.round(viewport.scale * 100)}%
-        </button>
-        <button
-          type="button"
-          onClick={fitToView}
-          title="Fit all to view"
-          aria-label="Fit all to view"
-        >
-          Fit
-        </button>
-        <button
-          type="button"
-          onClick={zoomToSelection}
-          title="Zoom to selection"
-          aria-label="Zoom to selection"
-        >
-          ⤢
-        </button>
-      </div>
-      <div className="minimap" title="Click or drag to navigate">
-        <canvas
-          ref={minimapRef}
-          aria-hidden="true"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            minimapDragRef.current = true;
-            minimapNavigate(e.clientX, e.clientY);
-          }}
-        />
-      </div>
+      {!THREE_D && (
+        <div className="zoom-controls" role="group" aria-label="Zoom controls">
+          <button type="button" onClick={zoomIn} title="Zoom in" aria-label="Zoom in">
+            +
+          </button>
+          <button type="button" onClick={zoomOut} title="Zoom out" aria-label="Zoom out">
+            −
+          </button>
+          <button
+            type="button"
+            className="zoom-level"
+            onClick={zoomReset}
+            title="Reset to 100%"
+            aria-label="Reset zoom to 100%"
+          >
+            {Math.round(viewport.scale * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={fitToView}
+            title="Fit all to view"
+            aria-label="Fit all to view"
+          >
+            Fit
+          </button>
+          <button
+            type="button"
+            onClick={zoomToSelection}
+            title="Zoom to selection"
+            aria-label="Zoom to selection"
+          >
+            ⤢
+          </button>
+        </div>
+      )}
+      {!THREE_D && (
+        <div className="minimap" title="Click or drag to navigate">
+          <canvas
+            ref={minimapRef}
+            aria-hidden="true"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              minimapDragRef.current = true;
+              minimapNavigate(e.clientX, e.clientY);
+            }}
+          />
+        </div>
+      )}
     </>
   );
 };
