@@ -63,7 +63,8 @@ interface Node3D {
 }
 
 export const Orbit3DLayer: React.FC = () => {
-  const { a11yNodes, selectedIds, state, selectNode } = useFlow();
+  const { a11yNodes, selectedIds, state, selectNode, findingMarkers, driftMarkers, costMarkers } =
+    useFlow();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [explode, setExplode] = useState(1.4);
   const [autoOrbit, setAutoOrbit] = useState(false);
@@ -88,8 +89,52 @@ export const Orbit3DLayer: React.FC = () => {
     const ids = new Set(nodes.map((n) => n.id));
     return state.relationships
       .filter((e) => e.from !== e.to && ids.has(e.from) && ids.has(e.to))
-      .map((e) => ({ from: e.from, to: e.to, color: EDGE_COLOR[e.kind] ?? "#5b6b8c" }));
+      .map((e) => ({
+        from: e.from,
+        to: e.to,
+        kind: e.kind,
+        color: EDGE_COLOR[e.kind] ?? "#5b6b8c",
+      }));
   }, [nodes, state.relationships]);
+
+  // Overlay glyph lookups (finding / drift / cost), keyed by resource id.
+  const overlays = useMemo(() => {
+    const finding = new Map(findingMarkers.map((m) => [m.id, m.level]));
+    const drift = new Map(driftMarkers.map((m) => [m.id, m.status]));
+    const cost = new Map(costMarkers.map((m) => [m.id, m.text]));
+    return { finding, drift, cost };
+  }, [findingMarkers, driftMarkers, costMarkers]);
+
+  // Selection info for the in-view card (name, service, depth, connections).
+  const selectedInfo = useMemo(() => {
+    const id = selectedIds[0];
+    if (!id) return null;
+    const a = a11yNodes.find((n) => n.id === id);
+    if (!a) return null;
+    const nameById = new Map(a11yNodes.map((n) => [n.id, n.name]));
+    const conns = state.relationships
+      .filter((e) => e.from === id || e.to === id)
+      .map((e) => {
+        const otherId = e.from === id ? e.to : e.from;
+        return {
+          dir: e.from === id ? "→" : "←",
+          kind: e.kind,
+          name: nameById.get(otherId) ?? otherId,
+        };
+      })
+      .slice(0, 6);
+    return {
+      id,
+      name: a.name,
+      serviceName: a.serviceName,
+      color: serviceColor(a.serviceId),
+      icon: serviceIcon(a.serviceId),
+      depth: a.depth,
+      container: a.isContainer,
+      parentName: a.parentName,
+      conns,
+    };
+  }, [selectedIds, a11yNodes, state.relationships]);
 
   const layout = useMemo(() => {
     const bounds = boundsOf(nodes.map((n) => n.rect));
@@ -116,6 +161,7 @@ export const Orbit3DLayer: React.FC = () => {
     layout,
     explode,
     showLabels,
+    overlays,
     selectedId: selectedIds[0] ?? null,
   });
   sceneRef.current = {
@@ -124,8 +170,12 @@ export const Orbit3DLayer: React.FC = () => {
     layout,
     explode,
     showLabels,
+    overlays,
     selectedId: selectedIds[0] ?? null,
   };
+  // Held navigation intents (keyboard + on-screen d-pad), applied each frame for
+  // smooth, game-like continuous motion.
+  const navRef = useRef<Set<string>>(new Set());
   const sizeRef = useRef({ W: 0, H: 0, DPR: 1 });
   const topFacesRef = useRef<Map<string, [number, number][]>>(new Map());
   const hoverRef = useRef<string | null>(null);
@@ -168,11 +218,26 @@ export const Orbit3DLayer: React.FC = () => {
     cam.target = { x: 0, y: (layout.maxDepth * LAYER_GAP * explode) / 2, z: 0 };
     requestRender();
   };
+  // Fresh reference for the (empty-deps) effect's keyboard handler.
+  const resetViewRef = useRef(resetView);
+  resetViewRef.current = resetView;
+
+  // Press-and-hold handlers for the on-screen navigation buttons — feed the same
+  // intent set the keyboard uses, so holding a button spins/zooms continuously.
+  const hold = (intent: string) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      e.preventDefault();
+      navRef.current.add(intent);
+      requestRender();
+    },
+    onPointerUp: () => navRef.current.delete(intent),
+    onPointerLeave: () => navRef.current.delete(intent),
+  });
   // Re-centre the camera vertically as depth/explode change, then repaint.
   useEffect(() => {
     camRef.current.target.y = (layout.maxDepth * LAYER_GAP * explode) / 2;
     requestRender();
-  }, [nodes, edges, layout, explode, showLabels, selectedIds]);
+  }, [nodes, edges, layout, explode, showLabels, overlays, selectedIds]);
 
   useEffect(() => {
     if (!ENABLED) return;
@@ -270,6 +335,50 @@ export const Orbit3DLayer: React.FC = () => {
     };
     const onCtx = (e: Event) => e.preventDefault();
 
+    // ---- keyboard navigation (game-like continuous motion) ----
+    const KEY_INTENT: Record<string, string> = {
+      arrowleft: "az-",
+      a: "az-",
+      arrowright: "az+",
+      d: "az+",
+      arrowup: "el+",
+      w: "el+",
+      arrowdown: "el-",
+      s: "el-",
+      "=": "zoom+",
+      "+": "zoom+",
+      q: "zoom+",
+      "-": "zoom-",
+      _: "zoom-",
+      e: "zoom-",
+    };
+    const isTyping = () => {
+      const ae = document.activeElement as HTMLElement | null;
+      const tag = ae?.tagName?.toLowerCase();
+      return (
+        !!ae && (tag === "input" || tag === "textarea" || tag === "select" || ae.isContentEditable)
+      );
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || isTyping()) return;
+      const key = e.key.toLowerCase();
+      if (key === "r") {
+        resetViewRef.current();
+        return;
+      }
+      const intent = KEY_INTENT[key];
+      if (!intent) return;
+      e.preventDefault();
+      navRef.current.add(intent);
+      requestRender();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const intent = KEY_INTENT[e.key.toLowerCase()];
+      if (intent) navRef.current.delete(intent);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointermove", onMove);
     canvas.addEventListener("pointerup", onUp);
@@ -351,6 +460,14 @@ export const Orbit3DLayer: React.FC = () => {
       const hoverId = hoverRef.current;
       for (const rec of recs) {
         const g = geom(rec);
+        // Distance cull: skip leaves whose centre is well off-screen (containers
+        // are few and large — always kept so their plates frame the scene).
+        if (!rec.container) {
+          const cp = project(basis, { x: g.x0 + g.w / 2, y: g.y + g.thick, z: g.z0 + g.d / 2 });
+          if (!cp) continue;
+          const m = 140;
+          if (cp.sx < -m || cp.sx > W + m || cp.sy < -m || cp.sy > H + m) continue;
+        }
         const corners = boxCorners(g);
         const proj = corners.map((c) => project(basis, c));
         const top = [4, 5, 6, 7].map((i) => proj[i]);
@@ -384,7 +501,57 @@ export const Orbit3DLayer: React.FC = () => {
 
       drawWires(eds);
       if (sceneRef.current.showLabels) drawLabels(recs);
+      drawOverlays(recs);
     };
+
+    // Findings / drift / cost as billboarded glyphs above each node's top.
+    function drawOverlays(recs: Node3D[]) {
+      const { overlays: ov, selectedId } = sceneRef.current;
+      if (ov.finding.size === 0 && ov.drift.size === 0 && ov.cost.size === 0) return;
+      for (const rec of recs) {
+        const level = ov.finding.get(rec.id);
+        const drift = ov.drift.get(rec.id);
+        const cost = ov.cost.get(rec.id);
+        if (!level && !drift && !cost) continue;
+        const g = geom(rec);
+        const p = project(basis, { x: g.x0 + g.w / 2, y: g.y + g.thick, z: g.z0 + g.d / 2 });
+        if (!p) continue;
+        if (
+          p.sx < -60 ||
+          p.sx > sizeRef.current.W + 60 ||
+          p.sy < -40 ||
+          p.sy > sizeRef.current.H + 40
+        )
+          continue;
+        const wpx = (g.w / p.z) * basis.focal;
+        if (wpx < 24 && rec.id !== selectedId) continue;
+        let bx = p.sx - 7;
+        const by = p.sy - (rec.container ? 10 : labelFontPx(wpx, 0.32, 14, 30) * 0.9) - 12;
+        const dot = (color: string) => {
+          ctx.beginPath();
+          ctx.arc(bx, by, 5, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 8;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          bx += 14;
+        };
+        if (level) dot(level === "error" ? "#f87171" : "#fbbf24");
+        if (drift) dot(drift === "added" ? "#34d399" : "#a78bfa");
+        if (cost) {
+          ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          const tw = ctx.measureText(cost).width;
+          roundRect(bx - 2, by - 8, tw + 8, 16, 4);
+          ctx.fillStyle = "rgba(6,10,18,0.82)";
+          ctx.fill();
+          ctx.fillStyle = "#a7f3d0";
+          ctx.fillText(cost, bx + 2, by);
+        }
+      }
+    }
 
     function drawFace(pr: {
       rec: Node3D;
@@ -575,10 +742,23 @@ export const Orbit3DLayer: React.FC = () => {
       ctx.closePath();
     }
 
-    // ---- render-on-demand loop: repaint only when dirty (or auto-orbiting) ----
+    // ---- render-on-demand loop: repaint only when dirty (or moving) ----
     const loop = () => {
+      const cam = camRef.current;
       if (autoOrbitRef.current) {
-        camRef.current.az += 0.0016;
+        cam.az += 0.0016;
+        dirtyRef.current = true;
+      }
+      // Apply held nav intents (keyboard + on-screen d-pad) for smooth motion.
+      const nav = navRef.current;
+      if (nav.size) {
+        const rot = 0.03;
+        if (nav.has("az-")) cam.az -= rot;
+        if (nav.has("az+")) cam.az += rot;
+        if (nav.has("el+")) cam.el = Math.min(1.55, cam.el + rot);
+        if (nav.has("el-")) cam.el = Math.max(0.08, cam.el - rot);
+        if (nav.has("zoom+")) cam.dist = Math.max(8, cam.dist * 0.97);
+        if (nav.has("zoom-")) cam.dist = Math.min(140, cam.dist * 1.03);
         dirtyRef.current = true;
       }
       if (dirtyRef.current) {
@@ -597,6 +777,8 @@ export const Orbit3DLayer: React.FC = () => {
       canvas.removeEventListener("pointerup", onUp);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("contextmenu", onCtx);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
     };
   }, []);
 
@@ -610,6 +792,19 @@ export const Orbit3DLayer: React.FC = () => {
     borderRadius: 8,
     padding: "6px 10px",
     cursor: "pointer",
+  };
+  const dpadBtn: React.CSSProperties = {
+    pointerEvents: "auto",
+    font: "600 15px ui-sans-serif, system-ui, sans-serif",
+    color: "#c7d2e4",
+    background: "rgba(14,21,38,0.72)",
+    border: "1px solid rgba(120,150,200,0.18)",
+    borderRadius: 8,
+    cursor: "pointer",
+    touchAction: "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   };
   const activeBtn = { color: "#04140f", background: "#4fd1c5", borderColor: "#4fd1c5" };
   const sep: React.CSSProperties = {
@@ -626,6 +821,118 @@ export const Orbit3DLayer: React.FC = () => {
         aria-hidden="true"
         style={{ position: "absolute", inset: 0, cursor: "grab", touchAction: "none", zIndex: 10 }}
       />
+      {/* On-screen orbit pad (press-and-hold) + keyboard-equivalent nav. */}
+      <div
+        style={{
+          position: "absolute",
+          right: 20,
+          bottom: 84,
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 34px)",
+          gridTemplateRows: "repeat(3, 34px)",
+          gap: 4,
+          zIndex: 11,
+        }}
+      >
+        <span />
+        <button type="button" style={dpadBtn} title="Tilt up (W)" {...hold("el+")}>
+          ↑
+        </button>
+        <span />
+        <button type="button" style={dpadBtn} title="Orbit left (A)" {...hold("az-")}>
+          ←
+        </button>
+        <button
+          type="button"
+          style={{ ...dpadBtn, fontSize: 13 }}
+          title="Reset (R)"
+          onClick={resetView}
+        >
+          ⟲
+        </button>
+        <button type="button" style={dpadBtn} title="Orbit right (D)" {...hold("az+")}>
+          →
+        </button>
+        <span />
+        <button type="button" style={dpadBtn} title="Tilt down (S)" {...hold("el-")}>
+          ↓
+        </button>
+        <span />
+      </div>
+      {/* Selection info card (in-view, mirrors the Inspector). */}
+      {selectedInfo && (
+        <div
+          style={{
+            position: "absolute",
+            left: 20,
+            bottom: 20,
+            width: 250,
+            borderRadius: 12,
+            overflow: "hidden",
+            background: "rgba(14,21,38,0.82)",
+            border: "1px solid rgba(120,150,200,0.18)",
+            backdropFilter: "blur(10px)",
+            zIndex: 11,
+            font: "12px ui-sans-serif, system-ui, sans-serif",
+            color: "#c7d2e4",
+          }}
+        >
+          <div style={{ height: 4, background: selectedInfo.color }} />
+          <div style={{ padding: "12px 14px 14px" }}>
+            <div style={{ fontSize: 10, letterSpacing: "0.14em", color: "#536078" }}>
+              {selectedInfo.serviceName.toUpperCase()}
+              {selectedInfo.container ? " · CONTAINER" : ""}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                margin: "3px 0 6px",
+                fontSize: 16,
+                fontWeight: 700,
+                color: "#fff",
+              }}
+            >
+              <span>{selectedInfo.icon}</span>
+              <span>{selectedInfo.name}</span>
+            </div>
+            <div style={{ color: "#7c8aa5", lineHeight: 1.6 }}>
+              <div>
+                <span style={{ color: "#536078" }}>layer</span> {selectedInfo.depth}
+                {selectedInfo.parentName ? (
+                  <>
+                    {"  "}
+                    <span style={{ color: "#536078" }}>within</span> {selectedInfo.parentName}
+                  </>
+                ) : null}
+              </div>
+            </div>
+            {selectedInfo.conns.length > 0 && (
+              <div style={{ marginTop: 9, display: "flex", flexDirection: "column", gap: 4 }}>
+                {selectedInfo.conns.map((c, i) => (
+                  <div key={i} style={{ display: "flex", gap: 7, alignItems: "baseline" }}>
+                    <span
+                      style={{
+                        color: "#4fd1c5",
+                        fontSize: 9.5,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        minWidth: 74,
+                      }}
+                    >
+                      {c.kind.replace(/_/g, " ")}
+                    </span>
+                    <span style={{ color: "#9fb0cc" }}>
+                      {c.dir} {c.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div
         style={{
           position: "absolute",
