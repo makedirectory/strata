@@ -16,6 +16,7 @@ import {
 } from "../aws/registry";
 import type { CloudProvider } from "../aws/types";
 import { buildSvg } from "../canvas/imageExport";
+import { resourceInventory, inventoryCsv, bomCsv } from "../aws/inventory";
 import { diffGraphs, type DriftResult } from "../aws/drift";
 import {
   validateArchitecture,
@@ -261,6 +262,10 @@ interface FlowContextValue {
   exportJSON: () => void;
   /** Download the diagram as a vector SVG or rasterised PNG image. */
   exportImage: (format: "svg" | "png") => void;
+  /** Download a resource inventory (asset dump / manifest / config baseline). */
+  exportInventory: (format: "csv" | "json") => void;
+  /** Download a bill of materials (counts + rough cost per service type) as CSV. */
+  exportBom: () => void;
   /** Copy a self-contained share link (diagram encoded in the URL hash). */
   shareDiagram: () => void;
   importJSONDialog: () => void;
@@ -1569,6 +1574,54 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }, [buildGraph, downloadBlob]);
 
+  /** Base filename derived from the diagram name (safe for a download). */
+  const exportBaseName = useCallback(
+    () =>
+      (store.graphName || "architecture").replace(/[^\w.-]+/g, "-").toLowerCase() || "architecture",
+    [store.graphName],
+  );
+
+  /**
+   * Resource inventory / asset dump / manifest / configuration baseline — one
+   * row per resource. CSV for spreadsheets, JSON for machines.
+   */
+  const exportInventory = useCallback(
+    (format: "csv" | "json") => {
+      const graph = buildGraph();
+      if (graph.resources.length === 0) {
+        setStatus("Nothing to export — the canvas is empty.");
+        return;
+      }
+      const base = exportBaseName();
+      if (format === "csv") {
+        downloadBlob(
+          new Blob([inventoryCsv(graph)], { type: "text/csv" }),
+          `${base}-inventory.csv`,
+        );
+      } else {
+        downloadBlob(
+          new Blob([JSON.stringify(resourceInventory(graph), null, 2)], {
+            type: "application/json",
+          }),
+          `${base}-inventory.json`,
+        );
+      }
+      setStatus(`Exported resource inventory (${graph.resources.length} resources).`);
+    },
+    [buildGraph, downloadBlob, exportBaseName, setStatus],
+  );
+
+  /** Bill of materials — counts + rough monthly cost rolled up per service type. */
+  const exportBom = useCallback(() => {
+    const graph = buildGraph();
+    if (graph.resources.length === 0) {
+      setStatus("Nothing to export — the canvas is empty.");
+      return;
+    }
+    downloadBlob(new Blob([bomCsv(graph)], { type: "text/csv" }), `${exportBaseName()}-bom.csv`);
+    setStatus("Exported bill of materials.");
+  }, [buildGraph, downloadBlob, exportBaseName, setStatus]);
+
   /** Export the diagram as an SVG (vector) or PNG (rasterised from the SVG). */
   const exportImage = useCallback(
     async (format: "svg" | "png") => {
@@ -2327,6 +2380,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       suggestRules: runSuggest,
       exportJSON,
       exportImage,
+      exportInventory,
+      exportBom,
       shareDiagram,
       importJSONDialog,
       importIaCDialog,
@@ -2472,6 +2527,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       runSuggest,
       exportJSON,
       exportImage,
+      exportInventory,
+      exportBom,
       shareDiagram,
       importJSONDialog,
       importIaCDialog,
