@@ -491,6 +491,52 @@ const analytics: ServiceDefinition[] = [
       { to: "kms", relationship: "depends_on", description: "Encrypts broker data at rest" },
     ],
   },
+  {
+    id: "opensearch-serverless",
+    name: "OpenSearch Serverless",
+    fullName: "Amazon OpenSearch Serverless Collection",
+    abbreviation: "AOSS",
+    category: "analytics",
+    description:
+      "On-demand serverless search and vector database billed in OpenSearch Compute Units (OCUs), distinct from managed OpenSearch domains.",
+    icon: "🛰️",
+    scope: "region",
+    cfnType: "AWS::OpenSearchServerless::Collection",
+    arnPattern: "arn:aws:aoss:{region}:{account}:collection/{id}",
+    keywords: ["opensearch", "serverless", "aoss", "vector", "ocu", "search", "collection"],
+    configFields: [
+      {
+        key: "type",
+        label: "Collection Type",
+        type: "select",
+        default: "VECTORSEARCH",
+        options: [
+          { value: "SEARCH", label: "Search" },
+          { value: "TIMESERIES", label: "Time Series" },
+          { value: "VECTORSEARCH", label: "Vector Search" },
+        ],
+      },
+      {
+        key: "standbyReplicas",
+        label: "Standby Replicas",
+        type: "select",
+        default: "ENABLED",
+        help: "ENABLED holds a 4-OCU minimum (2 primary + 2 standby); DISABLED a 2-OCU minimum.",
+        options: [
+          { value: "ENABLED", label: "Enabled (redundant, 4-OCU floor)" },
+          { value: "DISABLED", label: "Disabled (2-OCU floor)" },
+        ],
+      },
+    ],
+    commonConnections: [
+      {
+        to: "s3-bucket",
+        relationship: "reads_from",
+        description: "Ingests source documents from S3",
+      },
+      { to: "kms", relationship: "depends_on", description: "Encrypts the collection at rest" },
+    ],
+  },
 ];
 
 export default analytics;

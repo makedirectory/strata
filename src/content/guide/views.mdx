@@ -9,6 +9,29 @@ able to ask focused questions of it. Strata's **Layers & Views** and **Overlays*
 controls (in the left panel) let you filter, re-style, and analyze the graph
 without changing the underlying model.
 
+## Render modes: 2D · 2D⚡ · 3D
+
+The toggle at the **top-right of the canvas** switches how the diagram is drawn.
+All three read the same model and layout — only the painter changes — and your
+choice is remembered.
+
+- **2D** — the classic diagram (detailed cards with icons, config pills, provider
+  badges, finding/cost/drift markers, and leaf summaries like _7× Security
+  Group_). This is the everyday editing view and the best one to **print or embed**
+  — use **Data ▸ Export SVG/PNG** for a crisp, scale-independent image.
+- **2D⚡** — the same 2D diagram rendered on the GPU (WebGL). It looks nearly
+  identical but stays smooth at **thousands of nodes**, where the classic 2D view
+  starts to lag. It supports the full set of edits — select, pan/zoom, drag-to-move,
+  drag-to-reparent, marquee, connect, resize, container focus, and summary
+  expand — and is experimental.
+- **3D** — an orbit view where **containment depth becomes elevation**: an account
+  is a floor plate, each VPC a floor above it, subnets above those, resources on
+  top. Great for reading deeply-nested estates and for demos. Drag to orbit,
+  two-finger-scroll to pan, pinch to zoom, or use the WASD/arrow keys and the
+  on-screen pad; the **⬓ top** button gives a straight-down plan view, and
+  **explode** pulls the layers apart. Selecting a node from search flies the camera
+  to it. 3D is a presentation view — for detailed editing and printing, use 2D.
+
 ## Layers & filters
 
 Filter what's on screen by:

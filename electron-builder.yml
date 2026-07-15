@@ -1,0 +1,31 @@
+# electron-builder config for the Strata desktop shell. Additive: only used by
+# `npm run app:dist`; the web build/deploy never touches this.
+appId: com.strata.app
+productName: Strata
+copyright: Strata
+
+directories:
+  output: release
+  buildResources: electron/build
+
+# The Electron app itself (main + preload) goes in the asar. The Next standalone
+# server is shipped as an unpacked extra resource so it can be forked at runtime
+# (see electron/main.cjs → process.resourcesPath/standalone/server.js).
+files:
+  - electron/**/*
+  - package.json
+extraResources:
+  - from: .next/standalone
+    to: standalone
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+win:
+  target:
+    - nsis
+linux:
+  target:
+    - AppImage

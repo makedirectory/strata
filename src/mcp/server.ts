@@ -12,13 +12,14 @@
  * the process streams. Run it with `npm run mcp` (which uses `npx tsx`), and
  * point an MCP client at that command.
  */
+import { readFileSync } from "node:fs";
 import { version as SERVER_VERSION } from "../../package.json";
 import type { InfrastructureGraph } from "../aws/model";
 import { emptyGraph } from "../aws/model";
 import { allServices, getService, searchServices, serviceProvider } from "../aws/registry";
 import { validateArchitecture, suggestRules } from "../aws/rules";
 import { evaluateReachability } from "../aws/reachability";
-import { estimateMonthlyCost, estimateTotal } from "../aws/cost";
+import { estimateMonthlyCost, estimateTotal, type CostAssumptions } from "../aws/cost";
 import { reviewAccount } from "../aws/review";
 import { mapToCloud } from "../aws/cloudMap";
 import { detectFixes, applyFix } from "../aws/autofix";
@@ -29,6 +30,7 @@ import { connectRepo, detectRepoRoots, type ConnectStrategy } from "../server/co
 import { importPlanJson, runRepoPlan } from "../server/runPlan";
 import { exportIaC, type ExportFormat } from "../aws/iacExport";
 import { graphToDsl, dslToGraph } from "../aws/dsl";
+import { combineGraphs, type CombineSource } from "../aws/combine";
 import type { CloudProvider } from "../aws/types";
 
 /** MCP protocol revision this server speaks. */
@@ -52,6 +54,38 @@ function coerceGraph(value: unknown): InfrastructureGraph {
   };
 }
 
+/**
+ * In-process, NON-PERSISTENT handle registry (graphId → graph) for the server's
+ * lifetime. `import_iac` can hand back a `graphId` so a multi-MB `terraform show
+ * -json` graph never has to round-trip through the agent's context; the
+ * graph-consuming tools then accept that id in place of an inline `graph`.
+ * Handles are lost when the process exits — they are a convenience, not storage.
+ */
+const graphHandles = new Map<string, InfrastructureGraph>();
+let handleSeq = 0;
+/** Store a graph and return a fresh, process-unique handle id. */
+function storeGraph(g: InfrastructureGraph): string {
+  const id = `graph-${++handleSeq}`;
+  graphHandles.set(id, g);
+  return id;
+}
+/** Above this resource count, tools return a handle instead of inlining the graph. */
+const INLINE_RESOURCE_LIMIT = 200;
+
+/**
+ * Resolve the graph a tool should operate on from either a `graphId` handle or
+ * an inline `graph` argument (coerced as before). Throws on an unknown handle.
+ */
+function resolveGraph(a: Args): InfrastructureGraph {
+  const id = str(a, "graphId");
+  if (id) {
+    const g = graphHandles.get(id);
+    if (!g) throw new Error(`Unknown graphId: ${id} (handles are non-persistent — re-import).`);
+    return g;
+  }
+  return coerceGraph(a.graph);
+}
+
 export interface McpTool {
   name: string;
   description: string;
@@ -72,6 +106,38 @@ const GRAPH_SCHEMA = {
     relationships: { type: "array", items: { type: "object" } },
   },
 };
+
+const GRAPH_ID_SCHEMA = {
+  type: "string",
+  description:
+    "Handle returned by import_iac, used instead of an inline `graph` to keep large state out of context (non-persistent).",
+};
+
+/** Schema props for a tool accepting EITHER an inline `graph` OR a `graphId`. */
+const graphOrHandleProps = { graph: GRAPH_SCHEMA, graphId: GRAPH_ID_SCHEMA };
+
+const ASSUMPTIONS_SCHEMA = {
+  type: "object",
+  description: "Cost realism knobs (all optional; defaults = us-east-1, 730 hrs, no discount).",
+  properties: {
+    regionMultiplier: { type: "number", description: "Region price multiplier (1.0 = us-east-1)." },
+    hoursPerMonth: { type: "number", description: "Billable hours per month (default 730)." },
+    discountPct: { type: "number", description: "SP/RI discount, 0–100 % (default 0)." },
+  },
+};
+
+/** Read an optional CostAssumptions object from tool args. */
+function readAssumptions(a: Args): CostAssumptions | undefined {
+  const v = a.assumptions;
+  if (typeof v !== "object" || v === null) return undefined;
+  const o = v as Record<string, unknown>;
+  const numOr = (k: string) => (typeof o[k] === "number" ? (o[k] as number) : undefined);
+  return {
+    regionMultiplier: numOr("regionMultiplier"),
+    hoursPerMonth: numOr("hoursPerMonth"),
+    discountPct: numOr("discountPct"),
+  };
+}
 
 /** The tools an MCP client can list and call. */
 export const TOOLS: McpTool[] = [
@@ -129,10 +195,10 @@ export const TOOLS: McpTool[] = [
   {
     name: "validate_architecture",
     description:
-      "Run Strata's architecture + Well-Architected validation over a graph. Returns findings (level, message, resourceId).",
-    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+      "Run Strata's architecture + Well-Architected validation over a graph. Accepts an inline `graph` or a `graphId` handle. Returns findings (level, message, resourceId).",
+    inputSchema: objectSchema(graphOrHandleProps),
     run: (a) => {
-      const findings = validateArchitecture(coerceGraph(a.graph));
+      const findings = validateArchitecture(resolveGraph(a));
       const errors = findings.filter((f) => f.level === "error").length;
       const warnings = findings.filter((f) => f.level === "warn").length;
       return { errors, warnings, findings };
@@ -147,20 +213,31 @@ export const TOOLS: McpTool[] = [
   {
     name: "import_iac",
     description:
-      "Parse Infrastructure-as-Code (CloudFormation JSON/YAML, Terraform `show -json`, or Azure ARM) into a Strata graph. Auto-detects the format.",
-    inputSchema: objectSchema({ content: { type: "string" }, name: { type: "string" } }, [
-      "content",
-    ]),
+      "Parse Infrastructure-as-Code (CloudFormation JSON/YAML, Terraform `show -json`, or Azure ARM) into a Strata graph. Auto-detects the format. Provide EITHER inline `content` OR a local `path` (read server-side — best for multi-MB state). Returns a summary + a `graphId` handle; large graphs are NOT inlined (pass the graphId to estimate_cost/review_account/export_iac/validate_architecture).",
+    inputSchema: objectSchema({
+      content: { type: "string" },
+      path: { type: "string", description: "Local file path to read the IaC document from." },
+      name: { type: "string" },
+    }),
     run: (a) => {
       const content = str(a, "content");
-      if (!content) throw new Error("`content` (the IaC document text) is required.");
-      const r = importAnyIaC(content, { name: str(a, "name") });
+      const path = str(a, "path");
+      if (!!content === !!path) {
+        throw new Error("Provide exactly one of `content` (inline text) or `path` (local file).");
+      }
+      const text = content ?? readFileSync(path!, "utf8");
+      const r = importAnyIaC(text, { name: str(a, "name") });
+      const graphId = storeGraph(r.graph);
+      const large = r.graph.resources.length > INLINE_RESOURCE_LIMIT;
       return {
         format: r.format,
         resourceCount: r.graph.resources.length,
         unmappedTypes: r.unmappedTypes,
         warnings: r.warnings,
-        graph: r.graph,
+        graphId,
+        // Inline the graph only when it's small enough to be practical; large
+        // state stays behind the handle so it never floods the agent's context.
+        ...(large ? {} : { graph: r.graph }),
       };
     },
   },
@@ -239,16 +316,16 @@ export const TOOLS: McpTool[] = [
   {
     name: "export_iac",
     description:
-      "Generate IaC from a graph (a scaffold to finish). Formats: cloudformation-json, cloudformation-yaml, terraform.",
+      "Generate IaC from a graph (a scaffold to finish). Accepts an inline `graph` or a `graphId` handle. Formats: cloudformation-json, cloudformation-yaml, terraform.",
     inputSchema: objectSchema(
       {
-        graph: GRAPH_SCHEMA,
+        ...graphOrHandleProps,
         format: {
           type: "string",
           enum: ["cloudformation-json", "cloudformation-yaml", "terraform"],
         },
       },
-      ["graph", "format"],
+      ["format"],
     ),
     run: (a) => {
       const format = str(a, "format") as ExportFormat | undefined;
@@ -259,38 +336,86 @@ export const TOOLS: McpTool[] = [
       ) {
         throw new Error(`Unsupported format: ${format ?? "(missing)"}`);
       }
-      const out = exportIaC(coerceGraph(a.graph), format);
+      const out = exportIaC(resolveGraph(a), format);
       return { filename: out.filename, content: out.content, report: out.report };
     },
   },
   {
     name: "estimate_cost",
     description:
-      "Rough monthly USD estimate per resource + diagram total (us-east-1 baseline; ignores usage/transfer/discounts).",
-    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
+      "Rough monthly USD estimate per resource + diagram total (us-east-1 baseline). Accepts an inline `graph` or a `graphId` handle, and optional `assumptions` (regionMultiplier / hoursPerMonth / discountPct).",
+    inputSchema: objectSchema({ ...graphOrHandleProps, assumptions: ASSUMPTIONS_SCHEMA }),
     run: (a) => {
-      const graph = coerceGraph(a.graph);
-      const totals = estimateTotal(graph.resources);
+      const graph = resolveGraph(a);
+      const assumptions = readAssumptions(a);
+      const totals = estimateTotal(graph.resources, assumptions);
       return {
-        currency: "USD/month (rough)",
+        currency: totals.isFloor
+          ? `USD/month (rough FLOOR — ${totals.unmappedBillableTypes.length} billable type(s) unmapped)`
+          : "USD/month (rough)",
         total: Math.round(totals.total),
+        isFloor: totals.isFloor,
+        unmappedBillableTypes: totals.unmappedBillableTypes,
         estimatedResources: totals.estimated,
         unknownResources: totals.unknown,
         resources: graph.resources.map((r) => ({
           id: r.id,
           name: r.name,
           serviceId: r.serviceId,
-          monthly: estimateMonthlyCost(r),
+          monthly: estimateMonthlyCost(r, assumptions),
         })),
+      };
+    },
+  },
+  {
+    name: "merge_graphs",
+    description:
+      "Combine several independently-imported graphs (e.g. one per account/environment) into one canvas. Ids are namespaced per source so they never collide; roots are left position-less so the layout grids them side-by-side (no origin stacking). Pass wrapAs:'container' to nest each source under a labeled block.",
+    inputSchema: objectSchema(
+      {
+        graphs: {
+          type: "array",
+          description: "Sources to combine, each { name, graph }.",
+          items: {
+            type: "object",
+            properties: { name: { type: "string" }, graph: GRAPH_SCHEMA },
+            required: ["name", "graph"],
+          },
+        },
+        wrapAs: { type: "string", enum: ["container"] },
+        name: { type: "string" },
+      },
+      ["graphs"],
+    ),
+    run: (a) => {
+      const raw = Array.isArray(a.graphs) ? a.graphs : [];
+      const sources: CombineSource[] = raw.map((entry, i) => {
+        const e = (typeof entry === "object" && entry !== null ? entry : {}) as {
+          name?: unknown;
+          graph?: unknown;
+        };
+        return {
+          name: typeof e.name === "string" ? e.name : `source-${i}`,
+          graph: coerceGraph(e.graph),
+        };
+      });
+      const wrapAs = str(a, "wrapAs") === "container" ? "container" : undefined;
+      const graph = combineGraphs(sources, { wrapAs, name: str(a, "name") });
+      return {
+        graph,
+        sources: sources.length,
+        resourceCount: graph.resources.length,
+        relationshipCount: graph.relationships.length,
+        rootCount: graph.resources.filter((r) => !r.parentId).length,
       };
     },
   },
   {
     name: "review_account",
     description:
-      "Explain & Clean: review a graph for a cost-map summary, scored risk findings, tag coverage, orphan/unconnected resources, and a safe-cleanup checklist. Composes validation + cost; nothing is silently dropped (unknown-cost resources are counted).",
-    inputSchema: objectSchema({ graph: GRAPH_SCHEMA }, ["graph"]),
-    run: (a) => reviewAccount(coerceGraph(a.graph)),
+      "Explain & Clean: review a graph for a cost-map summary, scored risk findings, tag coverage, orphan/unconnected resources, and a safe-cleanup checklist. Composes validation + cost; nothing is silently dropped (unknown-cost resources are counted). Accepts an inline `graph` or a `graphId` handle.",
+    inputSchema: objectSchema(graphOrHandleProps),
+    run: (a) => reviewAccount(resolveGraph(a)),
   },
   {
     name: "evaluate_reachability",

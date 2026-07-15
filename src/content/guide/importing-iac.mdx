@@ -148,3 +148,22 @@ So there are no silent gaps.
 This pairs with import: you can **bring in** an existing template, edit visually,
 and **export** a scaffold back out — just expect to reconcile the details against
 your real configuration.
+
+## Reports & image exports
+
+Beyond IaC, **Data ▾** (and the ⌘K palette) can download several artifacts of the
+current diagram:
+
+- **Diagram image (SVG / PNG)** — a rendered picture. The **SVG is vector**, so it
+  stays crisp at any size and any node count — the best format for **print, docs,
+  or embedding**.
+- **Resource inventory (CSV / JSON)** — one row per resource with its type,
+  account, region, parent, tags, and rough cost. This is the same artifact people
+  ask for as a _Cloud Asset Inventory_, _Resource Export/Dump_, _Resource
+  Manifest_, or _Configuration Baseline_ — they're all this per-resource dump.
+- **Bill of materials (CSV)** — a rollup: count and rough monthly cost per service
+  type, with a TOTAL row.
+
+Cost figures follow the same rough, us-east-1 heuristic as the
+[cost estimate](/docs/guide/cost) (and mark unpriced-but-billable services), so a
+BOM total can read as a **floor**, not a bill.

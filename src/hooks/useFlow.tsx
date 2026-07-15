@@ -16,6 +16,7 @@ import {
 } from "../aws/registry";
 import type { CloudProvider } from "../aws/types";
 import { buildSvg } from "../canvas/imageExport";
+import { resourceInventory, inventoryCsv, bomCsv } from "../aws/inventory";
 import { diffGraphs, type DriftResult } from "../aws/drift";
 import {
   validateArchitecture,
@@ -79,6 +80,8 @@ export type ViewPreset = "all" | "network" | "security" | "data" | "high-level";
 export interface A11yNode {
   id: string;
   name: string;
+  /** Registry service id — for the canvas draw layer's colour/icon lookup. */
+  serviceId: string;
   serviceName: string;
   provider: CloudProvider;
   x: number;
@@ -86,8 +89,54 @@ export interface A11yNode {
   w: number;
   h: number;
   isContainer: boolean;
+  /** Containment depth from the layout (0 = root) — for canvas z-ordering. */
+  depth: number;
+  /** Id of the containing node, when nested (for WebGL reparent / subtree drag). */
+  parentId: string | null;
   /** Name of the containing node, when this node is nested. */
   parentName: string | null;
+  /** Short "label: value" config pills (≤3) — WebGL/canvas node chrome. */
+  pills: string[];
+  /** Visible child count for a container (0 for leaves) — header badge. */
+  childCount: number;
+}
+
+/** A collapsed leaf group ("N× Service") for the WebGL layer's summarization. */
+export interface A11ySummary {
+  /** Synthetic summary id (`summary::${parentId}::${serviceId}`). */
+  id: string;
+  parentId: string;
+  serviceId: string;
+  serviceName: string;
+  count: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Up to 3 short "label: value" pills from a resource's modeled config. */
+function nodePills(r: ResourceInstance): string[] {
+  const svc = getService(r.serviceId);
+  const pills: string[] = [];
+  if (r.region) pills.push(r.region);
+  if (svc) {
+    for (const f of svc.configFields) {
+      if (pills.length >= 3) break;
+      const v = r.config[f.key];
+      if (v === undefined || v === null || v === "") continue;
+      let text = Array.isArray(v)
+        ? v.join(",")
+        : typeof v === "boolean"
+          ? v
+            ? "yes"
+            : "no"
+          : String(v);
+      if (text.length > 22) text = text.slice(0, 21) + "…";
+      pills.push(`${f.label}: ${text}`);
+    }
+  }
+  return pills.slice(0, 3);
 }
 
 /** A user-saved view (layer state) persisted to localStorage. */
@@ -128,6 +177,20 @@ interface FlowCanvasContextValue {
   onWheelZoom: (e: WheelEvent) => void;
   addResourceFromPalette: (serviceId: string, x: number, y: number) => void;
   minimapNavigate: (clientX: number, clientY: number) => void;
+  /** Set the pan/zoom viewport directly (used by the WebGL layer's own pan). */
+  setViewport: (vp: FlowCanvasContextValue["viewport"]) => void;
+  /** Move a resource to a world position (WebGL-layer drag-to-move). */
+  moveResource: (id: string, x: number, y: number) => void;
+  /** Resize a resource (WebGL-layer resize handle). */
+  resizeResource: (id: string, w: number, h: number) => void;
+  /** Replace the multi-selection (WebGL marquee). */
+  setSelectedIds: (ids: string[]) => void;
+  /** Create a relationship (WebGL connect-mode drag). */
+  connect: (fromId: string, toId: string) => void;
+  /** Reparent a node into a container (or to root), at an optional drop pos. */
+  setParent: (id: string, parentId: string | undefined, dropPos?: { x: number; y: number }) => void;
+  /** Deepest container under a world point, excluding a node's own subtree. */
+  containerAt: (point: { x: number; y: number }, excludeId: string) => string | null;
 }
 
 interface FlowContextValue {
@@ -183,6 +246,10 @@ interface FlowContextValue {
   screenToWorld: (pt: { x: number; y: number }, pan: Viewport) => { x: number; y: number };
   /** Visible nodes projected for the accessible keyboard/screen-reader overlay. */
   a11yNodes: A11yNode[];
+  /** Collapsed leaf groups ("N× Service") for the WebGL layer's summarization. */
+  a11ySummaries: A11ySummary[];
+  /** Expand a summarized leaf group (WebGL summary click). */
+  expandSummary: (parentId: string, serviceId: string) => void;
   /** Setter for the live search-match highlight (read by the renderer only). */
   setSearchMatches: (ids: ReadonlySet<string>) => void;
   /** Ancestor path of the focus target, root → leaf (clickable crumbs). */
@@ -257,6 +324,10 @@ interface FlowContextValue {
   exportJSON: () => void;
   /** Download the diagram as a vector SVG or rasterised PNG image. */
   exportImage: (format: "svg" | "png") => void;
+  /** Download a resource inventory (asset dump / manifest / config baseline). */
+  exportInventory: (format: "csv" | "json") => void;
+  /** Download a bill of materials (counts + rough cost per service type) as CSV. */
+  exportBom: () => void;
   /** Copy a self-contained share link (diagram encoded in the URL hash). */
   shareDiagram: () => void;
   importJSONDialog: () => void;
@@ -327,6 +398,8 @@ interface FlowContextValue {
   listSavedGraphs: () => Promise<GraphSummary[]>;
   /** Load a saved graph by id. */
   loadGraph: (id: string) => Promise<void>;
+  /** Replace the whole diagram from an in-memory graph (dev perf harness / tests). */
+  loadGraphObject: (graph: InfrastructureGraph) => void;
   /** Delete a saved graph by id. */
   deleteSavedGraph: (id: string) => Promise<void>;
   /** Structured validation findings, or `null` before the first run. */
@@ -672,6 +745,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       out.push({
         id: r.id,
         name: r.name,
+        serviceId: r.serviceId,
         serviceName: svc?.name ?? r.serviceId,
         provider: svc ? serviceProvider(svc) : "aws",
         x: rect.x,
@@ -679,11 +753,39 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
         w: rect.w,
         h: rect.h,
         isContainer: layout.isContainerNode(r.id),
+        depth: layout.depth.get(r.id) ?? 0,
+        parentId: r.parentId ?? null,
         parentName: r.parentId ? (nameById.get(r.parentId) ?? null) : null,
+        pills: nodePills(r),
+        childCount: layout.isContainerNode(r.id) ? layout.childCount(r.id) : 0,
       });
     }
     return out;
   }, [store.resources, layout]);
+
+  // Synthetic summary nodes (e.g. "7× Security Group") the layout collapsed —
+  // consumed by the WebGL layer so it matches the DOM's leaf summarization.
+  // Clicking one expands the group (see onExpandGroup).
+  const a11ySummaries = React.useMemo<A11ySummary[]>(() => {
+    const out: A11ySummary[] = [];
+    for (const s of layout.summaries) {
+      const rect = layout.rects.get(s.id);
+      if (!rect) continue;
+      const svc = getService(s.serviceId);
+      out.push({
+        id: s.id,
+        parentId: s.parentId,
+        serviceId: s.serviceId,
+        serviceName: svc?.name ?? s.serviceId,
+        count: s.count,
+        x: rect.x,
+        y: rect.y,
+        w: rect.w,
+        h: rect.h,
+      });
+    }
+    return out;
+  }, [layout]);
 
   // Drift markers (top-left corner) for nodes that are new (added) or changed vs
   // the loaded baseline. Removed resources aren't on the canvas — the panel lists them.
@@ -940,6 +1042,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSelection: storeSetSelection,
     setSelectedIds: storeSetSelectedIds,
     connect: storeConnect,
+    setParent: storeSetParent,
+    updateResourceSize: storeUpdateResourceSize,
   } = store;
 
   // ---- selection helpers (single + multi kept consistent) ----------------
@@ -1563,6 +1667,54 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }, [buildGraph, downloadBlob]);
 
+  /** Base filename derived from the diagram name (safe for a download). */
+  const exportBaseName = useCallback(
+    () =>
+      (store.graphName || "architecture").replace(/[^\w.-]+/g, "-").toLowerCase() || "architecture",
+    [store.graphName],
+  );
+
+  /**
+   * Resource inventory / asset dump / manifest / configuration baseline — one
+   * row per resource. CSV for spreadsheets, JSON for machines.
+   */
+  const exportInventory = useCallback(
+    (format: "csv" | "json") => {
+      const graph = buildGraph();
+      if (graph.resources.length === 0) {
+        setStatus("Nothing to export — the canvas is empty.");
+        return;
+      }
+      const base = exportBaseName();
+      if (format === "csv") {
+        downloadBlob(
+          new Blob([inventoryCsv(graph)], { type: "text/csv" }),
+          `${base}-inventory.csv`,
+        );
+      } else {
+        downloadBlob(
+          new Blob([JSON.stringify(resourceInventory(graph), null, 2)], {
+            type: "application/json",
+          }),
+          `${base}-inventory.json`,
+        );
+      }
+      setStatus(`Exported resource inventory (${graph.resources.length} resources).`);
+    },
+    [buildGraph, downloadBlob, exportBaseName, setStatus],
+  );
+
+  /** Bill of materials — counts + rough monthly cost rolled up per service type. */
+  const exportBom = useCallback(() => {
+    const graph = buildGraph();
+    if (graph.resources.length === 0) {
+      setStatus("Nothing to export — the canvas is empty.");
+      return;
+    }
+    downloadBlob(new Blob([bomCsv(graph)], { type: "text/csv" }), `${exportBaseName()}-bom.csv`);
+    setStatus("Exported bill of materials.");
+  }, [buildGraph, downloadBlob, exportBaseName, setStatus]);
+
   /** Export the diagram as an SVG (vector) or PNG (rasterised from the SVG). */
   const exportImage = useCallback(
     async (format: "svg" | "png") => {
@@ -1936,6 +2088,21 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [storeReplaceAll, confirmReplaceIfDirty, storeMarkSaved],
   );
 
+  /** Load a graph object directly into the store (dev perf harness / tests). */
+  const loadGraphObject = useCallback(
+    (graph: InfrastructureGraph) => {
+      storeReplaceAll({
+        resources: graph.resources ?? [],
+        relationships: graph.relationships ?? [],
+        annotations: graph.annotations,
+        viewport: graph.viewport,
+        accounts: graph.accounts ?? [],
+        graphName: graph.name || "Perf harness",
+      });
+    },
+    [storeReplaceAll],
+  );
+
   /** Delete a saved graph by id (clears graphId if it was the open one). */
   const deleteSavedGraph = useCallback(
     async (id: string) => {
@@ -2218,6 +2385,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       onWheelZoom,
       addResourceFromPalette,
       minimapNavigate,
+      setViewport: storeSetViewport,
+      moveResource: (id: string, x: number, y: number) => updateResourcePosition(id, { x, y }),
+      resizeResource: (id: string, w: number, h: number) => storeUpdateResourceSize(id, { w, h }),
+      setSelectedIds: storeSetSelectedIds,
+      connect: (fromId: string, toId: string) => storeConnect(fromId, toId),
+      setParent: storeSetParent,
+      containerAt,
     }),
     [
       store.viewport,
@@ -2231,6 +2405,13 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       onWheelZoom,
       addResourceFromPalette,
       minimapNavigate,
+      storeSetViewport,
+      updateResourcePosition,
+      storeUpdateResourceSize,
+      storeSetSelectedIds,
+      storeConnect,
+      storeSetParent,
+      containerAt,
     ],
   );
 
@@ -2267,6 +2448,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       commitAnnotationDrag,
       screenToWorld,
       a11yNodes,
+      a11ySummaries,
+      expandSummary: onExpandGroup,
       setSearchMatches: store.setSearchMatches,
       breadcrumb,
       focusedContainerId: store.focusedContainerId,
@@ -2321,6 +2504,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       suggestRules: runSuggest,
       exportJSON,
       exportImage,
+      exportInventory,
+      exportBom,
       shareDiagram,
       importJSONDialog,
       importIaCDialog,
@@ -2360,6 +2545,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveGraph,
       listSavedGraphs,
       loadGraph,
+      loadGraphObject,
       deleteSavedGraph,
       validationResults,
       liveFindings,
@@ -2417,6 +2603,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       commitAnnotationDrag,
       screenToWorld,
       a11yNodes,
+      a11ySummaries,
+      onExpandGroup,
       store.setSearchMatches,
       breadcrumb,
       store.focusedContainerId,
@@ -2466,6 +2654,8 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       runSuggest,
       exportJSON,
       exportImage,
+      exportInventory,
+      exportBom,
       shareDiagram,
       importJSONDialog,
       importIaCDialog,
@@ -2503,6 +2693,7 @@ export const FlowProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveGraph,
       listSavedGraphs,
       loadGraph,
+      loadGraphObject,
       deleteSavedGraph,
       validationResults,
       liveFindings,

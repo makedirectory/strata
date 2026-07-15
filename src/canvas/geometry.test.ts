@@ -6,6 +6,7 @@ import {
   screenDeltaToWorld,
   snapToGrid,
   rectEdgeTowards,
+  dprBackingSize,
   DRAG_THRESHOLD_PX,
   zoomAbout,
   zoomByFactor,
@@ -340,6 +341,19 @@ describe("gridPack", () => {
     );
     // ceil(sqrt(4)) = 2 columns → "c" starts a new row
     expect(four[2].x).toBe(0);
+  });
+});
+
+describe("dprBackingSize", () => {
+  it("scales CSS size by DPR and rounds the backing store", () => {
+    expect(dprBackingSize(800, 600, 2)).toEqual({ width: 1600, height: 1200, ratio: 2 });
+    expect(dprBackingSize(100.4, 100.6, 1)).toEqual({ width: 100, height: 101, ratio: 1 });
+  });
+
+  it("clamps DPR to a sane range and tolerates bogus values", () => {
+    expect(dprBackingSize(100, 100, 0.1).ratio).toBe(1); // floored at 1
+    expect(dprBackingSize(100, 100, 99).ratio).toBe(4); // capped at 4
+    expect(dprBackingSize(100, 100, NaN).ratio).toBe(1); // non-finite → 1
   });
 });
 

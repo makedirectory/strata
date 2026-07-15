@@ -13,6 +13,10 @@
 /.next/
 /out/
 
+# electron desktop build output (electron-builder) + bundled MCP artifact
+/release/
+/electron/mcp.cjs
+
 # production
 /build
 

@@ -243,18 +243,30 @@ and IaC import/export — with **no DOM, no network, and no credentials**.
 
 ### Tools
 
-| Tool                    | Input                                   | Backed by                                                                |
-| ----------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
-| `list_services`         | `{ provider?, category?, query? }`      | registry (`allServices`/`searchServices`)                                |
-| `get_service`           | `{ id }`                                | registry (`getService`)                                                  |
-| `validate_architecture` | `{ graph }`                             | `validateArchitecture` ([rules engine](/docs/architecture/rules-engine)) |
-| `suggest_rules`         | `{ graph }`                             | `suggestRules`                                                           |
-| `import_iac`            | `{ content, name? }`                    | `importAnyIaC` ([IaC import](/docs/architecture/iac-import))             |
-| `list_repo_roots`       | `{ path }`                              | `detectRepoRoots` (Terraform roots under a local path)                   |
-| `connect_repo`          | `{ path, root?, roots?, strategy? }`    | `connectRepo` (local repo → layered graph)                               |
-| `import_plan`           | `{ planJson }` or `{ repoPath, root? }` | `importPlanJson` / `runRepoPlan` (plan → graph + change diff)            |
-| `export_iac`            | `{ graph, format }`                     | `exportIaC` (CloudFormation / Terraform)                                 |
-| `estimate_cost`         | `{ graph }`                             | `estimateMonthlyCost` / `estimateTotal`                                  |
+| Tool                    | Input                                   | Backed by                                                                                |
+| ----------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `list_services`         | `{ provider?, category?, query? }`      | registry (`allServices`/`searchServices`)                                                |
+| `get_service`           | `{ id }`                                | registry (`getService`)                                                                  |
+| `validate_architecture` | `{ graph }`                             | `validateArchitecture` ([rules engine](/docs/architecture/rules-engine))                 |
+| `suggest_rules`         | `{ graph }`                             | `suggestRules`                                                                           |
+| `import_iac`            | `{ content \| path, name? }`            | `importAnyIaC` ([IaC import](/docs/architecture/iac-import)); returns a `graphId` handle |
+| `merge_graphs`          | `{ graphs: [{name, graph}], wrapAs? }`  | `combineGraphs` (fold N per-account graphs onto one canvas)                              |
+| `list_repo_roots`       | `{ path }`                              | `detectRepoRoots` (Terraform roots under a local path)                                   |
+| `connect_repo`          | `{ path, root?, roots?, strategy? }`    | `connectRepo` (local repo → layered graph)                                               |
+| `import_plan`           | `{ planJson }` or `{ repoPath, root? }` | `importPlanJson` / `runRepoPlan` (plan → graph + change diff)                            |
+| `export_iac`            | `{ graph \| graphId, format }`          | `exportIaC` (CloudFormation / Terraform)                                                 |
+| `estimate_cost`         | `{ graph \| graphId, assumptions? }`    | `estimateMonthlyCost` / `estimateTotal` (returns `isFloor` + unmapped billable types)    |
+
+**Large state, small context.** `import_iac` accepts a local `path` (read
+server-side — `terraform show -json` is often multi-MB) and returns a summary
+plus a **`graphId`** handle from a non-persistent, in-process registry. The
+graph-consuming tools (`estimate_cost`, `review_account`, `export_iac`,
+`validate_architecture`) accept that `graphId` in place of an inline `graph`, so
+a multi-hundred-resource estate never has to round-trip through the agent's
+context. `estimate_cost` also takes optional `assumptions` (`regionMultiplier` /
+`hoursPerMonth` / `discountPct`) and always reports whether the total is a
+**floor** (some billable types unpriced). See the
+[Multi-Account Cost Model](/docs/guide/multi-account-cost) recipe.
 
 Because every tool delegates to a pure engine, the server stays in lockstep with
 the app: a new registry entry or validation rule is immediately available over MCP

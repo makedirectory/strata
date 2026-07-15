@@ -46,6 +46,28 @@ list:
 - **Cost estimation.** `src/aws/cost.ts` puts a rough monthly figure on the
   design (per-node badges + a toolbar total), refined by size/count/multi-AZ/
   storage for the big-ticket services. Deliberately a heuristic, not a forecast.
+- **Cost coverage & honesty.** Config-aware pricing for the high-variance movers
+  (OpenSearch Serverless OCUs, Fargate vCPU/mem, EIP, Flow Logs) plus base prices
+  for previously-$0 billables, and a **floor** signal: `estimateTotal` reports
+  `unmappedBillableTypes`/`isFloor` (distinguishing free control-plane services
+  from unpriced-but-billable ones) so a partial total never masquerades as
+  complete. Optional `CostAssumptions` (region / hours / discount) tune the figure.
+  See [Estimated Cost](/docs/guide/cost).
+- **Multi-account, at scale.** `combineGraphs` (`src/aws/combine.ts`) folds N
+  imported per-account graphs onto one canvas (id-namespaced, grid-laid-out) via
+  the `merge_graphs` MCP tool; the layout auto-grids position-less roots; and
+  `import_iac` gained a server-side `path` + non-persistent `graphId` handle so
+  multi-MB state stays out of the agent's context. Offline `strata cost` / `render`
+  CLI one-shots. See [Multi-Account Cost Model](/docs/guide/multi-account-cost).
+- **Reports.** Resource inventory (CSV/JSON — asset dump / manifest / config
+  baseline) and a bill-of-materials rollup (`src/aws/inventory.ts`), plus vector
+  SVG/PNG image export, from **Data ▾**.
+- **Renderer — 2D / 2D⚡ / 3D.** A runtime view toggle: the classic DOM 2D
+  (detailed, print/embed), a **WebGL (PixiJS)** 2D that scales to thousands of
+  nodes with full editing at feature parity, and a **3D orbit** view where
+  containment depth is elevation. Shared draw primitives keep the on-screen render
+  and the SVG export from drifting. A dev `/perf` route measures the WebGL layer at
+  1k/2k/5k. See [Views](/docs/guide/views).
 - **Local version history.** `src/lib/snapshots.ts` keeps a bounded `localStorage`
   ring of full-graph snapshots (Data ▾ → "Version history…"): save, restore, and
   use any snapshot as a drift/cost baseline via `compareWithVersion`
@@ -115,3 +137,17 @@ flat graph.)
 
 **Next:** derive containment/edges from discovered properties (as the IaC importer
 does), so a discovered account lands nested and connected, not as a flat grid.
+
+### 5. Packaging: no one-click install yet
+
+Strata runs via `npm run dev` and the MCP server via `npm run mcp`, wired into an
+agent by hand (see [Installing & MCP Setup](/docs/guide/install-and-mcp)). That's
+fine for developers but not for an "average user."
+
+**Next:** a **desktop shell** (Electron, or Tauri with a Node sidecar) that bundles
+the Next server + the MCP stdio server and can **write the MCP client config**
+for a one-click "Connect to Claude Desktop / Cursor." The local features
+(child-process `terraform`, provider SDKs, MCP stdio) need a Node runtime, so a
+Node-bearing shell is the pragmatic path — Next.js stays the UI/framework; the
+renderer is entirely client-side and works unchanged. Durable local storage
+(SQLite/file) would replace `localStorage` in that shell.

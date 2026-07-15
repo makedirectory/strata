@@ -282,6 +282,36 @@ export const CommandPalette: React.FC = () => {
       },
       { id: "export", title: "Export JSON", group: "Tools", run: flow.exportJSON },
       {
+        id: "export-svg",
+        title: "Export diagram image (SVG — vector, for print/embed)",
+        group: "Tools",
+        run: () => flow.exportImage("svg"),
+      },
+      {
+        id: "export-png",
+        title: "Export diagram image (PNG)",
+        group: "Tools",
+        run: () => flow.exportImage("png"),
+      },
+      {
+        id: "export-inventory-csv",
+        title: "Export resource inventory (CSV — asset dump / manifest / baseline)",
+        group: "Tools",
+        run: () => flow.exportInventory("csv"),
+      },
+      {
+        id: "export-inventory-json",
+        title: "Export resource inventory (JSON)",
+        group: "Tools",
+        run: () => flow.exportInventory("json"),
+      },
+      {
+        id: "export-bom",
+        title: "Export bill of materials (CSV — counts + cost per service)",
+        group: "Tools",
+        run: flow.exportBom,
+      },
+      {
         id: "export-iac",
         title: "Export to IaC (Terraform / OpenTofu / CloudFormation)",
         group: "Tools",

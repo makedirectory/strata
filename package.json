@@ -2,6 +2,7 @@
   "name": "strata",
   "version": "0.6.0",
   "private": true,
+  "main": "electron/main.cjs",
   "engines": {
     "node": ">=24"
   },
@@ -23,7 +24,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "mcp": "npx -y tsx src/mcp/bin.ts",
-    "strata": "npx -y tsx src/cli/bin.ts"
+    "strata": "npx -y tsx src/cli/bin.ts",
+    "app:dev": "cross-env ELECTRON_START_URL=http://localhost:3000 electron electron/main.cjs",
+    "app:build": "cross-env BUILD_TARGET=electron next build && node electron/prepare-standalone.cjs && node electron/build-mcp.cjs",
+    "app:dist": "npm run app:build && electron-builder"
   },
   "dependencies": {
     "@aws-sdk/client-cloudcontrol": "^3.1068.0",
@@ -35,6 +39,7 @@
     "next": "^15.5.19",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
+    "pixi.js": "^8.19.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
@@ -48,6 +53,9 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.9",
+    "cross-env": "^10.1.0",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^8",
     "eslint-config-next": "^15.5.19",
     "eslint-config-prettier": "^10.1.8",

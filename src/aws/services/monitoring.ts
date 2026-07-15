@@ -205,6 +205,52 @@ const monitoring: ServiceDefinition[] = [
       { to: "guardduty", relationship: "publishes_to", description: "Feeds threat detection" },
     ],
   },
+  {
+    id: "vpc-flow-logs",
+    name: "VPC Flow Logs",
+    fullName: "Amazon VPC Flow Logs",
+    category: "monitoring",
+    description:
+      "Captures IP traffic metadata for a VPC, subnet, or ENI and delivers it to CloudWatch Logs or S3.",
+    icon: "🌊",
+    scope: "region",
+    cfnType: "AWS::EC2::FlowLog",
+    arnPattern: "arn:aws:ec2:{region}:{account}:vpc-flow-log/{id}",
+    keywords: ["flow logs", "vpc", "network", "traffic", "audit"],
+    configFields: [
+      {
+        key: "destinationType",
+        label: "Destination",
+        type: "select",
+        default: "cloud-watch-logs",
+        options: [
+          { value: "cloud-watch-logs", label: "CloudWatch Logs" },
+          { value: "s3", label: "Amazon S3" },
+        ],
+      },
+      {
+        key: "trafficType",
+        label: "Traffic Type",
+        type: "select",
+        default: "ALL",
+        options: [
+          { value: "ALL", label: "All" },
+          { value: "ACCEPT", label: "Accepted" },
+          { value: "REJECT", label: "Rejected" },
+        ],
+      },
+      { key: "retentionDays", label: "Retention (days)", type: "number", default: 30 },
+    ],
+    commonConnections: [
+      {
+        to: "cloudwatch-logs",
+        relationship: "writes_to",
+        description: "Delivers flow records to a log group",
+      },
+      { to: "s3-bucket", relationship: "writes_to", description: "Delivers flow records to S3" },
+      { to: "vpc", relationship: "monitors", description: "Captures traffic for a VPC" },
+    ],
+  },
 ];
 
 export default monitoring;

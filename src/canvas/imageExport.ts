@@ -13,6 +13,7 @@
 import type { ResourceInstance } from "../aws/model";
 import type { Rect } from "./geometry";
 import { boundsOf } from "./geometry";
+import { rectCenter, edgeAnchor, fitLabel } from "./drawPrimitives";
 
 export interface ImageEdge {
   from: string;
@@ -39,29 +40,10 @@ const xmlEscape = (s: string) =>
     c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;",
   );
 
-const center = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
-
-/** Point where the segment a→b crosses rect `r`'s border (for arrow clipping). */
-function clipToRect(a: { x: number; y: number }, r: Rect): { x: number; y: number } {
-  const c = center(r);
-  const dx = a.x - c.x;
-  const dy = a.y - c.y;
-  if (dx === 0 && dy === 0) return c;
-  const hw = r.w / 2;
-  const hh = r.h / 2;
-  // Scale the direction vector so it just reaches the rect's edge.
-  const scale = Math.min(
-    dx === 0 ? Infinity : hw / Math.abs(dx),
-    dy === 0 ? Infinity : hh / Math.abs(dy),
-  );
-  return { x: c.x + dx * scale, y: c.y + dy * scale };
-}
-
-/** Truncate a label to fit the node width (rough monospace-ish estimate). */
-function fit(text: string, width: number): string {
-  const max = Math.max(3, Math.floor((width - 44) / 7.2));
-  return text.length > max ? text.slice(0, max - 1) + "…" : text;
-}
+// Edge clipping, label fit and rect-centre are shared with the on-screen canvas
+// painter via `drawPrimitives` so the export can't visually drift from the
+// render. `edgeAnchor(r, from)` is the point on `r`'s border toward `from`.
+const center = rectCenter;
 
 /** Build a standalone SVG document for the diagram. Returns "" when empty. */
 export function buildSvg(input: ImageExportInputs, opts: SvgOptions = {}): string {
@@ -93,8 +75,8 @@ export function buildSvg(input: ImageExportInputs, opts: SvgOptions = {}): strin
     const ra = input.rects.get(e.from);
     const rb = input.rects.get(e.to);
     if (!ra || !rb || e.from === e.to) continue;
-    const a = clipToRect(center(rb), ra);
-    const b = clipToRect(center(ra), rb);
+    const a = edgeAnchor(ra, center(rb));
+    const b = edgeAnchor(rb, center(ra));
     parts.push(
       `<line x1="${(a.x + ox).toFixed(1)}" y1="${(a.y + oy).toFixed(1)}" x2="${(b.x + ox).toFixed(
         1,
@@ -112,7 +94,7 @@ export function buildSvg(input: ImageExportInputs, opts: SvgOptions = {}): strin
     const y = box.y + oy;
     const accent = input.color(r.serviceId);
     const container = input.isContainer(r.id);
-    const name = fit(input.label(byId.get(r.id) ?? r), box.w);
+    const name = fitLabel(input.label(byId.get(r.id) ?? r), box.w);
     const icon = input.icon(r.serviceId);
     if (container) {
       parts.push(

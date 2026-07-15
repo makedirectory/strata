@@ -1,0 +1,110 @@
+---
+title: Multi-Account Cost Model
+---
+
+# Read-only cost model of an existing multi-account estate
+
+This recipe builds a **read-only, all-environments cost model** of infrastructure
+that already exists — several hundred resources spread across a handful of
+accounts/environments, on one canvas — starting from `terraform show -json` state
+you already have. No plan, no refresh, and **no credentials beyond a local file
+(or S3) read**.
+
+It contrasts with the other two ingestion paths:
+
+|                 | This recipe (offline state)      | `connect --static` (offline HCL) | Live discovery                     |
+| --------------- | -------------------------------- | -------------------------------- | ---------------------------------- |
+| **Input**       | `terraform show -json` state     | the repo's `.tf` source          | the live cloud account             |
+| **Credentials** | none (local file read)           | none                             | read-only cloud credentials        |
+| **Best for**    | "price what's actually deployed" | "diagram what the repo declares" | "diagram what's running right now" |
+
+> The total is deliberately a **rough, us-east-1 heuristic — and a _floor_**, not
+> a bill. See [Estimated Cost](/docs/guide/cost) for what the heuristic covers.
+
+## 1. Export state per account/environment
+
+For each account/environment, capture the state Terraform already knows about —
+no apply, no plan:
+
+```bash
+terraform show -json > prod.tfstate.json      # in the prod workspace
+terraform show -json > staging.tfstate.json   # in the staging workspace
+```
+
+(If your state lives in S3, `aws s3 cp s3://…/terraform.tfstate .` first — that
+S3 read is the only credential this path needs.)
+
+## 2. Cost a single file
+
+The fastest loop is the offline CLI. It imports the state, totals it, rolls the
+spend up by category, and — prominently — flags the total as a **FLOOR** with the
+billable types it couldn't price:
+
+```bash
+npm run strata -- cost ./prod.tfstate.json
+# 214 resource(s): $12.4k/mo  (FLOOR — lower bound)
+#   database        $6.1k/mo  (18)
+#   analytics       $3.5k/mo  (5)
+#   compute         $1.9k/mo  (61)
+#   …
+#   7 unpriced resource(s) excluded from the total.
+#
+# ⚠ FLOOR: the total is a lower bound — 3 billable type(s) unmapped:
+#   app-runner, kendra, quicksight
+```
+
+Add `--json` for machine output (CI/agents). Tune the realism knobs when you want
+something closer to your actual bill:
+
+```bash
+npm run strata -- cost ./prod.tfstate.json \
+  --region-multiplier 1.08 \   # e.g. a pricier region than us-east-1
+  --hours 730 \                # billable hours per month
+  --discount 30                # Savings Plan / RI discount, %
+```
+
+## 3. Combine every account onto one canvas
+
+To model the **whole estate** together, import each state file and merge them.
+Merging namespaces every id per source (so ids from different accounts can't
+collide) and lays the sources out **side-by-side** — never stacked at the origin.
+
+From an agent over MCP:
+
+```jsonc
+// Import each large state file server-side and keep a handle (the multi-MB
+// document never round-trips through the agent's context):
+import_iac({ "path": "./prod.tfstate.json" })      // → { graphId: "graph-1", … }
+import_iac({ "path": "./staging.tfstate.json" })   // → { graphId: "graph-2", … }
+
+// Combine (returns the merged graph inline), then cost the whole estate:
+merge_graphs({ "graphs": [
+  { "name": "prod",    "graph": /* graph-1 */ },
+  { "name": "staging", "graph": /* graph-2 */ }
+], "wrapAs": "container" })   // → { graph, sources, resourceCount, rootCount }
+
+estimate_cost({ "graph": /* merged graph */, "assumptions": { "discountPct": 30 } })
+```
+
+`wrapAs: "container"` nests each source under a labeled account block; omit it to
+let the layout grid arrange the sources on its own.
+
+## 4. Render a diagram headlessly
+
+Save the combined graph as JSON and render a standalone SVG — the headless
+equivalent of the in-app image export, no browser required:
+
+```bash
+npm run strata -- render ./estate.json -o ./estate.svg
+# Wrote ./estate.svg — 512 node(s), 84213 bytes.
+```
+
+## Why the total is a floor
+
+A resource whose service Strata can price contributes to the total. A resource
+whose service is **billable but not yet priced** is _excluded_ from the total and
+listed under the floor flag — so a redundant serverless minimum repeated across N
+accounts can never masquerade as **$0**. Free control-plane services (IAM, ACM,
+CloudFormation, Organizations, …) are classified separately and do **not** trip
+the flag. When the floor flag is absent, every unpriced resource was a known-free
+service and the total is complete for what's modeled.

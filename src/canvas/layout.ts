@@ -297,13 +297,41 @@ export function computeLayout(
     place(build(id, new Set<string>()), x, y, 0);
   };
 
-  for (const r of resources) {
-    if (hidden.has(r.id)) continue;
-    if (r.id === overrideId) continue; // placed last, at the cursor
-    if (parentOf(r.id) === undefined) {
-      const p = r.position ?? { x: 0, y: 0 };
-      placeRoot(r.id, p.x, p.y);
+  // Split roots by whether they carry a stored position. User-arranged roots
+  // keep their coordinates; position-less roots (e.g. freshly merged graphs) are
+  // packed into a grid so multiple accounts/environments never stack at (0,0).
+  const rootIds = resources.filter(
+    (r) => !hidden.has(r.id) && r.id !== overrideId && parentOf(r.id) === undefined,
+  );
+  const positioned = rootIds.filter((r) => r.position);
+  const positionless = rootIds.filter((r) => !r.position);
+
+  for (const r of positioned) placeRoot(r.id, r.position!.x, r.position!.y);
+
+  if (positionless.length <= 1) {
+    // A single (or no) position-less root: preserve the historical (0,0) anchor.
+    for (const r of positionless) placeRoot(r.id, 0, 0);
+  } else {
+    // Grid-pack the position-less roots. Build each box first so the grid stride
+    // fits the largest root, with a generous inter-root gap; anchor the grid
+    // clear of (below) any user-positioned roots so those stay honored.
+    const ROOT_GAP = 80;
+    const boxes = positionless.map((r) => build(r.id, new Set<string>()));
+    const maxW = Math.max(...boxes.map((b) => b.w));
+    const maxH = Math.max(...boxes.map((b) => b.h));
+    const strideX = maxW + ROOT_GAP;
+    const strideY = maxH + ROOT_GAP;
+    const c = cols(boxes.length);
+    let originY = 0;
+    for (const r of positioned) {
+      const rc = rects.get(r.id);
+      if (rc) originY = Math.max(originY, rc.y + rc.h + ROOT_GAP);
     }
+    boxes.forEach((box, i) => {
+      const col = i % c;
+      const row = Math.floor(i / c);
+      place(box, col * strideX, originY + row * strideY, 0);
+    });
   }
 
   // Orphans (e.g. broken by a cycle) that were never placed: anchor at stored pos.

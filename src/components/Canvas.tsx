@@ -4,7 +4,17 @@ import { useFlow, useFlowCanvas } from "../hooks/useFlow";
 import { PALETTE_ADD_EVENT } from "./Palette";
 import { AccessibleNodes } from "./AccessibleNodes";
 import { AnnotationLayer } from "./AnnotationLayer";
+import { CanvasRenderLayer } from "./CanvasRenderLayer";
+import { PixiRenderLayer } from "./PixiRenderLayer";
+import { Orbit3DLayer } from "./Orbit3DLayer";
 import { worldToScreen } from "../canvas/geometry";
+import {
+  useRenderMode,
+  setRenderMode,
+  getRenderMode,
+  RENDER_MODE_STORAGE_KEY,
+  type RenderMode,
+} from "../canvas/renderMode";
 
 /** Major/minor visible grid steps (world units). Minor matches the snap step. */
 const GRID_MAJOR = 80;
@@ -52,9 +62,27 @@ export const Canvas: React.FC = () => {
     driftMarkers,
   } = useFlow();
 
+  // Active render mode (2D DOM vs 3D orbit) — runtime, driven by the view toggle.
+  const renderModeValue = useRenderMode();
+  const threeD = renderModeValue === "3d";
+  // Read the current mode from inside long-lived listeners without re-binding.
+  const threeDRef = useRef(threeD);
+  threeDRef.current = threeD;
+
   // Whether a minimap click-drag is in progress (window-level so the drag keeps
   // navigating even when the pointer leaves the small minimap box).
   const minimapDragRef = useRef(false);
+
+  // Restore the persisted view choice once on mount (kept out of the initial
+  // render to avoid an SSR/hydration mismatch — see renderMode.ts).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(RENDER_MODE_STORAGE_KEY) as RenderMode | null;
+      if (saved && saved !== getRenderMode()) setRenderMode(saved);
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
 
   // Drag and drop — scoped to the canvas element so drops elsewhere in the
   // window (e.g. over the palette or inspector) are not swallowed.
@@ -79,12 +107,13 @@ export const Canvas: React.FC = () => {
         ) {
           // Convert window coords to canvas-wrap-local coords before passing to
           // screenToWorld (which only undoes pan/scale relative to that origin).
+          // In 3D the drop point has no meaningful 2D position, so drop at the
+          // viewport centre; addResource auto-selects it and the 3D camera flies
+          // to frame it.
           const rect = el.getBoundingClientRect();
-          addResourceFromPalette(
-            (item as { serviceId: string }).serviceId,
-            e.clientX - rect.left,
-            e.clientY - rect.top,
-          );
+          const x = threeDRef.current ? rect.width / 2 : e.clientX - rect.left;
+          const y = threeDRef.current ? rect.height / 2 : e.clientY - rect.top;
+          addResourceFromPalette((item as { serviceId: string }).serviceId, x, y);
         }
       } catch (err) {
         console.error("Canvas: failed to parse drag-and-drop payload", err);
@@ -116,11 +145,20 @@ export const Canvas: React.FC = () => {
     return () => window.removeEventListener(PALETTE_ADD_EVENT, handler);
   }, [addResourceFromPalette, worldRef, presentation]);
 
-  // Redraw when state changes
+  // Redraw when state changes (or the view mode toggles, so the DOM path repaints
+  // when switching back to 2D and clears itself when switching to 3D).
   useEffect(() => {
     draw();
     drawMinimap();
-  }, [state.resources, state.relationships, viewport, state.mode, draw, drawMinimap]);
+  }, [
+    state.resources,
+    state.relationships,
+    viewport,
+    state.mode,
+    renderModeValue,
+    draw,
+    drawMinimap,
+  ]);
 
   // Make the visible grid track the viewport so "snap to the visible grid" is
   // honest at any pan/zoom: background-position follows pan, size scales with
@@ -243,6 +281,37 @@ export const Canvas: React.FC = () => {
 
   return (
     <>
+      {/* View toggle: 2D (DOM — detailed, print/embed), 2D⚡ (WebGL — scales to
+          thousands, experimental), 3D orbit. */}
+      <div className="view-toggle" role="group" aria-label="View mode">
+        {[
+          {
+            m: "dom" as RenderMode,
+            label: "2D",
+            title: "Detailed 2D diagram (edit / print / embed)",
+          },
+          {
+            m: "webgl" as RenderMode,
+            label: "2D⚡",
+            title: "WebGL 2D — scales to thousands (experimental)",
+          },
+          { m: "3d" as RenderMode, label: "3D", title: "3D orbit view" },
+        ].map(({ m, label, title }) => {
+          const active = renderModeValue === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              className={active ? "view-toggle-btn active" : "view-toggle-btn"}
+              aria-pressed={active}
+              title={title}
+              onClick={() => setRenderMode(m)}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
       <div className="grid" ref={gridRef} aria-hidden="true" />
       <svg className="edges" ref={svgRef} aria-hidden="true" />
       {/* Pointer-only canvas surface; node interactions are delivered via the
@@ -258,8 +327,14 @@ export const Canvas: React.FC = () => {
         }}
       />
       <div className="overlay" aria-hidden="true" />
-      <AnnotationLayer />
-      {(guides.length > 0 || marquee) && (
+      {/* Mode A draw layers — flag-gated (off by default), read-only over the
+          DOM path; the DOM still owns interaction. Canvas-2D vs PixiJS/WebGL are
+          selected by NEXT_PUBLIC_STRATA_CANVAS_RENDERER; each self-gates. */}
+      <CanvasRenderLayer />
+      <PixiRenderLayer />
+      <Orbit3DLayer />
+      {!threeD && <AnnotationLayer />}
+      {!threeD && (guides.length > 0 || marquee) && (
         <svg
           className="guides"
           aria-hidden="true"
@@ -302,7 +377,7 @@ export const Canvas: React.FC = () => {
           )}
         </svg>
       )}
-      {findingMarkers.length > 0 && (
+      {!threeD && findingMarkers.length > 0 && (
         <svg className="findings-overlay" aria-hidden="true">
           {findingMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -322,7 +397,7 @@ export const Canvas: React.FC = () => {
           })}
         </svg>
       )}
-      {driftMarkers.length > 0 && (
+      {!threeD && driftMarkers.length > 0 && (
         <svg className="findings-overlay" aria-hidden="true">
           {driftMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -342,7 +417,7 @@ export const Canvas: React.FC = () => {
           })}
         </svg>
       )}
-      {costMarkers.length > 0 && (
+      {!threeD && costMarkers.length > 0 && (
         <div className="cost-overlay" aria-hidden="true">
           {costMarkers.map((m) => {
             const p = worldToScreen(m, viewport);
@@ -367,7 +442,7 @@ export const Canvas: React.FC = () => {
           </button>
         </div>
       )}
-      {breadcrumb.length > 0 && (
+      {!threeD && breadcrumb.length > 0 && (
         <div className="breadcrumb" role="navigation" aria-label="Containment path">
           {breadcrumb.map((c, i) => (
             <React.Fragment key={c.id}>
@@ -388,51 +463,55 @@ export const Canvas: React.FC = () => {
           )}
         </div>
       )}
-      <div className="zoom-controls" role="group" aria-label="Zoom controls">
-        <button type="button" onClick={zoomIn} title="Zoom in" aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={zoomOut} title="Zoom out" aria-label="Zoom out">
-          −
-        </button>
-        <button
-          type="button"
-          className="zoom-level"
-          onClick={zoomReset}
-          title="Reset to 100%"
-          aria-label="Reset zoom to 100%"
-        >
-          {Math.round(viewport.scale * 100)}%
-        </button>
-        <button
-          type="button"
-          onClick={fitToView}
-          title="Fit all to view"
-          aria-label="Fit all to view"
-        >
-          Fit
-        </button>
-        <button
-          type="button"
-          onClick={zoomToSelection}
-          title="Zoom to selection"
-          aria-label="Zoom to selection"
-        >
-          ⤢
-        </button>
-      </div>
-      <div className="minimap" title="Click or drag to navigate">
-        <canvas
-          ref={minimapRef}
-          aria-hidden="true"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            minimapDragRef.current = true;
-            minimapNavigate(e.clientX, e.clientY);
-          }}
-        />
-      </div>
+      {!threeD && (
+        <div className="zoom-controls" role="group" aria-label="Zoom controls">
+          <button type="button" onClick={zoomIn} title="Zoom in" aria-label="Zoom in">
+            +
+          </button>
+          <button type="button" onClick={zoomOut} title="Zoom out" aria-label="Zoom out">
+            −
+          </button>
+          <button
+            type="button"
+            className="zoom-level"
+            onClick={zoomReset}
+            title="Reset to 100%"
+            aria-label="Reset zoom to 100%"
+          >
+            {Math.round(viewport.scale * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={fitToView}
+            title="Fit all to view"
+            aria-label="Fit all to view"
+          >
+            Fit
+          </button>
+          <button
+            type="button"
+            onClick={zoomToSelection}
+            title="Zoom to selection"
+            aria-label="Zoom to selection"
+          >
+            ⤢
+          </button>
+        </div>
+      )}
+      {!threeD && (
+        <div className="minimap" title="Click or drag to navigate">
+          <canvas
+            ref={minimapRef}
+            aria-hidden="true"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              minimapDragRef.current = true;
+              minimapNavigate(e.clientX, e.clientY);
+            }}
+          />
+        </div>
+      )}
     </>
   );
 };

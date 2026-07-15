@@ -444,6 +444,57 @@ const aiMl: ServiceDefinition[] = [
       { to: "lambda", relationship: "invokes", description: "Custom data source connectors" },
     ],
   },
+  {
+    id: "bedrock-knowledge-base",
+    name: "Bedrock KB",
+    fullName: "Amazon Bedrock Knowledge Base",
+    category: "ai-ml",
+    description:
+      "Managed retrieval-augmented-generation knowledge base that embeds source documents into a vector store for foundation-model retrieval.",
+    icon: "📚",
+    scope: "region",
+    cfnType: "AWS::Bedrock::KnowledgeBase",
+    keywords: ["bedrock", "knowledge base", "rag", "vector", "embeddings", "retrieval", "genai"],
+    configFields: [
+      {
+        key: "embeddingModel",
+        label: "Embedding Model",
+        type: "select",
+        default: "amazon.titan-embed-text-v2",
+        options: [
+          { value: "amazon.titan-embed-text-v2", label: "Titan Text Embeddings V2" },
+          { value: "amazon.titan-embed-text-v1", label: "Titan Text Embeddings V1" },
+          { value: "cohere.embed-english-v3", label: "Cohere Embed English V3" },
+          { value: "cohere.embed-multilingual-v3", label: "Cohere Embed Multilingual V3" },
+        ],
+      },
+      {
+        key: "vectorStore",
+        label: "Vector Store",
+        type: "select",
+        default: "opensearch-serverless",
+        options: [
+          { value: "opensearch-serverless", label: "OpenSearch Serverless" },
+          { value: "aurora", label: "Aurora PostgreSQL (pgvector)" },
+          { value: "pinecone", label: "Pinecone" },
+        ],
+      },
+    ],
+    commonConnections: [
+      {
+        to: "opensearch-serverless",
+        relationship: "depends_on",
+        description: "Stores document embeddings in a vector collection",
+      },
+      {
+        to: "s3-bucket",
+        relationship: "reads_from",
+        description: "Ingests source documents from an S3 data source",
+      },
+      { to: "iam-role", relationship: "assumes", description: "Knowledge base service role" },
+      { to: "bedrock", relationship: "invokes", description: "Calls the embedding model" },
+    ],
+  },
 ];
 
 export default aiMl;
