@@ -2,7 +2,7 @@
 # `npm run app:dist`; the web build/deploy never touches this.
 appId: com.strata.app
 productName: Strata
-copyright: Strata
+copyright: Copyright © 2025-2026 Make Directory Developers LLC
 
 directories:
   output: release
@@ -17,15 +17,47 @@ files:
 extraResources:
   - from: .next/standalone
     to: standalone
+# better-sqlite3 is a native addon (.node) — it can't run from inside the asar,
+# so unpack it. electron-builder rebuilds it for Electron's ABI at package time
+# (npmRebuild is on by default); see electron/README.md if a rebuild is needed.
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+
+# --- Auto-update feed: GitHub Releases. `app:dist` emits latest-*.yml alongside
+# the installers; publishing needs GH_TOKEN in the environment. See README. ---
+publish:
+  provider: github
+  releaseType: release
 
 mac:
   category: public.app-category.developer-tools
   target:
     - dmg
     - zip
+  # Signing + notarization. Certificate comes from CSC_LINK / CSC_KEY_PASSWORD
+  # (a Developer ID Application .p12); notarization runs in electron/notarize.cjs
+  # from the APPLE_* env vars. Hardened runtime is required to notarize.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: electron/entitlements.mac.plist
+  entitlementsInherit: electron/entitlements.mac.plist
+  # notarization is handled by the afterSign hook below (built-in notarize off to
+  # avoid submitting twice).
+  notarize: false
+
+# afterSign runs after the app is signed — we notarize there.
+afterSign: electron/notarize.cjs
+
 win:
   target:
     - nsis
+  # Code signing: electron-builder reads the cert from WIN_CSC_LINK /
+  # WIN_CSC_KEY_PASSWORD (or the generic CSC_LINK / CSC_KEY_PASSWORD) in the
+  # environment. Unsigned if those are absent. See electron/README.md.
+  signtoolOptions:
+    signingHashAlgorithms:
+      - sha256
+
 linux:
   target:
     - AppImage
