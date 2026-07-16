@@ -100,10 +100,21 @@ hand-editing. In the packaged app it points the client at the app binary in MCP
 mode (`Strata --mcp`, a bundled stdio server); in dev it points at `npm run mcp`.
 It only adds/updates the `strata` entry, leaving your other MCP servers untouched.
 
-**Durable storage.** The desktop app persists diagrams to a JSON file in the OS
-user-data dir instead of the browser's `localStorage`, so they survive reinstalls
-and aren't capped by browser quota. The web app is unchanged (still `localStorage`).
+**Durable storage.** The desktop app persists diagrams to a **SQLite** database
+(`better-sqlite3`) in the OS user-data dir instead of the browser's `localStorage`,
+so they survive reinstalls, aren't capped by browser quota, and scale to large
+libraries. An existing `graphs.json` from an earlier build is migrated in on first
+run. The renderer talks to it through the same synchronous whole-map bridge, so the
+web app is unchanged (still `localStorage`), and if the native module can't load the
+app falls back to the JSON file automatically.
 
-**Still to finish** (needs your machine / keys): code signing + notarization,
-auto-update, and — optionally — moving desktop storage from a JSON file to SQLite
-for very large libraries.
+**Auto-update.** The packaged app checks GitHub Releases on launch and every six
+hours, and offers a "Check for Updates…" item under **Tools**; a ready update
+prompts you to restart and install. Disabled in dev builds.
+
+**Code signing + notarization.** `app:dist` signs and notarizes when the signing
+credentials are present in the environment — never committed. See
+[`electron/README.md`](https://github.com/) for the required env vars
+(`CSC_LINK`, `APPLE_ID`, `APPLE_TEAM_ID`, `WIN_CSC_LINK`, …), the GitHub release
+flow (`GH_TOKEN`), and the native-module rebuild notes. Run `app:dist` on each
+target OS.

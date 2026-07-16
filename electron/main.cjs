@@ -33,6 +33,8 @@ if (process.argv.includes("--mcp") || process.env.STRATA_MCP === "1") {
 const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require("electron");
 const http = require("http");
 const { fork } = require("child_process");
+const { createStorage } = require("./storage.cjs");
+const updater = require("./updater.cjs");
 
 const DEV_URL = process.env.ELECTRON_START_URL || "";
 const PORT = Number(process.env.STRATA_PORT || 34115);
@@ -40,24 +42,25 @@ const PORT = Number(process.env.STRATA_PORT || 34115);
 /** @type {import('child_process').ChildProcess | null} */
 let serverProc = null;
 
-// ---- durable storage (JSON file in userData; bridged to the page via preload) ----
-function storageFile() {
-  return path.join(app.getPath("userData"), "graphs.json");
+// ---- durable storage (SQLite in userData, JSON fallback; see storage.cjs) ----
+// Bridged to the page via preload as a synchronous whole-map read/write. Built
+// lazily on first use, since app.getPath("userData") requires app to be ready.
+/** @type {ReturnType<typeof createStorage> | null} */
+let store = null;
+function storage() {
+  if (!store) store = createStorage(app.getPath("userData"));
+  return store;
 }
 ipcMain.on("strata-storage-read", (e) => {
   try {
-    const f = storageFile();
-    e.returnValue = fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null;
+    e.returnValue = storage().readAll();
   } catch {
     e.returnValue = null;
   }
 });
 ipcMain.on("strata-storage-write", (e, json) => {
   try {
-    const f = storageFile();
-    fs.mkdirSync(path.dirname(f), { recursive: true });
-    fs.writeFileSync(f, typeof json === "string" ? json : "{}");
-    e.returnValue = true;
+    e.returnValue = storage().writeAll(json);
   } catch {
     e.returnValue = false;
   }
@@ -177,6 +180,11 @@ function buildMenu() {
     submenu: [
       { label: "Connect to Claude Desktop…", click: () => connectAndReport("claude") },
       { label: "Connect to Cursor…", click: () => connectAndReport("cursor") },
+      { type: "separator" },
+      {
+        label: "Check for Updates…",
+        click: () => updater.checkForUpdatesManually({ app, dialog }),
+      },
     ],
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -202,6 +210,7 @@ function createWindow(url) {
 
 app.whenReady().then(async () => {
   buildMenu();
+  updater.init({ app, dialog });
   try {
     const url = DEV_URL || (await startProdServer());
     createWindow(url);
@@ -222,4 +231,5 @@ app.on("window-all-closed", () => {
 });
 app.on("quit", () => {
   if (serverProc) serverProc.kill();
+  if (store) store.close();
 });

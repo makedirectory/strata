@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for the notarized macOS build.
+
+  Strata's main process forks a bundled Next.js server and re-invokes its own
+  binary in Node mode (ELECTRON_RUN_AS_NODE) for the MCP server, and may spawn
+  `terraform`. Those, plus Electron/V8's JIT and the native better-sqlite3 addon,
+  need the exceptions below to run under the hardened runtime.
+-->
+<plist version="1.0">
+  <dict>
+    <!-- V8 JIT. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!-- Electron/V8 allocate unsigned executable memory. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- Required so ELECTRON_RUN_AS_NODE / forked-server env vars are honoured
+         under the hardened runtime (MCP mode + the standalone Next server). -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <!-- Load the native better-sqlite3 addon and spawn helper binaries
+         (e.g. terraform) that Apple didn't sign. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <!-- Outbound network for the local forked server + live cloud discovery. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- The forked Next server listens on 127.0.0.1. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+  </dict>
+</plist>

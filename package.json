@@ -35,6 +35,7 @@
     "@azure/identity": "^4.13.1",
     "@cdktf/hcl2json": "^0.21.0",
     "@google-cloud/asset": "^6.3.3",
+    "electron-updater": "^6.8.9",
     "js-yaml": "^4.2.0",
     "next": "^15.5.19",
     "nextra": "^4.6.1",
@@ -44,6 +45,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -66,5 +68,8 @@
     "vite": "^8.0.16",
     "vitest": "^4.1.7",
     "zod": "4.1.13"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.10.0"
   }
 }
