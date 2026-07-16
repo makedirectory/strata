@@ -2,7 +2,7 @@
 # `npm run app:dist`; the web build/deploy never touches this.
 appId: com.strata.app
 productName: Strata
-copyright: Strata
+copyright: Copyright © 2025-2026 Make Directory Developers LLC
 
 directories:
   output: release
