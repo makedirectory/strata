@@ -30,19 +30,19 @@
     "app:dist": "npm run app:build && electron-builder"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudcontrol": "^3.1068.0",
+    "@aws-sdk/client-cloudcontrol": "^3.1095.0",
     "@azure/arm-resourcegraph": "^4.2.1",
     "@azure/identity": "^4.13.1",
     "@cdktf/hcl2json": "^0.21.0",
     "@google-cloud/asset": "^6.3.3",
     "electron-updater": "^6.8.9",
     "js-yaml": "^4.2.0",
-    "next": "^15.5.19",
+    "next": "^15.5.22",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "pixi.js": "^8.19.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
